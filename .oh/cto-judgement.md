@@ -86,3 +86,113 @@ We are optimizing for: a believable end-to-end operating model where intake work
 
 ### Ready for Solution Space?
 Yes - the terrain is clear enough to compare solution options. The next step is to choose a capability decomposition and service topology that keep the JTBD workflows first-class while minimizing accidental complexity.
+
+## Problem Statement
+**Updated:** 2026-03-25
+
+> Chosen walking skeleton: intake worker uploads a handwritten form, the system extracts a draft with confidence scores, and a reviewer corrects uncertain fields and finalizes the record within tenant boundaries.
+
+**Current framing:** We need to pick a JTBD workflow that is a good walking skeleton to get the backend and frontend wired up and working.
+
+**Reframed as:** Intake workers and reviewers need one thin end-to-end trust loop that proves a handwritten document can become a tenant-safe, corrected, finalized case record, because that is the smallest workflow that demonstrates the platform's core value and architectural credibility; currently the assignment is easy to treat as a breadth-first feature checklist, which would wire many parts loosely without proving the central workflow.
+
+**The shift:** From 'what should we build first?' to 'what is the smallest workflow that proves the product is real?' The selected JTBD spine is upload → extract → review uncertain fields → finalize. Search, case view, and similar-case assistance should attach to this spine, not compete with it for first priority.
+
+### Constraints
+- **Hard:** .NET backend, React/TypeScript frontend, tenant-aware authorization, template-based upload, stored extraction/confidence/status, human review with corrections and finalization, and a locally runnable system. The assignment's required workflow correctness explicitly centers upload → extract → review → finalize.
+- **Soft:** Real OCR versus mocked extraction, number of initial templates needed in the first slice, how much search/case aggregation appears in the first increment, and whether similar-case retrieval is fully implemented in the first walking skeleton or added immediately after the review spine is stable.
+
+### What this framing enables
+- A first vertical slice that exercises both frontend and backend with meaningful state transitions instead of isolated CRUD screens.
+- Capability boundaries organized around intake processing and review trust, which is the clearest path to a defensible service topology.
+- Early proof of tenant propagation, audit logging, confidence handling, and worker orchestration on a real user journey.
+- A natural place to attach RAG later in the same reviewer workflow once the review surface exists.
+
+### What this framing excludes
+- Starting with search, case aggregation, or vector retrieval before the upload-to-review trust loop exists.
+- Building microservice shells or shared abstractions that are not yet earned by a working end-to-end flow.
+- Treating template management or blank-template download as the first integration slice; those matter, but they do not prove the product's core behavior.
+- Broad checklist progress that looks busy but leaves the reviewer unable to walk a document from intake to finalized record.
+
+## Solution Space
+**Updated:** 2026-03-25
+
+> Recommendation: build a thin capability-sliced platform from day one — one React app, small backend services aligned to the trust loop, and a separate worker — with shared relational storage and a real vector store, rather than either a fake seeded demo or a fully overbuilt event mesh.
+
+## Solution Space Analysis
+
+**Problem:** We need a walking skeleton that proves a handwritten document can move from upload to extracted draft to reviewer correction to finalization across backend and frontend.
+**Key Constraint:** The first slice must make the core trust loop real while still reading as a credible microservices solution under the assignment's tenant-safety, review, and RAG guardrails.
+
+### Candidates Considered
+
+| Option | Level | Approach | Trade-off |
+|--------|-------|----------|-----------|
+| A | Band-Aid | Review-first seeded demo: start with a seeded extracted document and build only the review/finalize UI before wiring upload or background processing | Very fast feedback, but it dodges ingestion, async processing, and trust boundaries that the assignment actually evaluates |
+| B | Local Optimum | Modular monolith + worker: one ASP.NET backend with clean internal modules, one separate worker, one React app, shared database, row-level tenancy | Fastest credible end-to-end build, but weak signal on the 'set of microservices' requirement and may require later repartitioning |
+| C | Reframe | Thin capability-sliced services: Identity/Tenant service, Intake service, Review/Case service, separate Extraction worker, one React app, shared Postgres, real vector DB | More upfront integration work, but the architecture mirrors the workflow and trust boundaries we actually need to prove |
+| D | Redesign | Full platform-first event mesh: many services, queue/bus, per-service databases, dedicated audit/search/retrieval services, richer infrastructure from day one | Strong theoretical purity, but high coordination cost and a real risk of architecture theater before the user workflow works |
+
+### Evaluation
+
+**Option A: Review-first seeded demo**
+- Solves stated problem: **Partially**
+- Implementation cost: **Low**
+- Maintenance burden: **High** once real upload, tenant propagation, and worker orchestration are added
+- Second-order effects: Gives fast UI momentum, but it hides the most failure-prone seams and risks producing a demo that cannot prove the assignment's central workflow correctness.
+
+**Option B: Modular monolith + worker**
+- Solves stated problem: **Yes**
+- Implementation cost: **Low-Medium**
+- Maintenance burden: **Medium**
+- Second-order effects: Strong delivery speed and easy local debugging, but it under-signals architectural judgment against the explicit microservices ask and pushes service-boundary decisions later when rewrites are more expensive.
+
+**Option C: Thin capability-sliced services**
+- Solves stated problem: **Yes**
+- Implementation cost: **Medium**
+- Maintenance burden: **Medium-Low** if boundaries stay few and capability-aligned
+- Second-order effects: Exercises the real seams early — auth/tenant propagation, async extraction, review/finalization, and eventual retrieval — while staying small enough to keep the walking skeleton coherent. It also gives a natural home for search, case view, and similar-case assistance as follow-on slices.
+
+**Option D: Full platform-first event mesh**
+- Solves stated problem: **Yes, in theory**
+- Implementation cost: **High**
+- Maintenance burden: **High**
+- Second-order effects: Maximizes distributed-systems overhead before user value is proven. Likely to consume time on infrastructure choreography, boilerplate, and service coordination instead of making the review workflow trustworthy.
+
+### Recommendation
+
+**Selected:** Option C - Thin capability-sliced services
+**Level:** Reframe
+
+**Rationale:** This approach best fits the actual test. The assignment is not rewarding the narrowest possible backend, nor the fanciest distributed system. It rewards clear boundaries, credible multi-tenancy, a real async extraction path, and a review workflow where trust is visible. Option C gives us enough architecture to make those claims real without spending the schedule on platform ceremony.
+
+**Why not the others:**
+- **Option A:** Useful only as a throwaway prototype; it fails the trust-loop test because upload, extraction orchestration, and tenant seams remain unproven.
+- **Option B:** Tempting for speed, but too easy to look like a monolith wearing microservice language. It weakens the architecture signal we want the reviewer to see.
+- **Option D:** Over-optimizes for architectural purity and future scale that the exercise does not require. High risk, low interview payoff.
+
+**Accepted trade-offs:**
+- Use a shared Postgres instance initially, with explicit service schemas and tenant-aware tables, rather than paying the cost of fully separate operational databases on day one.
+- Start with mocked or hybrid extraction behind a real asynchronous job contract so the workflow shape is correct before the extraction model gets fancy.
+- Land Similar Cases immediately after the upload/extract/review/finalize spine is stable, attaching it to the same review screen rather than treating it as a separate workstream.
+
+### Implementation Notes
+
+**Recommended service topology**
+- **Identity/Tenant Service:** issues JWTs with `tenantId` and role claims for Intake Worker and Reviewer.
+- **Intake Service:** owns templates, uploads, document records, processing status, and starts the extraction workflow.
+- **Review/Case Service:** owns review tasks, corrections, finalization, audit log, case read model, and later search/similar-case endpoints.
+- **Extraction Worker:** runs as a Temporal worker that performs OCR/extraction, writes extracted field values + confidence scores, and records workflow progress for review consumption.
+- **React Frontend:** starts with login, upload, review queue/detail, and finalized record views.
+
+**Recommended infrastructure choices**
+- **Relational + retrieval store:** Postgres with `tenant_id` on all major entities, service-specific schemas, `pgvector` for embeddings, and built-in full-text search for hybrid retrieval and case search.
+- **Object storage:** MinIO in Docker Compose via its S3-compatible API; preserve original documents there and keep object references in Postgres.
+- **Async orchestration:** Temporal for durable workflows, retries, visibility, and chained steps; avoid introducing a second jobs table or broker unless a concrete need appears.
+
+**Recommended sequencing**
+1. Wire auth + tenant context, one template, upload, document record, object storage, and the extraction workflow start.
+2. Wire the Temporal worker to produce extracted draft data + confidence scores and expose processing status.
+3. Build the review screen that shows source document, extracted fields, corrections, finalize action, and audit trail.
+4. Add Similar Cases into that same review screen using synthetic historical data and Postgres hybrid retrieval (`pgvector` + FTS).
+5. Extend into case search/aggregate views, richer observability, and broader template coverage once the spine is trustworthy.
