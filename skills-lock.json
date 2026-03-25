@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "skills": {
+    "aim": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "7d523e21c9bf375b0891445fa9c3c940fd2683491a01fd53f52749b0433f5e85"
+    },
+    "dissent": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "0e9e18b00ef37f219b1781897af92bbedcd37fcfd697ef0058382d110c33aeaf"
+    },
+    "distill": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "c4f8fea8c24fd3d5f04ba1d998662db6d64d84c80993cb86c24f124bc74cc415"
+    },
+    "execute": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "f5d1f59b1abc6675bab5de49eb03950dcee2c1fcb7a7ee7d213fabff7a1172df"
+    },
+    "problem-space": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "ca972b23d2396d41f8b0500fa238d315f4b3591fc295510941bed80c2a685b84"
+    },
+    "problem-statement": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "33a9425d8d80ac149a121c379dad77769616d80b2d130aa1d9fc69c54e13d61c"
+    },
+    "record": {
+      "source": "open-horizon-labs/repo-native-alignment",
+      "sourceType": "github",
+      "computedHash": "f92582a6b4f9359f3541442c624fd9e50da68875ce3fea5c8cdfd0fe0eb0efa5"
+    },
+    "review": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "6ebc90a53922f478bdad2806e1786f320f5b4a23e544ca61e050c778925b7618"
+    },
+    "salvage": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "de41605f47618c64a2e7b4ce1e71aa89c73a53ec4c342890ef8b2554e16ca21a"
+    },
+    "setup": {
+      "source": "open-horizon-labs/repo-native-alignment",
+      "sourceType": "github",
+      "computedHash": "3c44321c8289fc1654bd0dc1ae52a410513b1dab7bcc1d9a343d06c4468bb807"
+    },
+    "ship": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "db183a0d15526f582fe961ab6999ce3e992c25b52dfdab06fd5142a5f1a49e42"
+    },
+    "solution-space": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "48ec7d50ea1e9771302b6592d019b5694403f59fc8cbf3102a8a392da89ad50d"
+    },
+    "teach-oh": {
+      "source": "open-horizon-labs/skills",
+      "sourceType": "github",
+      "computedHash": "b6b7ddd702cb1639d851b340bff63e8d403a9b9b08dc2edb11078ac8ca7ad161"
+    }
+  }
+}
