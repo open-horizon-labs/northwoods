@@ -138,3 +138,38 @@
 - A reviewer can open the resulting draft, correct fields, finalize, and observe audit history.
 - Cross-tenant access fails in API and retrieval tests.
 - The code structure clearly supports adding Similar Cases next without reworking the core workflow.
+
+## Execute
+**Updated:** 2026-03-26
+**Status:** complete
+
+Completed the first real backend slice for the review-ready intake loop.
+
+What now works end to end:
+- Tenant-scoped login against seeded users in Postgres
+- Multipart intake upload with tenant header enforcement
+- Original document storage in MinIO via an S3-compatible API
+- Durable document/extracted-field/audit persistence in Postgres
+- Worker-driven asynchronous extraction that advances uploaded documents to `review_ready`
+- Review detail retrieval with confidence-scored fields and audit history
+- Review finalization that persists corrections and marks the document finalized
+- Row-level tenant isolation enforced via `app.tenant_id` + `app_user` role + RLS policies
+
+Verification completed during execution:
+- `dotnet build src/Northwoods.slnx` passed
+- `docker compose up --build -d` brought up Postgres 18, MinIO, API, and worker
+- `/healthz` returned healthy and proved DB connectivity
+- Upload → extract → review → finalize flow succeeded via curl
+- Cross-tenant intake lookup returned no data under the wrong tenant header
+
+Notes:
+- The worker currently simulates extraction output; this is the deliberate placeholder for a later Temporal-based workflow implementation.
+- Status values are stored in snake_case in Postgres and mapped explicitly to `ProcessingStatus` in the API.
+- Frontend screens for login, upload, review queue, review detail, and finalize are now implemented on top of this backend spine.
+- Temporal orchestration and similar-case retrieval remain next steps after the working browser flow.
+
+Frontend verification added after the backend slice:
+- `pnpm --dir apps/web lint` passed
+- `pnpm --dir apps/web build` passed
+- Vite dev server was exercised in a browser session
+- Browser flow covered seeded-user sign-in, UI-driven upload, live review queue display, review detail inspection, and finalize action

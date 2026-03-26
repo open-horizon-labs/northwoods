@@ -9,28 +9,25 @@ namespace Northwoods.Tenancy;
 public sealed class ObjectStore
 {
     private readonly AmazonS3Client _s3Client;
+    private readonly AmazonS3Client _publicS3Client;
     private readonly string _bucketName;
 
-    public ObjectStore(string endpoint, string accessKey, string secretKey, string bucketName)
+    public ObjectStore(string endpoint, string accessKey, string secretKey, string bucketName, string? publicEndpoint = null)
     {
         _bucketName = bucketName;
 
-        var s3Config = new AmazonS3Config
-        {
-            ServiceURL = $"http://{endpoint}",
-            ForcePathStyle = true,
-            AuthenticationRegion = "us-east-1"
-        };
-
-        _s3Client = new AmazonS3Client(accessKey, secretKey, s3Config);
+        _s3Client = new AmazonS3Client(accessKey, secretKey, CreateConfig(endpoint));
+        _publicS3Client = new AmazonS3Client(accessKey, secretKey, CreateConfig(publicEndpoint ?? endpoint));
     }
 
-    /// <summary>
-    /// Uploads a file to the object store.
-    /// </summary>
-    /// <param name="key">The object key/path</param>
-    /// <param name="data">The file data stream</param>
-    /// <param name="contentType">The MIME type of the content</param>
+    private static AmazonS3Config CreateConfig(string endpoint) => new()
+    {
+        ServiceURL = $"http://{endpoint}",
+        ForcePathStyle = true,
+        UseHttp = true,
+        AuthenticationRegion = "us-east-1",
+    };
+
     public async Task UploadAsync(string key, Stream data, string contentType)
     {
         var request = new PutObjectRequest
@@ -38,18 +35,12 @@ public sealed class ObjectStore
             BucketName = _bucketName,
             Key = key,
             InputStream = data,
-            ContentType = contentType
+            ContentType = contentType,
         };
 
         await _s3Client.PutObjectAsync(request);
     }
 
-    /// <summary>
-    /// Generates a presigned URL for retrieving an object.
-    /// </summary>
-    /// <param name="key">The object key/path</param>
-    /// <param name="expiry">The duration for which the URL is valid</param>
-    /// <returns>A presigned URL for GET requests</returns>
     public string GetPresignedUrl(string key, TimeSpan expiry)
     {
         var request = new GetPreSignedUrlRequest
@@ -57,15 +48,12 @@ public sealed class ObjectStore
             BucketName = _bucketName,
             Key = key,
             Expires = DateTime.UtcNow.Add(expiry),
-            Verb = HttpVerb.GET
+            Verb = HttpVerb.GET,
         };
 
-        return _s3Client.GetPreSignedURL(request);
+        return _publicS3Client.GetPreSignedURL(request).Replace("https://", "http://");
     }
 
-    /// <summary>
-    /// Ensures the bucket exists, creating it if necessary.
-    /// </summary>
     public async Task EnsureBucketAsync()
     {
         try

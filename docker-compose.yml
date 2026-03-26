@@ -44,6 +44,7 @@ services:
       Minio__AccessKey: northwoods
       Minio__SecretKey: northwoods
       Minio__BucketName: intakes
+      Minio__PublicEndpoint: localhost:9000
     ports:
       - "5100:8080"
     depends_on:
