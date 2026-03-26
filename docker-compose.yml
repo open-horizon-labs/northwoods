@@ -16,6 +16,23 @@ services:
       timeout: 3s
       retries: 5
 
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: northwoods
+      MINIO_ROOT_PASSWORD: northwoods
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   api:
     build:
       context: src
@@ -23,10 +40,16 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Host=postgres;Database=northwoods;Username=northwoods;Password=northwoods
+      Minio__Endpoint: minio:9000
+      Minio__AccessKey: northwoods
+      Minio__SecretKey: northwoods
+      Minio__BucketName: intakes
     ports:
       - "5100:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   worker:
@@ -35,9 +58,16 @@ services:
       dockerfile: Workers/Extraction.Worker/Dockerfile
     environment:
       ConnectionStrings__Default: Host=postgres;Database=northwoods;Username=northwoods;Password=northwoods
+      Minio__Endpoint: minio:9000
+      Minio__AccessKey: northwoods
+      Minio__SecretKey: northwoods
+      Minio__BucketName: intakes
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
 volumes:
   pgdata:
+  miniodata:
