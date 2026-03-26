@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: northwoods
+      POSTGRES_PASSWORD: northwoods
+      POSTGRES_DB: northwoods
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U northwoods"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: src
+      dockerfile: Services/Northwoods.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Host=postgres;Database=northwoods;Username=northwoods;Password=northwoods
+    ports:
+      - "5100:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: src
+      dockerfile: Workers/Extraction.Worker/Dockerfile
+    environment:
+      ConnectionStrings__Default: Host=postgres;Database=northwoods;Username=northwoods;Password=northwoods
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

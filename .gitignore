@@ -1,2 +1,14 @@
 .DS_Store
 .oh/.cache/
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo

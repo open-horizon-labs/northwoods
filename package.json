@@ -1,0 +1,13 @@
+{
+  "name": "northwoods",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev:web": "pnpm --dir apps/web dev",
+    "build:web": "pnpm --dir apps/web build",
+    "lint:web": "pnpm --dir apps/web lint",
+    "restore:dotnet": "mise exec -- dotnet restore src/Northwoods.slnx",
+    "build:dotnet": "mise exec -- dotnet build src/Northwoods.slnx",
+    "check": "pnpm build:web && pnpm build:dotnet"
+  }
+}

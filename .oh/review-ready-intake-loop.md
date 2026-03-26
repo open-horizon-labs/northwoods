@@ -51,3 +51,90 @@
 - Search-first or RAG-first slices that do not prove the intake-to-finalization trust loop.
 - Template-management-heavy work that does not materially advance the representative workflow.
 - Architecture work that is not earned by the selected JTBD.
+
+
+## Solution Space
+**Updated:** 2026-03-25
+
+> Recommendation: implement the walking skeleton as a thin end-to-end vertical slice with one React app, capability-aligned .NET services, Temporal orchestration, MinIO object storage, and Postgres-backed tenancy/retrieval, but initially only one template and one reviewer queue path.
+
+## Solution Space Analysis
+
+**Problem:** We need the first implementation slice to prove that an uploaded handwritten intake can become a review-ready draft and then a finalized record across frontend and backend.
+**Key Constraint:** The slice must exercise the hard seams—tenant-aware auth, object storage, asynchronous extraction, confidence-aware review, and auditability—without exploding the build into broad checklist work.
+
+### Candidates Considered
+
+| Option | Level | Approach | Trade-off |
+|--------|-------|----------|-----------|
+| A | Band-Aid | Seeded review loop: build login + review UI against pre-created extracted drafts, then add upload/extraction later | Fastest UI progress, but it dodges the core ingestion and async seams we need to prove |
+| B | Local Optimum | Upload-first skeleton: build auth, upload, object storage, and extraction status, but stop before reviewer correction/finalization | Exercises ingestion well, but leaves the trust-winning human review loop unproven |
+| C | Reframe | Review-ready intake loop: build one tenant-safe vertical slice from upload through async extraction to reviewer correction/finalization and audit trail | More surface area in the first slice, but it forces most critical contracts to exist together |
+| D | Redesign | Full capability platform: include search, similar cases, multiple templates, richer case views, and broader service boundaries in the first pass | Stronger demo breadth, but high risk of shallow trust and unfinished core workflow |
+
+### Evaluation
+
+**Option A: Seeded review loop**
+- Solves stated problem: **Partially**
+- Implementation cost: **Low**
+- Maintenance burden: **High**
+- Second-order effects: Encourages a fake first milestone where the frontend looks alive but the backend seams that matter most remain untested. Later integration would likely cause churn in contracts and state modeling.
+
+**Option B: Upload-first skeleton**
+- Solves stated problem: **Partially**
+- Implementation cost: **Low-Medium**
+- Maintenance burden: **Medium**
+- Second-order effects: Good for proving storage and workflows, but it delays the reviewer correction/finalization path that actually demonstrates human-in-the-loop trust and the assignment's core workflow correctness.
+
+**Option C: Review-ready intake loop**
+- Solves stated problem: **Yes**
+- Implementation cost: **Medium**
+- Maintenance burden: **Medium-Low**
+- Second-order effects: Forces the right contracts early: document identity, workflow status, extracted field shape, confidence modeling, reviewer mutations, finalization rules, audit events, and tenant scoping across them all. It also leaves an obvious attachment point for Similar Cases.
+
+**Option D: Full capability platform first**
+- Solves stated problem: **Yes, but too broadly**
+- Implementation cost: **High**
+- Maintenance burden: **High**
+- Second-order effects: Increases coordination and surface area before the representative JTBD is stable. High risk of progress that looks broad but fails under scrutiny on the core trust loop.
+
+### Recommendation
+
+**Selected:** Option C - Review-ready intake loop
+**Level:** Reframe
+
+**Rationale:** This is the smallest slice that still proves the product. It exercises both user roles, makes the backend own real state transitions, and forces the architecture decisions already made—RLS-backed tenancy, Temporal, MinIO, Postgres retrieval readiness—to work in concert. It is broad enough to be credible and narrow enough to finish.
+
+**Accepted trade-offs:**
+- Start with a single template and a constrained extracted field schema rather than all four forms.
+- Use mocked or hybrid OCR behind the real Temporal workflow contract in the first iteration.
+- Defer Similar Cases, search, and broader case views until the upload → extract → review → finalize loop is solid, but keep the schema and service contracts ready for them.
+
+### Implementation Notes
+
+**What the first slice should include**
+- Login for two roles: Intake Worker and Reviewer.
+- Upload form with template selection for one representative template.
+- Document record persisted with tenant context and object storage reference.
+- Temporal ingestion workflow that stores the file, runs extraction, writes extracted fields + confidence, and marks the document review-ready.
+- Reviewer queue/detail screen showing original document, extracted fields, confidence cues, editable corrections, finalize action, and audit trail.
+- Finalized record view or status transition proving completion.
+
+**What the first slice should not include**
+- Multiple templates beyond what is needed to prove the pattern.
+- Fully featured Similar Cases or search before the review loop works.
+- Over-generalized abstractions for future templates or workflows.
+- Additional services that do not protect a real capability or trust boundary.
+
+**Suggested first contracts**
+- `POST /auth/login` → returns JWT with `tenantId` and role.
+- `POST /intakes` → creates document + starts workflow.
+- `GET /intakes/{id}` → returns processing status and extracted draft when ready.
+- `GET /review-queue` / `GET /reviews/{id}` → reviewer worklist and detail.
+- `POST /reviews/{id}/finalize` → persists corrections, finalizes, appends audit event.
+
+**Exit criteria for this slice**
+- A tenant-scoped user can upload a document and see status advance asynchronously.
+- A reviewer can open the resulting draft, correct fields, finalize, and observe audit history.
+- Cross-tenant access fails in API and retrieval tests.
+- The code structure clearly supports adding Similar Cases next without reworking the core workflow.

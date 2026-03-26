@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/BuildingBlocks/">
+    <Project Path="BuildingBlocks/Northwoods.Contracts/Northwoods.Contracts.csproj" />
+    <Project Path="BuildingBlocks/Northwoods.Tenancy/Northwoods.Tenancy.csproj" />
+  </Folder>
+  <Folder Name="/Services/">
+    <Project Path="Services/Northwoods.Api/Northwoods.Api.csproj" />
+  </Folder>
+  <Folder Name="/Workers/">
+    <Project Path="Workers/Extraction.Worker/Extraction.Worker.csproj" />
+  </Folder>
+</Solution>
