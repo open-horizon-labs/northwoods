@@ -1,0 +1,29 @@
+# Version control
+.git/
+.gitignore
+
+# Dependencies (rebuilt inside container)
+node_modules/
+
+# Build artifacts
+dist/
+coverage/
+**/bin/
+**/obj/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.DS_Store
+*.user
+*.suo
+.vscode/
+.idea/
+
+# Test / tooling
+.playwright/
+.playwright-cli/
+.oh/
