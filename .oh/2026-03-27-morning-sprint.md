@@ -273,3 +273,30 @@ PR: [#33](https://github.com/open-horizon-labs/northwoods/pull/33) | Branch: `is
 
 **CodeRabbit review:** 1 trivial finding (iframe sandbox attribute) -- fixed before merge.
 **Post-merge audit:** Clean -- 0 unaddressed comments.
+
+---
+
+### Issue #10 complete: Final polish and submission readiness -- 2026-03-27
+
+PR: [#34](https://github.com/open-horizon-labs/northwoods/pull/34) | Branch: `10-final-polish-submission-readiness` | Merged
+
+**Final verification against all acceptance criteria:**
+
+| Criterion | Status |
+|-----------|--------|
+| All rubric areas 3+ | PASS (Tenant safety at 4, all others at 3) |
+| Docker Compose starts cleanly | PASS (fresh `down -v` + `up -d`, all 4 services healthy) |
+| Sample data produces meaningful results | PASS (upload -> extract -> review with similar cases -> finalize) |
+| README instructions work | PASS (full E2E verified) |
+| All deliverables present | PASS (source, compose, OpenAPI, architecture doc, self-assessment, README, samples) |
+| No cross-tenant leakage | PASS (404 on cross-access, 0 results on cross-search, scoped metrics) |
+
+**Tests:** 32/32 passing. `pnpm check` clean.
+**CodeRabbit review:** No findings (docs-only PR).
+**Post-merge audit:** Clean -- 0 unaddressed comments across PR #33 and #34.
+
+---
+
+## All Issues Complete
+
+All open issues now closed. System is submission-ready.
