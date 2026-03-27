@@ -1,6 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api } from '../api'
+import { clearStoredAuth, readStoredAuth, storeAuth } from '../lib/auth'
 import type {
   CaseAggregateResponse,
   CaseDocumentItem,
@@ -172,28 +173,6 @@ const formatAuditEvent = (eventName: string) => {
   return pretty.join(' ')
 }
 
-const AUTH_STORAGE_KEY = 'northwoods:auth'
-
-function readStoredAuth(): LoginResponse | null {
-  try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (
-      parsed &&
-      typeof parsed.accessToken === 'string' &&
-      parsed.accessToken &&
-      typeof parsed.tenantId === 'string' &&
-      parsed.tenantId &&
-      (parsed.role === 0 || parsed.role === 1 || parsed.role === 'IntakeWorker' || parsed.role === 'Reviewer')
-    ) {
-      return parsed as LoginResponse
-    }
-    return null
-  } catch {
-    return null
-  }
-}
 
 export default function DevPage() {
   const [loginForm, setLoginForm] = useState<LoginForm>(initialLogin)
@@ -288,7 +267,7 @@ export default function DevPage() {
       email: preset.email,
       password: preset.password,
     })
-    try { localStorage.removeItem(AUTH_STORAGE_KEY) } catch { /* best-effort */ }
+    clearStoredAuth()
     setAuth(null)
     setAuthError(null)
     setTemplates([])
@@ -387,7 +366,7 @@ export default function DevPage() {
 
     try {
       const nextAuth = await api.login(loginForm as LoginRequest)
-      try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth)) } catch { /* best-effort */ }
+      storeAuth(nextAuth)
       setAuth(nextAuth)
       await Promise.all([refreshTemplates(nextAuth.accessToken), refreshQueue(nextAuth.accessToken)])
     } catch (error) {
