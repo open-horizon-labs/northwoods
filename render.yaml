@@ -9,7 +9,7 @@ databases:
   - name: northwoods-db
     plan: basic_256mb
     region: oregon
-    postgresMajorVersion: 16
+    postgresMajorVersion: '18'
     databaseName: northwoods
     user: northwoods
 
