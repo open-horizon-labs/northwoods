@@ -11,7 +11,7 @@ namespace Northwoods.Worker.UnitTests;
 public class ExtractionPipelineTests
 {
     [Fact]
-    public async Task PipelineEscalatesOnlyLowConfidenceFields()
+    public async Task PipelineRunsAllProvidersOnAllFields()
     {
         var context = new WorkerService.ExtractionContext(
             Guid.NewGuid(),
@@ -19,7 +19,8 @@ public class ExtractionPipelineTests
             "general-assistance",
             "sample.pdf",
             "sample.pdf",
-            1024);
+            1024,
+            [0x25, 0x50, 0x44, 0x46]);
 
         var baseline = new TrackingProvider("baseline", "ocr", 0)
         {
@@ -31,7 +32,7 @@ public class ExtractionPipelineTests
             }
         };
 
-        var escalated = new TrackingProvider("normalizer", "normalize", 1)
+        var secondary = new TrackingProvider("normalizer", "normalize", 1)
         {
             FieldValues =
             {
@@ -43,19 +44,17 @@ public class ExtractionPipelineTests
         var result = await WorkerService.RunExtractionPipelineForTests(
             context,
             ["applicantName", "dateOfBirth", "notes"],
-            [baseline, escalated],
+            [baseline, secondary],
             CancellationToken.None);
 
         var applicant = result.Single(r => r.FieldKey == "applicantName");
         var dob = result.Single(r => r.FieldKey == "dateOfBirth");
         var notes = result.Single(r => r.FieldKey == "notes");
 
+        // Both providers run on all fields
         Assert.Equal(3, baseline.RequestedFieldKeys.Count);
-        Assert.Equal(2, escalated.RequestedFieldKeys.Count);
-        Assert.Contains("applicantName", baseline.RequestedFieldKeys);
-        Assert.Contains("dateOfBirth", baseline.RequestedFieldKeys);
-        Assert.Contains("notes", escalated.RequestedFieldKeys);
-        Assert.DoesNotContain("dateOfBirth", escalated.RequestedFieldKeys);
+        Assert.Equal(3, secondary.RequestedFieldKeys.Count);
+        Assert.Contains("dateOfBirth", secondary.RequestedFieldKeys);
 
         Assert.Equal("Jamie Carter", applicant.FinalValue);
         Assert.True(applicant.SystemConfidence > 0.78m);
@@ -100,7 +99,7 @@ public class ExtractionPipelineTests
                         item.Confidence,
                         Stage,
                         Name,
-                        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["tenant"] = context.TenantId
                         }));
