@@ -9,7 +9,7 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./infra/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U northwoods"]
       interval: 5s
@@ -73,6 +73,21 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
 volumes:
   pgdata:
