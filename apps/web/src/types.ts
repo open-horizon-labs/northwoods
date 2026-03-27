@@ -4,7 +4,7 @@ export type ProcessingStatus = 0 | 1 | 2 | 3 | 4 | 'Uploaded' | 'Extracting' | '
 export type LoginRequest = {
   email: string
   password: string
-  tenantId: string
+  tenantId?: string
 }
 
 export type LoginResponse = {
@@ -39,8 +39,8 @@ export type ReviewQueueItem = {
   applicantName: string
   templateId: string
   uncertainFieldCount: number
+  uploadDate: string
 }
-
 export type SimilarCase = {
   reviewId: string
   intakeId: string

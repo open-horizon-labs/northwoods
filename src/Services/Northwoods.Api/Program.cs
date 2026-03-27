@@ -167,7 +167,6 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
     var errors = new List<string>();
     if (string.IsNullOrWhiteSpace(request.Email)) errors.Add("Email is required.");
     if (string.IsNullOrWhiteSpace(request.Password)) errors.Add("Password is required.");
-    if (string.IsNullOrWhiteSpace(request.TenantId)) errors.Add("TenantId is required.");
 
     static bool ContainsNullByte(string? value) => value is not null && value.Contains('\0');
     if (ContainsNullByte(request.Email) || ContainsNullByte(request.Password) || ContainsNullByte(request.TenantId))
@@ -176,10 +175,26 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
     if (errors.Count > 0)
         return Results.BadRequest(new { errors });
 
-    await using var session = await dbFactory.OpenSessionAsync(request.TenantId);
+    // Resolve tenant: if TenantId is absent, look it up from the email globally.
+    // The unscoped session runs as the DB owner (bypasses RLS).
+    var tenantId = request.TenantId;
+    if (string.IsNullOrWhiteSpace(tenantId))
+    {
+        await using var global = await dbFactory.OpenUnscopedSessionAsync();
+        var tenants = (await global.Connection.QueryAsync<string>(
+            "SELECT tenant_id FROM users WHERE email = @Email",
+            new { request.Email },
+            global.Transaction)).AsList();
+        // Ambiguous (multiple tenants) or missing → 401; do not reveal existence across tenants.
+        if (tenants.Count != 1)
+            return Results.Unauthorized();
+        tenantId = tenants[0];
+    }
+
+    await using var session = await dbFactory.OpenSessionAsync(tenantId);
     var user = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string role, string password_hash)>(
         "SELECT id, role, password_hash FROM users WHERE email = @Email AND tenant_id = @TenantId",
-        new { request.Email, request.TenantId },
+        new { request.Email, TenantId = tenantId },
         session.Transaction);
 
     if (user == default || !VerifyPassword(request.Password, user.password_hash))
@@ -190,14 +205,14 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
 
     var token = CreateJwt(
         user.id,
-        request.TenantId,
+        tenantId,
         role,
         jwtSigningCredentials,
         jwtIssuer,
         jwtAudience,
         jwtExpiration);
 
-    return Results.Ok(new LoginResponse(token, request.TenantId, role));
+    return Results.Ok(new LoginResponse(token, tenantId, role));
 })
     .WithName("Login").WithTags("Auth")
     .WithSummary("Authenticates a user and returns a signed JWT access token.");
@@ -386,7 +401,8 @@ app.MapGet("/review-queue", async (HttpContext httpContext, DbConnectionFactory 
         SELECT d.id AS ReviewId, d.id AS IntakeId,
                COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.field_key = 'applicantName' LIMIT 1), '(unknown)') AS ApplicantName,
                d.template_id AS TemplateId,
-               (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount
+               (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount,
+               d.created_at AS UploadDate
         FROM documents d
         WHERE d.tenant_id = @TenantId AND d.status = 'review_ready'
         ORDER BY d.created_at
