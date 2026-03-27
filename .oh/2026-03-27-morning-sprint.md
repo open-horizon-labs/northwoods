@@ -153,3 +153,26 @@ causing `FindFirstValue("role")` to return null and all authenticated endpoints 
 
 **CodeRabbit review:** APPROVED, no actionable findings.
 **Post-merge audit:** Clean -- 0 unaddressed comments.
+
+---
+
+### Issue #26 — Add input validation to login endpoint
+
+PR: #30 | Branch: `26-login-input-validation` | Merged: `52de18c`
+
+**Fix:** Added guard clause at top of `/auth/login` handler validating:
+- `Email`, `Password`, `TenantId` are non-null and non-whitespace
+- No field contains null bytes (`\0`)
+- Returns `400 Bad Request` with `{ errors: [...] }` on failure
+
+**Findings addressed:**
+| Finding | Before | After |
+|---------|--------|-------|
+| F-02 (missing password) | 500 NullReferenceException | 400 |
+| F-03 (missing tenantId) | 500 Npgsql error | 400 |
+| F-04 (null byte in email) | 500 Postgres encoding error | 400 |
+| F-06 (missing email) | 401 (misleading) | 400 |
+
+**Tests:** 11 integration tests added (`LoginValidationTests.cs`), all passing.
+**CodeRabbit review:** Review incomplete (PR merged during processing). No findings posted.
+**Post-merge audit:** Clean -- 0 unaddressed comments.
