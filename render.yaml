@@ -1,0 +1,117 @@
+# Render Blueprint for Northwoods deployment
+# See: https://render.com/docs/blueprint-spec
+#
+# Note: This blueprint documents the service topology. Services were created
+# via the Render API and deploy from Docker Hub images (muness/northwoods-*).
+# To use this blueprint directly, connect the GitHub repo to Render first.
+
+databases:
+  - name: northwoods-db
+    plan: basic_256mb
+    region: oregon
+    postgresMajorVersion: 16
+    databaseName: northwoods
+    user: northwoods
+
+services:
+  - type: web
+    name: northwoods-api
+    plan: starter
+    region: oregon
+    runtime: image
+    image:
+      url: docker.io/muness/northwoods-api:latest
+    healthCheckPath: /healthz
+    envVars:
+      - key: ASPNETCORE_URLS
+        value: http://+:10000
+      - key: ConnectionStrings__Default
+        fromDatabase:
+          name: northwoods-db
+          property: connectionString
+      - key: Database__UseAppUserRole
+        value: "false"
+      - key: Minio__Endpoint
+        fromService:
+          type: web
+          name: northwoods-minio
+          property: hostport
+      - key: Minio__AccessKey
+        value: northwoods
+      - key: Minio__SecretKey
+        sync: false
+      - key: Minio__BucketName
+        value: intakes
+      - key: Auth__Jwt__SigningKey
+        generateValue: true
+      - key: Auth__Jwt__Issuer
+        value: northwoods-api
+      - key: Auth__Jwt__Audience
+        value: northwoods-web
+      - key: Auth__ReviewerCanUpload
+        value: "false"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: Extraction__UseOpenAiVision
+        value: "true"
+      - key: Extraction__UsePaddleOcr
+        value: "false"
+      - key: Cors__AllowedOrigins__0
+        value: https://northwoods.muness.com
+      - key: Cors__AllowedOrigins__1
+        value: https://northwoods-web.onrender.com
+
+  - type: worker
+    name: northwoods-worker
+    plan: starter
+    region: oregon
+    runtime: image
+    image:
+      url: docker.io/muness/northwoods-worker:latest
+    envVars:
+      - key: ConnectionStrings__Default
+        fromDatabase:
+          name: northwoods-db
+          property: connectionString
+      - key: Minio__Endpoint
+        fromService:
+          type: web
+          name: northwoods-minio
+          property: hostport
+      - key: Minio__AccessKey
+        value: northwoods
+      - key: Minio__SecretKey
+        sync: false
+      - key: Minio__BucketName
+        value: intakes
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: Extraction__UseOpenAiVision
+        value: "true"
+      - key: Extraction__UsePaddleOcr
+        value: "false"
+      - key: Extraction__OpenAi__VisionModel
+        value: gpt-5.4-nano
+
+  - type: web
+    name: northwoods-minio
+    plan: starter
+    region: oregon
+    runtime: image
+    image:
+      url: docker.io/minio/minio:latest
+    dockerCommand: minio server /data --address :10000 --console-address :10001
+    envVars:
+      - key: MINIO_ROOT_USER
+        value: northwoods
+      - key: MINIO_ROOT_PASSWORD
+        sync: false
+
+  - type: web
+    name: northwoods-web
+    plan: starter
+    region: oregon
+    runtime: image
+    image:
+      url: docker.io/muness/northwoods-web:latest
+    # Custom domain: northwoods.muness.com (CNAME via Cloudflare)

@@ -22,9 +22,9 @@ public sealed class ObjectStore
 
     private static AmazonS3Config CreateConfig(string endpoint) => new()
     {
-        ServiceURL = $"http://{endpoint}",
+        ServiceURL = endpoint.Contains("://") ? endpoint : $"http://{endpoint}",
         ForcePathStyle = true,
-        UseHttp = true,
+        UseHttp = !endpoint.StartsWith("https://", StringComparison.OrdinalIgnoreCase),
         AuthenticationRegion = "us-east-1",
     };
 
@@ -51,7 +51,9 @@ public sealed class ObjectStore
             Verb = HttpVerb.GET,
         };
 
-        return _publicS3Client.GetPreSignedURL(request).Replace("https://", "http://");
+        var url = _publicS3Client.GetPreSignedURL(request);
+        // Only downgrade to HTTP for local MinIO endpoints, keep HTTPS for production
+        return url;
     }
 
     public async Task<byte[]> DownloadAsync(string key)
