@@ -15,3 +15,9 @@ coverage/
 
 .playwright/
 .playwright-cli/__pycache__/
+
+# Generated corpus PDFs (run scripts/corpus/gen_*.py to regenerate)
+samples/corpus/*.pdf
+samples/corpus/**/*.pdf
+scripts/corpus/__pycache__/
+scripts/corpus/**/__pycache__/
