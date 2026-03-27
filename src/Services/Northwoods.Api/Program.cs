@@ -38,7 +38,8 @@ var jwtAudience = builder.Configuration["Auth:Jwt:Audience"] ?? "northwoods-web"
 var jwtExpiration = TimeSpan.FromMinutes(builder.Configuration.GetValue("Auth:Jwt:ExpiresInMinutes", 120));
 var reviewersCanUpload = builder.Configuration.GetValue("Auth:ReviewerCanUpload", false);
 
-var db = new DbConnectionFactory(connectionString);
+var useAppUserRole = builder.Configuration.GetValue("Database:UseAppUserRole", true);
+var db = new DbConnectionFactory(connectionString, useAppUserRole);
 var store = new ObjectStore(
     builder.Configuration["Minio:Endpoint"] ?? "localhost:9000",
     builder.Configuration["Minio:AccessKey"] ?? "northwoods",
@@ -49,6 +50,19 @@ var store = new ObjectStore(
 builder.Services.AddSingleton(db);
 builder.Services.AddSingleton(store);
 builder.Services.AddOpenApi();
+
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:5173", "http://localhost:4173"];
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
 builder.Services.AddHealthChecks()
     .AddCheck("postgres", new PostgresHealthCheck(connectionString));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -83,6 +97,8 @@ const string correlationIdHeader = "X-Correlation-Id";
 const double SearchFuzzySimilarityThreshold = 0.3;
 const double CaseAggregateSimilarityThreshold = 0.6;
 
+app.UseCors();
+
 app.Use(async (httpContext, next) =>
 {
     var correlationId = httpContext.Request.Headers.TryGetValue(correlationIdHeader, out var provided)
@@ -111,6 +127,7 @@ app.UseAuthorization();
 
 app.MapOpenApi();
 app.MapHealthChecks("/healthz");
+
 
 app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFactory) =>
 {

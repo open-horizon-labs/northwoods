@@ -29,8 +29,16 @@ public sealed class DbSession : IAsyncDisposable
 /// <summary>
 /// Creates tenant-scoped database sessions using row-level security.
 /// </summary>
-public sealed class DbConnectionFactory(string connectionString)
+public sealed class DbConnectionFactory
 {
+    private readonly string _connectionString;
+    private readonly bool _useAppUserRole;
+
+    public DbConnectionFactory(string connectionString, bool useAppUserRole = true)
+    {
+        _connectionString = connectionString;
+        _useAppUserRole = useAppUserRole;
+    }
     /// <summary>
     /// Creates a new tenant-scoped session: opens a connection, begins a transaction,
     /// sets the RLS tenant context, and switches to the restricted app_user role.
@@ -38,7 +46,7 @@ public sealed class DbConnectionFactory(string connectionString)
     /// </summary>
     public async Task<DbSession> OpenSessionAsync(string tenantId)
     {
-        var conn = new NpgsqlConnection(connectionString);
+        var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync();
         var tx = await conn.BeginTransactionAsync();
 
@@ -49,9 +57,12 @@ public sealed class DbConnectionFactory(string connectionString)
             await cmd.ExecuteNonQueryAsync();
         }
 
-        await using (var cmd = new NpgsqlCommand("SET LOCAL ROLE app_user", conn, tx))
+        if (_useAppUserRole)
         {
-            await cmd.ExecuteNonQueryAsync();
+            await using (var cmd = new NpgsqlCommand("SET LOCAL ROLE app_user", conn, tx))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         return new DbSession(conn, tx);

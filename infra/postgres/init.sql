@@ -260,18 +260,18 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
-    ('tenant-a', 'worker@sunrise.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'IntakeWorker'),
-    ('tenant-a', 'reviewer@sunrise.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'Reviewer')
-ON CONFLICT (tenant_id, email) DO NOTHING;
+    ('tenant-a', 'worker@sunrise.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'IntakeWorker'),
+    ('tenant-a', 'reviewer@sunrise.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Reviewer')
+ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- ============================================================================
 -- Seed data: Users for tenant-b
 -- ============================================================================
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
-    ('tenant-b', 'worker@lakewood.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'IntakeWorker'),
-    ('tenant-b', 'reviewer@lakewood.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'Reviewer')
-ON CONFLICT (tenant_id, email) DO NOTHING;
+    ('tenant-b', 'worker@lakewood.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'IntakeWorker'),
+    ('tenant-b', 'reviewer@lakewood.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Reviewer')
+ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- ============================================================================
 -- Seed data: Templates
