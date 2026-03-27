@@ -203,3 +203,23 @@ PR: [#31](https://github.com/open-horizon-labs/northwoods/pull/31) | Branch: `25
 
 **CodeRabbit review:** Review incomplete (PR merged during processing). No findings posted.
 **Post-merge audit:** Clean -- 0 unaddressed comments.
+
+---
+
+### Issue #24 — Persist auth token in localStorage (B-01)
+
+PR: [#29](https://github.com/open-horizon-labs/northwoods/pull/29) | Branch: `24-persist-auth-token` | Merged: `df2afd2`
+
+**Fix:** Store JWT in localStorage after login, restore on mount, clear on logout (preset switch), send in Authorization header (already handled by api.ts).
+
+**Changes (apps/web/src/App.tsx):**
+- `readStoredAuth()`: Defensive helper reads/validates stored auth from localStorage (checks `accessToken`, `tenantId`, `role`). Returns null on missing/corrupt data.
+- Lazy state init: `useState(readStoredAuth)` restores auth on mount.
+- Persist on login: `localStorage.setItem()` after successful `api.login()`, wrapped in try-catch (best-effort).
+- Clear on preset switch: `localStorage.removeItem()` wrapped in try-catch.
+- Mount effect: `restoredAuthOnMountRef` pattern fetches templates/queue only for restored sessions (not fresh logins), preventing duplicate API calls.
+
+**Finding addressed:** B-01 (auth token not persisted -- lost on reload)
+
+**CodeRabbit review:** 3 rounds. Round 1: incomplete validation (Major), eslint-disable pattern (Trivial). Round 2: best-effort storage wrapping (Major), duplicate API calls on login (Major). Round 3: clean ("No actionable comments").
+**Post-merge audit:** All 4 CodeRabbit findings confirmed fixed in merged code. 0 unaddressed comments.
