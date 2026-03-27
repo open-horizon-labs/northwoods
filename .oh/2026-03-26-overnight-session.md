@@ -47,6 +47,7 @@
 - **Implementation commit:** `f494605` (`feat: add similar-case retrieval to review workflow`)
 - **PR:** #12 (`https://github.com/open-horizon-labs/northwoods/pull/12`)
 - **Merged:** yes (merge commit `69c3bbb77487c3c865c939defaece312926267b2`)
+- **Issue status:** closed (`2026-03-27T02:24:48Z`)
 
 ### Major decisions
 - Implemented tenant-scoped `case_profiles` table with `vector(16)` embeddings, `search_tsv`, trgm/FTS indexes, and RLS policy.
