@@ -5,7 +5,6 @@ export type LoginRequest = {
   email: string
   password: string
   tenantId: string
-  role: UserRole
 }
 
 export type LoginResponse = {

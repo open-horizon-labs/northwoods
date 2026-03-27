@@ -1,9 +1,8 @@
 namespace Northwoods.Tenancy;
 
-public static class TenantHeaders
+public static class AuthClaims
 {
-    public const string TenantId = "X-Tenant-Id";
-    public const string Role = "X-User-Role";
+    public const string TenantId = "tenant_id";
+    public const string UserId = "user_id";
+    public const string Role = "role";
 }
-
-public sealed record TenantContext(string TenantId, string Role);
