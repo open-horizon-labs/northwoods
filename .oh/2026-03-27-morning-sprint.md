@@ -342,3 +342,58 @@ All 27 issues closed. All PRs merged. All rubric areas score 3+.
 | #27 Dual OCR pipeline | Merged | #32 |
 | #9 Review round 1 | Merged | #33 |
 | #10 Review round 2 | Merged | #34 |
+
+## Render Deployment (Issue #35)
+
+### Completed
+- Deployed full Northwoods stack to Render via API
+- Custom domain: https://northwoods.muness.com (Cloudflare CNAME)
+- PR #36 merged to main
+
+### Services
+- **northwoods-api**: Web Service (Docker) at northwoods-api.onrender.com
+- **northwoods-worker**: Background Worker (Docker)
+- **northwoods-minio**: MinIO S3 at northwoods-minio.onrender.com
+- **northwoods-web**: Frontend (nginx) at northwoods-web.onrender.com
+- **northwoods-db**: Render Managed Postgres 16 (basic_256mb)
+
+### Issues Encountered & Resolved
+1. **Render free Postgres**: No external connections; upgraded to basic_256mb
+2. **Docker platform**: macOS arm64 images rejected; rebuilt with `--platform linux/amd64`
+3. **Private repo**: Can't use Render Git deploy; built images locally, pushed to Docker Hub
+4. **SET ROLE app_user**: Render managed Postgres can't create custom roles; made role switching configurable
+5. **BCrypt seed hashes**: Existing hash in init.sql didn't match "password"; regenerated correct hash
+6. **MinIO docker command**: Render's dockerCommand needs explicit `minio server` prefix
+7. **SSL external connection**: All libpq/psycopg clients failed SSL handshake from host; used Render internal cron jobs for migrations
+
+### Code Changes
+- `apps/web/src/api.ts`: API_BASE configurable via VITE_API_URL
+- `Program.cs`: CORS support, Database:UseAppUserRole config
+- `DbConnectionFactory.cs`: Optional SET ROLE app_user
+- `ObjectStore.cs`: HTTPS endpoint support
+- `init.sql`: Fixed password hashes, idempotent user upserts
+- `render.yaml`: New blueprint documenting service topology
+
+---
+
+## Issue #36: Replace hash-based embeddings with OpenAI text-embedding-3-small
+
+### Changes
+- **`src/Workers/Extraction.Worker/Worker.cs`**: Replaced hash-based `GenerateCaseEmbedding` (SHA256 hash -> 16-dim vector) with `GenerateCaseEmbeddingAsync` calling OpenAI `text-embedding-3-small` API (1536-dim vectors)
+- **`infra/postgres/init.sql`**: Changed `embedding VECTOR(16) NOT NULL` to `embedding VECTOR(1536)` (nullable). Removed fake 16-dim vectors from seed data.
+- **`docker-compose.yml`**: Pass `OPENAI_API_KEY` to worker service
+- **`.env.example`**: Added embedding model documentation comment
+
+### Key design decisions
+- Made embedding column **nullable** so seed data and documents without API keys still work. The similar-case query already has `AND cp.embedding IS NOT NULL` guards.
+- `PersistCaseProfile` changed from `static` to instance method to access `config` for the API key, avoiding parameter threading through 4 method signatures.
+- Embedding token usage logged as `audit_events` with `event_type='embedding_generated'` (model, dimensions, prompt_tokens, total_tokens).
+- If OpenAI API call fails, document is stored without embedding (graceful degradation) rather than failing extraction.
+- Uses `COALESCE(EXCLUDED.embedding, case_profiles.embedding)` in upsert to preserve existing embedding if re-extraction fails to generate one.
+
+### Verification
+- Uploaded two documents with real extraction
+- Both got real 1536-dim embeddings via text-embedding-3-small
+- Token usage logged: 152 tokens (housing-stability), 455 tokens (general-intake)
+- Similar case retrieval returns semantically related documents
+- All 30 tests passing, `pnpm check` clean, ADR compliance checks pass

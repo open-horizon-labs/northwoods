@@ -20,9 +20,10 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
     internal const decimal HighConfidenceThreshold = 0.90m;
     internal const decimal ReviewRequiredThreshold = 0.75m;
     internal const decimal EscalateThreshold = 0.82m;
-    private const int CaseEmbeddingDimensions = 16;
+    private const int CaseEmbeddingDimensions = 1536;
     private const int DefaultMaxRetryAttempts = 3;
     private const int DefaultRetryDelayMilliseconds = 1_000;
+    private static readonly HttpClient EmbeddingHttp = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -538,7 +539,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         return exists == 1;
     }
 
-    private static async Task PersistCaseProfile(
+    private async Task PersistCaseProfile(
         NpgsqlConnection conn,
         NpgsqlTransaction tx,
         Guid docId,
@@ -554,15 +555,53 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         var applicantName = GetFieldValue(fields, "applicantName");
         var dateOfBirth = GetFieldValue(fields, "dateOfBirth");
         var address = GetFieldValue(fields, "address");
-        var embedding = GenerateCaseEmbedding(caseProfileText);
-        var embeddingLiteral = ToPgVectorLiteral(embedding);
+
+        string? embeddingLiteral = null;
+        var apiKey = config["OPENAI_API_KEY"] ?? config["Extraction:OpenAi:ApiKey"];
+
+        if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(caseProfileText))
+        {
+            try
+            {
+                var (embedding, promptTokens, totalTokens) = await GenerateCaseEmbeddingAsync(caseProfileText, apiKey, ct);
+                embeddingLiteral = ToPgVectorLiteral(embedding);
+
+                await conn.ExecuteAsync(
+                    """
+                    INSERT INTO audit_events (document_id, tenant_id, event_type, details)
+                    VALUES (@DocId, @TenantId, 'embedding_generated', @Details::jsonb)
+                    """,
+                    new
+                    {
+                        DocId = docId,
+                        TenantId = tenantId,
+                        Details = JsonSerializer.Serialize(new
+                        {
+                            model = "text-embedding-3-small",
+                            dimensions = CaseEmbeddingDimensions,
+                            prompt_tokens = promptTokens,
+                            total_tokens = totalTokens
+                        })
+                    },
+                    tx);
+
+                logger.LogInformation(
+                    "Generated embedding for {DocId}: model=text-embedding-3-small tokens={TotalTokens}",
+                    docId, totalTokens);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Failed to generate embedding for {DocId}; storing without embedding", docId);
+            }
+        }
 
         await conn.ExecuteAsync(
             """
             INSERT INTO case_profiles
                 (document_id, tenant_id, template_id, applicant_name, date_of_birth, address, search_text, embedding)
             VALUES
-                (@DocId, @TenantId, @TemplateId, @ApplicantName, @DateOfBirth, @Address, @SearchText, CAST(@Embedding AS vector(16)))
+                (@DocId, @TenantId, @TemplateId, @ApplicantName, @DateOfBirth, @Address, @SearchText,
+                 CASE WHEN @Embedding IS NULL THEN NULL ELSE CAST(@Embedding AS vector(1536)) END)
             ON CONFLICT (document_id)
                 DO UPDATE SET
                     tenant_id = EXCLUDED.tenant_id,
@@ -571,7 +610,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                     date_of_birth = EXCLUDED.date_of_birth,
                     address = EXCLUDED.address,
                     search_text = EXCLUDED.search_text,
-                    embedding = EXCLUDED.embedding,
+                    embedding = COALESCE(EXCLUDED.embedding, case_profiles.embedding),
                     updated_at = now()
             """,
             new
@@ -590,32 +629,54 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         ct.ThrowIfCancellationRequested();
     }
 
-    private static double[] GenerateCaseEmbedding(string text)
+    private static async Task<(double[] Embedding, long PromptTokens, long TotalTokens)> GenerateCaseEmbeddingAsync(
+        string text, string apiKey, CancellationToken ct)
     {
-        var normalized = (text ?? string.Empty).ToLowerInvariant();
+        var requestPayload = new
+        {
+            model = "text-embedding-3-small",
+            input = text
+        };
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/embeddings")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(requestPayload), Encoding.UTF8, "application/json")
+        };
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        using var res = await EmbeddingHttp.SendAsync(req, ct);
+        var body = await res.Content.ReadAsStringAsync(ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var isTransient = (int)res.StatusCode >= 500
+                              || res.StatusCode == HttpStatusCode.TooManyRequests
+                              || res.StatusCode == HttpStatusCode.RequestTimeout;
+            if (isTransient)
+                throw new TransientExtractionException($"OpenAI embedding failed ({(int)res.StatusCode}).");
+            throw new InvalidOperationException($"OpenAI embedding failed ({(int)res.StatusCode}): {body}");
+        }
+
+        using var doc = JsonDocument.Parse(body);
+        var dataArray = doc.RootElement.GetProperty("data");
+        var embeddingElement = dataArray[0].GetProperty("embedding");
         var values = new double[CaseEmbeddingDimensions];
-
-        using var sha = SHA256.Create();
-        for (var i = 0; i < values.Length; i++)
+        var idx = 0;
+        foreach (var el in embeddingElement.EnumerateArray())
         {
-            var hashInput = Encoding.UTF8.GetBytes($"{i}|{normalized}");
-            var hashBytes = sha.ComputeHash(hashInput);
-            var raw = BitConverter.ToInt32(hashBytes, 0);
-            values[i] = raw / (double)int.MaxValue;
+            if (idx < values.Length)
+                values[idx++] = el.GetDouble();
         }
 
-        var norm = Math.Sqrt(values.Sum(v => v * v));
-        if (norm <= 0.00001)
+        long promptTokens = 0, totalTokens = 0;
+        if (doc.RootElement.TryGetProperty("usage", out var usage))
         {
-            return values;
+            if (usage.TryGetProperty("prompt_tokens", out var pt) && pt.ValueKind == JsonValueKind.Number)
+                promptTokens = pt.GetInt64();
+            if (usage.TryGetProperty("total_tokens", out var tt) && tt.ValueKind == JsonValueKind.Number)
+                totalTokens = tt.GetInt64();
         }
 
-        for (var i = 0; i < values.Length; i++)
-        {
-            values[i] /= norm;
-        }
-
-        return values;
+        return (values, promptTokens, totalTokens);
     }
 
     private static string ToPgVectorLiteral(double[] values)

@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS case_profiles (
     address TEXT,
     search_text TEXT NOT NULL,
     search_tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('simple', COALESCE(search_text, ''))) STORED,
-    embedding VECTOR(16) NOT NULL,
+    embedding VECTOR(1536),
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -414,22 +414,17 @@ VALUES
     ('44444444-4444-4444-4444-444444444444', 'tenant-b', 'requestedServices', 'Job placement support', 0.94, false)
 ON CONFLICT (document_id, field_key) DO NOTHING;
 
-INSERT INTO case_profiles (document_id, tenant_id, template_id, applicant_name, date_of_birth, address, search_text, embedding)
+INSERT INTO case_profiles (document_id, tenant_id, template_id, applicant_name, date_of_birth, address, search_text)
 VALUES
     ('11111111-1111-1111-1111-111111111111', 'tenant-a', 'general-assistance',
         'Jamie Carter', '03/15/1988', '742 Evergreen Terrace, Springfield',
-        'template=general-assistance; fields=applicantName: Jamie Carter | dateOfBirth: 03/15/1988 | address: 742 Evergreen Terrace, Springfield | householdSize: 4 | monthlyIncome: $1,850 | requestedServices: Housing assistance, utility aid',
-        '[0.63,0.58,0.17,0.05,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00]'::vector),
+        'template=general-assistance; fields=applicantName: Jamie Carter | dateOfBirth: 03/15/1988 | address: 742 Evergreen Terrace, Springfield | householdSize: 4 | monthlyIncome: $1,850 | requestedServices: Housing assistance, utility aid'),
     ('22222222-2222-2222-2222-222222222222', 'tenant-a', 'general-assistance',
         'Jamie Carrr', '03/15/1988', '742 Evergreen Ave, Springfield',
-        'template=general-assistance; fields=applicantName: Jamie Carrr | dateOfBirth: 03/15/1988 | address: 742 Evergreen Ave, Springfield | householdSize: 3 | monthlyIncome: $1,900 | requestedServices: Emergency rent aid, utility aid',
-        '[0.61,0.55,0.21,0.08,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00]'::vector),
+        'template=general-assistance; fields=applicantName: Jamie Carrr | dateOfBirth: 03/15/1988 | address: 742 Evergreen Ave, Springfield | householdSize: 3 | monthlyIncome: $1,900 | requestedServices: Emergency rent aid, utility aid'),
     ('33333333-3333-3333-3333-333333333333', 'tenant-a', 'general-assistance',
         'Luis Romero', '11/05/1985', '18 River Rd, Springfield',
-        'template=general-assistance; fields=applicantName: Luis Romero | dateOfBirth: 11/05/1985 | address: 18 River Rd, Springfield | householdSize: 2 | monthlyIncome: $2,500 | requestedServices: Food assistance',
-        '[0.16,0.72,0.69,0.06,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00]'::vector),
+        'template=general-assistance; fields=applicantName: Luis Romero | dateOfBirth: 11/05/1985 | address: 18 River Rd, Springfield | householdSize: 2 | monthlyIncome: $2,500 | requestedServices: Food assistance'),
     ('44444444-4444-4444-4444-444444444444', 'tenant-b', 'general-assistance',
         'Morgan Lee', '07/08/1990', '12 Lake Ave, Harbor City',
-        'template=general-assistance; fields=applicantName: Morgan Lee | dateOfBirth: 07/08/1990 | address: 12 Lake Ave, Harbor City | householdSize: 1 | monthlyIncome: $3,100 | requestedServices: Job placement support',
-        '[0.09,-0.19,0.22,0.97,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00]'::vector)
-ON CONFLICT (document_id) DO NOTHING;
+        'template=general-assistance; fields=applicantName: Morgan Lee | dateOfBirth: 07/08/1990 | address: 12 Lake Ave, Harbor City | householdSize: 1 | monthlyIncome: $3,100 | requestedServices: Job placement support')

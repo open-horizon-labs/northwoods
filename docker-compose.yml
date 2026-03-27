@@ -67,6 +67,7 @@ services:
       Minio__AccessKey: northwoods
       Minio__SecretKey: northwoods
       Minio__BucketName: intakes
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
