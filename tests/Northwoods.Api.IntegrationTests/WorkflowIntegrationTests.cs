@@ -134,6 +134,104 @@ public sealed class WorkflowIntegrationTests
         Assert.True(tenantAMetrics.ReviewFinalizationCount > tenantBMetrics.ReviewFinalizationCount);
     }
 
+    [Trait("Category", "runtime")]
+    [Fact]
+    public async Task Search_ReturnsTenantScopedResults()
+    {
+        using var baselineClient = CreateClient();
+
+        if (!await IsRuntimeAvailableAsync(baselineClient))
+        {
+            _output.WriteLine("API runtime is not available; skipping search integration test.");
+            return;
+        }
+
+        var tenantAToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
+        var tenantBToken = await LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "dev");
+
+        using var tenantAClient = CreateClient(tenantAToken);
+        using var tenantBClient = CreateClient(tenantBToken);
+
+        // Search with a generic query that may return results for tenant-a
+        using var searchResponseA = await tenantAClient.GetAsync("/search?q=intake");
+        Assert.Equal(HttpStatusCode.OK, searchResponseA.StatusCode);
+
+        var searchA = await searchResponseA.Content.ReadFromJsonAsync<SearchResponse>();
+        Assert.NotNull(searchA);
+        Assert.Equal("intake", searchA.Query);
+
+        // Search with same query for tenant-b should not return tenant-a data
+        using var searchResponseB = await tenantBClient.GetAsync("/search?q=intake");
+        Assert.Equal(HttpStatusCode.OK, searchResponseB.StatusCode);
+
+        var searchB = await searchResponseB.Content.ReadFromJsonAsync<SearchResponse>();
+        Assert.NotNull(searchB);
+
+        // Tenant-b results should not contain any tenant-a intake IDs
+        if (searchA.Results.Count > 0)
+        {
+            var tenantAIds = searchA.Results.Select(r => r.IntakeId).ToHashSet();
+            var tenantBIds = searchB.Results.Select(r => r.IntakeId).ToHashSet();
+            Assert.Empty(tenantAIds.Intersect(tenantBIds));
+        }
+
+        // Empty query returns empty results
+        using var emptyResponse = await tenantAClient.GetAsync("/search?q=");
+        Assert.Equal(HttpStatusCode.OK, emptyResponse.StatusCode);
+        var emptySearch = await emptyResponse.Content.ReadFromJsonAsync<SearchResponse>();
+        Assert.NotNull(emptySearch);
+        Assert.Empty(emptySearch.Results);
+    }
+
+    [Trait("Category", "runtime")]
+    [Fact]
+    public async Task CaseAggregate_ReturnsTenantScopedDocuments()
+    {
+        using var baselineClient = CreateClient();
+
+        if (!await IsRuntimeAvailableAsync(baselineClient))
+        {
+            _output.WriteLine("API runtime is not available; skipping case aggregate integration test.");
+            return;
+        }
+
+        var tenantAToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
+        var tenantBToken = await LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "dev");
+
+        using var tenantAClient = CreateClient(tenantAToken);
+        using var tenantBClient = CreateClient(tenantBToken);
+
+        // Case view with a name that might exist in tenant-a
+        using var caseResponseA = await tenantAClient.GetAsync("/cases/Jamie%20Carter");
+        Assert.Equal(HttpStatusCode.OK, caseResponseA.StatusCode);
+
+        var caseA = await caseResponseA.Content.ReadFromJsonAsync<CaseAggregateResponse>();
+        Assert.NotNull(caseA);
+        Assert.Equal("Jamie Carter", caseA.PersonKey);
+
+        // Same name with tenant-b should return empty (tenant isolation)
+        using var caseResponseB = await tenantBClient.GetAsync("/cases/Jamie%20Carter");
+        Assert.Equal(HttpStatusCode.OK, caseResponseB.StatusCode);
+
+        var caseB = await caseResponseB.Content.ReadFromJsonAsync<CaseAggregateResponse>();
+        Assert.NotNull(caseB);
+
+        // Tenant-b should not see tenant-a documents
+        if (caseA.Documents.Count > 0)
+        {
+            var tenantAIds = caseA.Documents.Select(d => d.IntakeId).ToHashSet();
+            var tenantBIds = caseB.Documents.Select(d => d.IntakeId).ToHashSet();
+            Assert.Empty(tenantAIds.Intersect(tenantBIds));
+        }
+
+        // Non-existent person returns empty documents list
+        using var notFoundResponse = await tenantAClient.GetAsync("/cases/Nonexistent%20Person%20XYZ");
+        Assert.Equal(HttpStatusCode.OK, notFoundResponse.StatusCode);
+        var notFoundCase = await notFoundResponse.Content.ReadFromJsonAsync<CaseAggregateResponse>();
+        Assert.NotNull(notFoundCase);
+        Assert.Empty(notFoundCase.Documents);
+    }
+
     private static HttpClient CreateClient(string? token = null)
     {
         var client = new HttpClient
@@ -267,3 +365,9 @@ internal sealed record ApiMetricsResponse(
     int ReviewFinalizationCount,
     long ExtractionSuccessCount,
     long ExtractionFailureCount);
+
+
+internal sealed record SearchResultItem(Guid IntakeId, string TemplateId, string ApplicantName, string Status, decimal Confidence, string Snippet);
+internal sealed record SearchResponse(string Query, List<SearchResultItem> Results);
+internal sealed record CaseDocumentItem(Guid IntakeId, string TemplateId, string Status, DateTimeOffset CreatedAt, List<ConfidenceField> Fields);
+internal sealed record CaseAggregateResponse(string PersonKey, List<CaseDocumentItem> Documents);

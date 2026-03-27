@@ -62,3 +62,24 @@ public sealed record TemplateDescriptor(
     string Id,
     string Name,
     IReadOnlyList<TemplateField> Fields);
+
+public sealed record SearchResultItem(
+    Guid IntakeId,
+    string TemplateId,
+    string ApplicantName,
+    string Status,
+    decimal Confidence,
+    string Snippet);
+
+public sealed record SearchResponse(string Query, IReadOnlyList<SearchResultItem> Results);
+
+public sealed record CaseDocumentItem(
+    Guid IntakeId,
+    string TemplateId,
+    string Status,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<ConfidenceField> Fields);
+
+public sealed record CaseAggregateResponse(
+    string PersonKey,
+    IReadOnlyList<CaseDocumentItem> Documents);

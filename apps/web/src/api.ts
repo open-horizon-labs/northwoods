@@ -1,4 +1,5 @@
 import type {
+  CaseAggregateResponse,
   CreateIntakeResponse,
   FinalizeReviewRequest,
   FinalizeReviewResponse,
@@ -7,6 +8,7 @@ import type {
   LoginResponse,
   ReviewDetailResponse,
   ReviewQueueItem,
+  SearchResponse,
   TemplateDescriptor,
 } from './types'
 
@@ -104,5 +106,19 @@ export const api = {
       body: JSON.stringify(payload),
     })
     return handleResponse<FinalizeReviewResponse>(response)
+  },
+
+  search: async (accessToken: string, query: string) => {
+    const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, {
+      headers: authHeader(accessToken),
+    })
+    return handleResponse<SearchResponse>(response)
+  },
+
+  getCaseAggregate: async (accessToken: string, personKey: string) => {
+    const response = await fetch(`${API_BASE}/cases/${encodeURIComponent(personKey)}`, {
+      headers: authHeader(accessToken),
+    })
+    return handleResponse<CaseAggregateResponse>(response)
   },
 }
