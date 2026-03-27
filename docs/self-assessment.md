@@ -99,25 +99,67 @@ Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1-4):
 
 ## Known gaps
 
-- **Web frontend**: React UI exists but is not included in Docker Compose as a container. Run separately with `pnpm --dir apps/web dev`.
-- **Production auth hardening**: Bcrypt hashing is in place, but token refresh, rate limiting, and account lockout are not implemented.
-- **OpenAI Vision in Docker**: The worker container does not have `OPENAI_API_KEY` by default. Vision extraction requires setting the key in the worker environment.
-- **Embedding quality**: Case profile embeddings use a deterministic hash-based generator, not a real embedding model. Real embeddings would improve similar-case retrieval relevance.
-- **UI smoke tests**: Browser-level Playwright tests exist in reports but are not automated in CI.
+- **Production auth hardening**: bcrypt hashing is in place, but token refresh, rate limiting, and account lockout are not implemented.
+- **OpenAI Vision in Docker**: the worker container requires `OPENAI_API_KEY` in the worker environment for Vision extraction; defaults to mock provider otherwise.
+- **UI smoke tests**: Playwright e2e test scaffold exists; full automation in CI is a follow-on item.
 
 ## AI-assisted development
 
-### Example 1: Architecture and scoping
-- **Use:** AI assisted with initial architecture synthesis, rubric design, and ADR drafting -- translating assignment requirements into a coherent system design.
+This project was built primarily through agentic AI development using Claude with a structured pipeline (`dev-pipeline-oversight`). Each GitHub issue was worked end-to-end by an agent: branch, implement, review, dissent challenge, CodeRabbit, merge. The human role was scoping, reviewing agent output, catching drift, and making architectural calls.
 
-### Example 2: Extraction pipeline design
-- **Use:** AI helped design the dual-provider extraction model, including the append-only attempt storage pattern and confidence consensus logic.
+### Representative prompts and what they produced
 
-### Example 3: Security hardening
-- **Use:** Fuzz testing (API + browser) was AI-assisted, producing structured findings reports that drove the fix loop (JWT claim mapping, bcrypt passwords, input validation, token persistence).
+**1. Architecture synthesis (early session)**
+```
+Read the assignment brief at docs/exercise.md. Produce an architecture that satisfies all requirements
+using a single API + worker + Postgres + MinIO topology. Justify every boundary. Draft ADRs for the
+four most consequential decisions. Identify what I should NOT build to avoid unearned complexity.
+```
+→ Produced the one-API-one-worker design, the Postgres-for-retrieval decision (no separate vector DB),
+the RLS tenancy model, and ADRs 001-005 including the portable extraction pipeline design.
 
-### Example 4: RAG retrieval implementation
-- **Use:** The hybrid retrieval query (FTS + vector + trigram + structured boosts with reciprocal rank fusion) was developed with AI assistance to combine multiple retrieval modalities without external dependencies.
+**2. Dual-provider extraction pipeline (issue #27)**
+```
+Run both PaddleOCR and OpenAI gpt-5.4-nano vision in the extraction pipeline on every document.
+Log token usage (prompt, completion, total) in extraction_attempts.details as numeric JSONB.
+Escalate to gpt-5.4-mini if nano fails. Preserve append-only attempt history.
+```
+→ Produced `OpenAiVisionProvider`, `CallWithFallback`, token logging in JSONB, and 8 new unit tests.
+The agent caught that `Dictionary<string,string>` needed to become `Dictionary<string,object>`
+for numeric JSON serialization — a detail not in the original spec.
 
-### Example 5: CI compliance checks
-- **Use:** AI helped design AST/linter-level compliance checks for RLS enforcement and append-only guarantees, wrapping them in a CI workflow.
+**3. Adversarial security audit (fuzz session)**
+```
+Fuzz the API as a stickler attacker. Test every endpoint for: auth bypass, tenant boundary violations,
+null bytes, missing field handling, plaintext secrets, token persistence. Produce a structured report
+with severity ratings (Critical/High/Medium) and reproduce steps for each finding.
+```
+→ Found F-01 (JWT MapInboundClaims breaking all auth), F-05 (plaintext passwords), B-01 (token not
+persisted), null byte Postgres crash, and missing input validation. Each became a tracked issue.
+
+**4. Confidence tier implementation (issue #42)**
+```
+ADR 005 promises three confidence tiers but they aren't implemented. Fix this completely:
+- Remove mock provider as default (UseOpenAiVision should default true)
+- Implement auto-accept at >= 0.90, review_ready for 0.75-0.90, forced review below 0.75
+- Escalate nano -> mini if avg field confidence < 0.75 after extraction
+- Separate transient errors (retry 3x) from capability failures (escalate) from hard errors (fail)
+- 6+ new tests covering each path
+```
+→ Agent implemented all four behaviors, correctly identified that `completed` status needed adding
+to the document status enum, and caught that the retry test needed a mock HTTP handler.
+
+**5. Requirements audit (adversarial reviewer session)**
+```
+You are a stickler reviewer with zero prior context. Extract every requirement from docs/exercise.md.
+Check each one against the actual repo. Status: PASS / PARTIAL / FAIL / MISSING. Evidence must be
+a file path and line number or command output. Do not mark anything PASS without verification.
+```
+→ Found 11 gaps including a live 500 on /review-queue, 8 failing integration tests, missing frontend
+in Docker Compose, and a seed corpus too small for meaningful RAG. Every gap became a filed issue.
+
+### What was not AI-generated
+- The 40-person people roster and visit distribution design (`scripts/corpus/people.py`) — manually specified to match a realistic long-tail social services caseload.
+- The rubric scoring and gap analysis — human judgment applied to AI output.
+- The decision to use Postgres-centered retrieval instead of a dedicated vector DB — a deliberate architectural call made before any code was written.
+- The decision not to implement Temporal (ADR 002) — deferred after weighing complexity against timeline.
