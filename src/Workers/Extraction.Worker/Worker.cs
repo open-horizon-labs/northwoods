@@ -68,16 +68,18 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
     {
         var providers = new List<IExtractionProvider>();
 
+        var useMock = configuration.GetValue("Extraction:UseMockProvider", false);
+        if (useMock)
+        {
+            providers.Add(new MockTesseractProvider());
+        }
+
         var usePaddle = configuration.GetValue("Extraction:UsePaddleOcr", false);
         if (usePaddle)
         {
             var pythonPath = configuration["Extraction:PaddleOcr:PythonPath"] ?? "python3";
             var scriptPath = configuration["Extraction:PaddleOcr:ScriptPath"] ?? "scripts/paddle_extract.py";
             providers.Add(new PaddleOcrProvider(pythonPath, scriptPath));
-        }
-        else
-        {
-            providers.Add(new MockTesseractProvider());
         }
 
         var useOpenAiNormalizer = configuration.GetValue("Extraction:UseOpenAiNormalizer", false);
@@ -91,7 +93,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
             providers.Add(new OpenAiNormalizerProvider(apiKey, modelMini));
         }
 
-        var useOpenAiVision = configuration.GetValue("Extraction:UseOpenAiVision", false);
+        var useOpenAiVision = configuration.GetValue("Extraction:UseOpenAiVision", true);
         if (useOpenAiVision)
         {
             var apiKey = configuration["OPENAI_API_KEY"] ?? configuration["Extraction:OpenAi:ApiKey"];
@@ -273,9 +275,42 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                         ct);
                 }
 
+                // ADR 005 confidence tiers: compute document-level confidence (min of field confidences)
+                var minFieldConfidence = results.Count > 0
+                    ? results.Min(r => r.SystemConfidence)
+                    : 0m;
+                var allFieldsHighConfidence = results.Count > 0 && results.All(r => r.SystemConfidence >= HighConfidenceThreshold);
+                var anyFieldLowConfidence = results.Any(r => r.SystemConfidence < ReviewRequiredThreshold);
+
+                string documentStatus;
+                bool autoAccepted;
+                bool requiresAttention;
+
+                if (allFieldsHighConfidence)
+                {
+                    // All fields >= 0.90: auto-accept (still auditable, still visible in review queue)
+                    documentStatus = "completed";
+                    autoAccepted = true;
+                    requiresAttention = false;
+                }
+                else if (anyFieldLowConfidence)
+                {
+                    // Any field < 0.75: forced review with attention flag
+                    documentStatus = "review_ready";
+                    autoAccepted = false;
+                    requiresAttention = true;
+                }
+                else
+                {
+                    // Fields between 0.75-0.90: warning review path
+                    documentStatus = "review_ready";
+                    autoAccepted = false;
+                    requiresAttention = false;
+                }
+
                 await conn.ExecuteAsync(
-                    "UPDATE documents SET status = 'review_ready', updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
-                    new { Id = docId, TenantId = tenantId },
+                    "UPDATE documents SET status = @Status, updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
+                    new { Status = documentStatus, Id = docId, TenantId = tenantId },
                     tx);
                 await conn.ExecuteAsync(
                     """
@@ -294,8 +329,13 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                             fields_extracted = results.Count,
                             high_confidence_fields = results.Count(r => r.SystemConfidence >= HighConfidenceThreshold),
                             warning_fields = results.Count(r => r.SystemConfidence >= ReviewRequiredThreshold && r.SystemConfidence < HighConfidenceThreshold),
+                            low_confidence_fields = results.Count(r => r.SystemConfidence < ReviewRequiredThreshold),
                             review_required_threshold = ReviewRequiredThreshold,
                             auto_accept_threshold = HighConfidenceThreshold,
+                            min_field_confidence = minFieldConfidence,
+                            document_status = documentStatus,
+                            auto_accepted = autoAccepted,
+                            requires_attention = requiresAttention,
                             escalated_fields = results.Count(r => r.AllAttempts.Count > 1)
                         })
                     },
@@ -1257,17 +1297,82 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         private async Task<(string Model, string Body, bool Escalated, string? Reason)> CallWithFallback(
             ExtractionContext context, string prompt, CancellationToken ct)
         {
+            // Phase 1: Try nano with retry for transient errors
+            string? nanoBody = null;
+            Exception? lastTransient = null;
+
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    nanoBody = await CallVisionApi(modelNano, context, prompt, ct);
+                    lastTransient = null;
+                    break;
+                }
+                catch (TransientExtractionException tex)
+                {
+                    lastTransient = tex;
+                    if (attempt < 2)
+                        await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(10_000, 500 * (1 << attempt))), ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (InvalidOperationException)
+                {
+                    // Hard error (e.g. 400 Bad Request) -- fail immediately, do not escalate
+                    throw;
+                }
+            }
+
+            // If all nano retries failed with transient errors, escalate to mini
+            if (nanoBody is null)
+            {
+                var reason = $"nano_transient_exhausted:{lastTransient?.GetType().Name}:{lastTransient?.Message}";
+                var miniBody = await CallVisionApi(modelMini, context, prompt, ct);
+                return (modelMini, miniBody, true, reason);
+            }
+
+            // Phase 2: Check nano response quality -- escalate on low confidence or empty output
+            var outputText = TryGetResponseText(nanoBody);
+            if (string.IsNullOrWhiteSpace(outputText))
+            {
+                var miniBody = await CallVisionApi(modelMini, context, prompt, ct);
+                return (modelMini, miniBody, true, "nano_empty_response");
+            }
+
+            Dictionary<string, (string Value, decimal Confidence)>? parsed = null;
             try
             {
-                var body = await CallVisionApi(modelNano, context, prompt, ct);
-                return (modelNano, body, false, null);
+                parsed = ParseFieldsStrict(outputText);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (JsonException)
             {
-                var reason = $"nano_error:{ex.GetType().Name}:{ex.Message}";
-                var body = await CallVisionApi(modelMini, context, prompt, ct);
-                return (modelMini, body, true, reason);
+                // Unparseable -- escalate to mini
+                var miniBody = await CallVisionApi(modelMini, context, prompt, ct);
+                return (modelMini, miniBody, true, "nano_unparseable_json");
             }
+
+            // Compute average confidence of parsed fields
+            if (parsed.Count > 0)
+            {
+                var avgConfidence = parsed.Values.Average(v => v.Confidence);
+                if (avgConfidence < ReviewRequiredThreshold)
+                {
+                    var reason = $"low_confidence:nano_avg={avgConfidence:F4}";
+                    var miniBody = await CallVisionApi(modelMini, context, prompt, ct);
+                    return (modelMini, miniBody, true, reason);
+                }
+            }
+            else
+            {
+                // No fields parsed -- escalate
+                var miniBody = await CallVisionApi(modelMini, context, prompt, ct);
+                return (modelMini, miniBody, true, "nano_no_fields_parsed");
+            }
+
+            return (modelNano, nanoBody, false, null);
         }
 
         private async Task<string> CallVisionApi(string model, ExtractionContext context, string prompt, CancellationToken ct)

@@ -68,15 +68,26 @@ A single extraction result record must be represented as:
   - per-field `confidence`
   - `requiresReview` behavior remains first-class
   - optional `extractionAttempts` for diagnostics/troubleshooting.
-- Add explicit threshold policy:
-  - `>= 0.90` auto-accepted (still auditable)
-  - `0.75 - 0.90` warning review path
-  - `< 0.75` forced review
+- Add explicit threshold policy (implemented in Worker.cs `ExtractDocument`):
+  - `>= 0.90` all fields: document status `completed` (auto-accepted, still visible in review queue with badge)
+  - `0.75 - 0.90` any field: document status `review_ready` (warning review path)
+  - `< 0.75` any field: document status `review_ready` with `requires_attention` flag (forced review)
+  - Threshold constants: `HighConfidenceThreshold = 0.90`, `ReviewRequiredThreshold = 0.75`
+- Escalation in `OpenAiVisionProvider.CallWithFallback`:
+  - Transient errors (429, 5xx, timeout): retry nano 3x with exponential backoff, then escalate to mini
+  - Capability failure (avg field confidence < 0.75, empty response, unparseable JSON): escalate to mini immediately
+  - Hard error (400 Bad Request): fail the document, do not escalate
+  - Escalation metadata logged in `extraction_attempts.details`: `escalation_reason`, `escalated_from`
+- `UseOpenAiVision` defaults to `true` in appsettings.json; `MockTesseractProvider` only runs when `UseMockProvider=true`.
 - Store every stage attempt; never overwrite previous attempts.
-- Add fixtures/integration tests for:
-  - provider agreement
-  - provider disagreement
-  - low-confidence escalation
+- Test coverage for:
+  - provider agreement (confidence boost)
+  - provider disagreement (higher-confidence value wins, no boost)
+  - low-confidence escalation trigger
+  - auto-accept status (`completed`) for all-high-confidence fields
+  - mixed confidence to `review_ready` with attention flag
+  - warning-range fields to `review_ready` without attention
+  - empty provider response handling
   - reviewer correction persistence
 
 ## Rejected alternatives

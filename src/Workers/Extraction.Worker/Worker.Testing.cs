@@ -27,4 +27,23 @@ public sealed partial class Worker
         CancellationToken cancellationToken)
         => RunExtractionPipeline(context, fieldKeys, providers, cancellationToken);
 
+    /// <summary>
+    /// Determines the document status based on ADR 005 confidence tiers.
+    /// Returns (status, autoAccepted, requiresAttention).
+    /// </summary>
+    internal static (string Status, bool AutoAccepted, bool RequiresAttention) DetermineDocumentStatus(
+        IReadOnlyList<FieldExtractionResult> results)
+    {
+        if (results.Count == 0)
+            return ("review_ready", false, true);
+
+        var allHigh = results.All(r => r.SystemConfidence >= HighConfidenceThreshold);
+        var anyLow = results.Any(r => r.SystemConfidence < ReviewRequiredThreshold);
+
+        if (allHigh)
+            return ("completed", true, false);
+        if (anyLow)
+            return ("review_ready", false, true);
+        return ("review_ready", false, false);
+    }
 }

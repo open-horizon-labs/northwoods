@@ -11,6 +11,7 @@ public enum ProcessingStatus
     Uploaded,
     Extracting,
     ReviewReady,
+    Completed,
     Finalized,
     Failed
 }

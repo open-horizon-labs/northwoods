@@ -142,7 +142,7 @@ app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFac
     var counts = await session.Connection.QueryFirstOrDefaultAsync<(long ExtractionSuccessCount, long ExtractionFailureCount, long ReviewFinalizationCount)>(
         """
         SELECT
-            COUNT(*) FILTER (WHERE status IN ('review_ready', 'finalized'))::bigint AS ExtractionSuccessCount,
+            COUNT(*) FILTER (WHERE status IN ('review_ready', 'completed', 'finalized'))::bigint AS ExtractionSuccessCount,
             COUNT(*) FILTER (WHERE status = 'failed')::bigint AS ExtractionFailureCount,
             COUNT(*) FILTER (WHERE status = 'finalized')::bigint AS ReviewFinalizationCount
         FROM documents
@@ -404,7 +404,7 @@ app.MapGet("/review-queue", async (HttpContext httpContext, DbConnectionFactory 
                (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount,
                d.created_at AS UploadDate
         FROM documents d
-        WHERE d.tenant_id = @TenantId AND d.status = 'review_ready'
+        WHERE d.tenant_id = @TenantId AND d.status IN ('review_ready', 'completed')
         ORDER BY d.created_at
         """,
         new { TenantId = authContext.TenantId },
@@ -477,8 +477,8 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
         session.Transaction);
 
     if (doc == default) return Results.NotFound();
-    if (doc.status != "review_ready")
-        return Results.BadRequest(new { error = $"Document is in '{doc.status}' state, not review_ready." });
+    if (doc.status != "review_ready" && doc.status != "completed")
+        return Results.BadRequest(new { error = $"Document is in '{doc.status}' state, not review_ready or completed." });
 
     foreach (var field in request.Fields)
     {
@@ -705,6 +705,7 @@ static ProcessingStatus ParseStatus(string dbStatus) => dbStatus switch
     "uploaded" => ProcessingStatus.Uploaded,
     "extracting" => ProcessingStatus.Extracting,
     "review_ready" => ProcessingStatus.ReviewReady,
+    "completed" => ProcessingStatus.Completed,
     "finalized" => ProcessingStatus.Finalized,
     "failed" => ProcessingStatus.Failed,
     _ => throw new ArgumentException($"Unknown status: {dbStatus}")
