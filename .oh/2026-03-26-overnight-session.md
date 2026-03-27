@@ -138,3 +138,141 @@
   - `curl -sS http://localhost:5100/healthz` timed out.
   - `docker compose up -d postgres minio api worker` timed out.
 - Tomorrow follow-up: rerun live intake flow once docker runtime is responsive.
+
+## Issue #5 — Add structured logging, correlation IDs, metrics, and retry resilience
+
+- **Session file:** `.oh/sessions/5-dev.md`
+- **Branch:** `issue-5-observability-resilience`
+- **Implementation commits:**
+  - `f0148b9c16a80220274e9089dcc2bbf8bb0223ac` (`feat: add observability and retry resilience`)
+  - `a2d991bb8bcc6dd2086102bafcec9385855c1b33` (`fix: enforce tenant filters and cancel-safe retries`)
+- **PR:** #16 (`https://github.com/open-horizon-labs/northwoods/pull/16`)
+- **Merged:** yes (merge commit `3fe3de3159b726cec09f9f3f4a122278e56e2d0e`)
+- **Issue status:** closed (`2026-03-27T05:46:48Z`)
+
+### Major decisions
+- Enabled structured JSON logging (scoped, timestamped) in API and extraction worker.
+- Added request correlation middleware (`X-Correlation-Id`) and persisted `correlation_id` into upload/extraction/finalize audit events.
+- Added authenticated `/metrics` endpoint exposing request count, review finalization count, and extraction success/failure counts.
+- Implemented worker transient retry with configurable backoff (`Extraction__MaxRetryAttempts`, `Extraction__RetryDelayMs`) and explicit cancellation-safe behavior.
+- Tightened tenant isolation consistency by adding explicit tenant predicates/params to metrics and document/review/finalize queries in API.
+
+### Code review findings and resolutions
+- Post-merge audit endpoints:
+  - `gh api repos/open-horizon-labs/northwoods/pulls/16/comments --paginate` → two CodeRabbit findings (1 Critical, 1 Minor), both marked `✅ Addressed in commit a2d991b`.
+  - `gh api repos/open-horizon-labs/northwoods/issues/16/comments --paginate` → CodeRabbit run-status note plus maintainer status note; no additional actionable findings.
+- Unaddressed external findings: none.
+- Follow-up PR required: no.
+
+### Blockers / deferred verification
+- Runtime delivery smoke remains blocked in this environment:
+  - `docker compose up -d postgres minio api worker` timed out.
+  - `docker compose ps` timed out.
+  - `curl -sS http://localhost:5100/healthz` timed out.
+  - `curl -sS -F 'file=@samples/intakes/chatgpt-sample-general-intake.pdf' -F 'templateId=general-assistance' -H 'X-Tenant-Id: tenant-a' http://localhost:5100/intakes` timed out.
+- Deferred item for next run: perform live intake -> extraction -> review/finalize smoke and confirm correlation/metrics behavior.
+
+### Next-step gate
+- Issue #5 is complete (merged with post-merge audit clean). Move to issue #6 next.
+
+## Issue #6 — Add representative test suite: unit, API integration, worker, UI smoke
+
+- **Session file:** `.oh/sessions/6-dev.md`
+- **Branch:** `6-representative-test-suite`
+- **Implementation commit:** `479e216a83c104046e7da97a514ff8e6655ae7d0` (`test: add representative trust-boundary suite`)
+- **PR:** #17 (`https://github.com/open-horizon-labs/northwoods/pull/17`)
+- **Merged:** yes (merge commit `7142ce5e7cbf06e55bf474bff501e5264f78fdc2`)
+- **Issue status:** closed (`2026-03-27T06:16:28Z`)
+
+### Major decisions
+- Added worker unit tests for confidence threshold gates and consensus merge behavior using internal test hooks (`Worker.Testing.cs`).
+- Added tenant context tests for `DbConnectionFactory.OpenSessionAsync` validating `app.tenant_id` scoping, `app_user` role restriction, and document-level RLS isolation by tenant.
+- Added API runtime integration tests for upload -> worker terminal transition and review/finalize workflow with cross-tenant access checks and tenant-scoped metrics assertions.
+- Added unified test entrypoints in root scripts: `pnpm test:unit`, `pnpm test:runtime`, and `pnpm test`.
+- Deferred Playwright UI smoke automation explicitly via `test:web-smoke` placeholder to keep trust-boundary coverage prioritized in run window.
+
+### Verification run
+- `pnpm test`
+- `pnpm check`
+
+### Code review findings and resolutions
+- Post-merge audit endpoints:
+  - `gh api repos/open-horizon-labs/northwoods/pulls/17/comments --paginate` → `[]` (no inline review findings).
+  - `gh api repos/open-horizon-labs/northwoods/issues/17/comments --paginate` → `[]` (no issue-thread findings).
+- Unaddressed external findings: none.
+- Follow-up PR required: no.
+
+### Blockers / deferred verification
+- Delivery spot-check commands requiring a live runtime were blocked in this environment:
+  - `curl -sS --max-time 10 http://localhost:5100/healthz` timed out.
+  - `docker compose ps` timed out.
+  - `docker info` timed out.
+  - `curl` auth+upload smoke (`/auth/login` then `POST /intakes`) timed out.
+- Runtime-dependent UI smoke remains deferred pending stable local runtime + Playwright harness wiring.
+
+### Next-step gate
+- Issue #6 is complete and merged with post-merge audit clean; proceed to issue #7.
+
+## Issue #7 — Write architecture rationale document with diagram
+
+- **Session file:** `.oh/sessions/7-dev.md`
+- **Branch:** `7-architecture-rationale`
+- **Implementation commit:** `cbf652d6407f1d5c8a8af9302a18f856a3dd365e` (`docs: add unified architecture rationale`)
+- **PR:** #18 (`https://github.com/open-horizon-labs/northwoods/pull/18`)
+- **Merged:** yes (merge commit `71e3db54f0ce22cabc3d63b8f0a79c33a29c17f9`)
+- **Issue status:** closed (`2026-03-27T06:48:16Z`)
+
+### Major decisions
+- Created `docs/architecture.md` as a single CTO-readable architecture rationale source instead of spreading rationale across ADR fragments.
+- Included Mermaid architecture diagram covering users, frontend, API, extraction worker, Postgres (RLS + retrieval), and MinIO boundaries.
+- Documented component responsibilities and explicit non-responsibilities for frontend, API, worker, Postgres, and MinIO.
+- Captured template/extraction model rationale with append-only attempt history and confidence-tier review gating.
+- Captured hybrid RAG strategy (vector + FTS + trigram + structured boosts) and why retrieval remains Postgres-centered.
+- Documented multi-tenancy enforcement path (JWT claim -> DB session tenant context -> RLS backstop) and operational implications.
+- Added explicit trade-offs/intentional omissions (polling vs Temporal, Postgres-centered retrieval, human-in-the-loop invariant, institutional UX restraint, AI as assistive).
+
+### Verification run
+- `pnpm check`
+
+### Code review findings and resolutions
+- Mandatory RNA index readiness check completed via `mcp_rna_repo_map` before phase-5 audit (index current).
+- Post-merge audit endpoints:
+  - `gh api repos/open-horizon-labs/northwoods/pulls/18/comments --paginate` → `[]` (no inline findings).
+  - `gh api repos/open-horizon-labs/northwoods/issues/18/comments --paginate` → `[]` (no issue-thread findings).
+  - `gh api repos/open-horizon-labs/northwoods/pulls/18/reviews --paginate` → `[]` (no review findings).
+- Unaddressed external findings: none.
+- Follow-up PR required: no.
+
+### Blockers / deferred verification
+- None for this issue; deliverable is docs-only and was validated through repository inspection.
+
+### Next-step gate
+- Issue #7 is complete and merged with post-merge audit clean; proceed to issue #8 only now.
+
+## Issue #8 — Write self-assessment: completed, missing, trade-offs, AI usage
+
+- **Session file:** `.oh/sessions/8-dev.md`
+- **Branch:** `8-self-assessment`
+- **PR:** pending
+- **Merged:** pending
+- **Issue status:** pending
+
+### Major decisions
+- Deliverable is documentation-only but includes explicit completeness/deferment and rubric score calibration.
+- Added `docs/self-assessment.md` with:
+  - Completed work summary and operational boundaries
+  - Explicit missing/deferred items with rationale and blockers
+  - Key design trade-offs and their consequences
+  - Reviewer-rubric score reflections
+  - Concrete AI usage examples with example prompts
+
+### Verification plan and blockers
+- Runtime smoke is out of scope for this issue itself but remains blocked globally by environment (`docker`/`curl` timeouts seen in earlier issues), so this file explicitly calls those out.
+- Post-merge phase-5 audit will be run after PR creation against:
+  - `gh api repos/open-horizon-labs/northwoods/pulls/<PR>/comments --paginate`
+  - `gh api repos/open-horizon-labs/northwoods/issues/<PR>/comments --paginate`
+  - `gh api repos/open-horizon-labs/northwoods/pulls/<PR>/reviews --paginate`
+- Any critical findings from external channels must trigger follow-up PR before closure.
+
+### Next-step gate
+- Issue #8 will close when PR is merged and audit comment check is complete.
