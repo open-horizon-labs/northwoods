@@ -62,6 +62,7 @@ type Props = {
 
 export default function WorkerDashboard({ auth, onLogout }: Props) {
   const [templates, setTemplates] = useState<TemplateDescriptor[]>([])
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true)
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadBusy, setUploadBusy] = useState(false)
@@ -74,14 +75,21 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadTemplates = useCallback(async () => {
+    setIsLoadingTemplates(true)
+    setTemplatesError(null)
     try {
       const list = await api.getTemplates(auth.accessToken)
       setTemplates(list)
       if (list.length > 0) {
         setSelectedTemplateId((current) => list.find((t) => t.id === current)?.id ?? list[0].id)
+      } else {
+        setSelectedTemplateId('')
       }
     } catch (err) {
       setTemplatesError(err instanceof Error ? err.message : 'Failed to load templates.')
+      setSelectedTemplateId('')
+    } finally {
+      setIsLoadingTemplates(false)
     }
   }, [auth.accessToken])
 
@@ -114,11 +122,19 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
             stillPolling.add(intakeId)
           }
         } catch {
-          // stop polling on error
+          // Treat transient errors as non-terminal; keep the ID in the polling set
+          stillPolling.add(intakeId)
         }
       }
 
-      setActivePolling(stillPolling)
+      // Functional updater merges with current set to avoid dropping IDs added concurrently
+      setActivePolling((current) => {
+        const next = new Set(current)
+        for (const id of activePolling) {
+          if (!stillPolling.has(id)) next.delete(id)
+        }
+        return next
+      })
     }, 2500)
 
     return () => window.clearInterval(timer)
@@ -216,12 +232,12 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
                 id="template-select"
                 value={selectedTemplateId}
                 onChange={(e) => setSelectedTemplateId(e.target.value)}
-                disabled={templates.length === 0 || uploadBusy}
+                disabled={isLoadingTemplates || uploadBusy}
                 required
                 aria-required="true"
                 className={`${inputInteractive} disabled:bg-slate-50 disabled:text-slate-500`}
               >
-                {templates.length === 0 ? (
+                {isLoadingTemplates ? (
                   <option value="" disabled>
                     Loading form types\u2026
                   </option>
@@ -315,7 +331,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
           </div>
         ) : null}
 
-        <p className="mt-8 text-xs text-slate-400">
+        <p className="mt-8 text-xs text-slate-600">
           Need help? Contact your supervisor or system administrator.
         </p>
       </main>
