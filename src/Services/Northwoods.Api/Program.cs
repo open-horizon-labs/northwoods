@@ -122,11 +122,12 @@ app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFac
 
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
-    var extractionCounts = await session.Connection.QueryFirstOrDefaultAsync<ExtractionCounts>(
+    var counts = await session.Connection.QueryFirstOrDefaultAsync<(long ExtractionSuccessCount, long ExtractionFailureCount, long ReviewFinalizationCount)>(
         """
         SELECT
             COUNT(*) FILTER (WHERE status IN ('review_ready', 'finalized'))::bigint AS ExtractionSuccessCount,
-            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS ExtractionFailureCount
+            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS ExtractionFailureCount,
+            COUNT(*) FILTER (WHERE status = 'finalized')::bigint AS ReviewFinalizationCount
         FROM documents
         WHERE tenant_id = @TenantId
         """,
@@ -135,9 +136,9 @@ app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFac
 
     return Results.Ok(new ApiMetricsResponse(
         observability.RequestCount,
-        observability.ReviewFinalizationCount,
-        extractionCounts?.ExtractionSuccessCount ?? 0,
-        extractionCounts?.ExtractionFailureCount ?? 0));
+        counts.ReviewFinalizationCount,
+        counts.ExtractionSuccessCount,
+        counts.ExtractionFailureCount));
 })
     .WithName("GetMetrics")
     .WithSummary("Returns basic service metrics for tenant-scoped requests.")
@@ -1065,7 +1066,6 @@ file sealed record ApiMetricsResponse(
     long ExtractionSuccessCount,
     long ExtractionFailureCount);
 
-file sealed record ExtractionCounts(long ExtractionSuccessCount, long ExtractionFailureCount);
 
 file sealed record AuthContext(Guid UserId, string TenantId, UserRole Role);
 file sealed record SimilarCaseCandidate(
