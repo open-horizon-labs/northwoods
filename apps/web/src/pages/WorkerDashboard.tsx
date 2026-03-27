@@ -132,7 +132,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
             typeof status.status === 'number'
               ? status.status
               : status.status.toLowerCase().replace(/\s+/g, '')
-          const done = sNorm === 2 || sNorm === 3 || sNorm === 4 || sNorm === 'reviewready' || sNorm === 'finalized' || sNorm === 'failed'
+          const done = sNorm === 2 || sNorm === 3 || sNorm === 4 || sNorm === 5 || sNorm === 'reviewready' || sNorm === 'completed' || sNorm === 'finalized' || sNorm === 'failed'
 
           setUploads((prev) =>
             prev.map((u) => (u.intakeId === intakeId ? { ...u, status: status.status } : u)),

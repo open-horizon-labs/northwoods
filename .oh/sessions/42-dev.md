@@ -21,7 +21,7 @@ Changes required:
 3. `Worker.cs` - CallWithFallback: parse nano response, compute avg confidence, escalate to mini if < 0.75
 4. `Worker.cs` - CallWithFallback: separate transient/capability/hard error handling
 5. `Worker.cs` - ExtractDocument: after consensus, compute min field confidence, set status per ADR 005 tiers
-6. `init.sql` - add `completed` to status CHECK, add `requires_attention` column
+6. `init.sql` - add `completed` to status CHECK constraint (`requires_attention` tracked in audit event details, not as separate column)
 7. `Models.cs` - add `Completed` to ProcessingStatus enum
 8. `Program.cs` - handle `completed` in ParseStatus
 9. `types.ts` / `statusLabel` - handle Completed status in frontend
