@@ -63,27 +63,27 @@ Script: `scripts/spike-openai-vision-ocr.py`
 Results: [Spike: OpenAI Vision OCR vs PaddleOCR Baseline](../docs/spike-openai-vision-ocr.md)  
 Commit: `7324478`
 
-**Approach:** Convert PDF→PNG via PyMuPDF (fitz), send to OpenAI Responses API with vision, extract 7 intake fields as structured JSON with per-field confidence. gpt-4.1-nano tried first, gpt-4.1-mini fallback.
+**Approach:** Convert PDF→PNG via PyMuPDF (fitz), send to OpenAI Responses API with vision, extract 7 intake fields as structured JSON with per-field confidence. gpt-5.4-nano tried first, gpt-5.4-mini fallback.
 
 **Results across 5 samples:**
 
 | File | Model | Fields | Avg conf | Paddle agreement |
 |------|-------|--------|----------|-----------------|
-| chatgpt-sample-housing-stability-intake.pdf | gpt-4.1-nano | 7/7 | 0.90 | 3/7 (partial) |
-| chatgpt-sample-financial-assistance-intake.pdf | gpt-4.1-nano | 3/7 | 0.38 | 0/7 |
-| chatgpt-sample-case-worker-notes.pdf | gpt-4.1-nano | 1/7 | 0.13 | 0/7 |
-| chatgpt-sample-general-intake.pdf | gpt-4.1-nano | 1/7 | 0.14 | 0/7 |
-| chatgpt-sample-soap-note.pdf | gpt-4.1-nano | 0/7 | 0.00 | 0/7 |
+| chatgpt-sample-housing-stability-intake.pdf | gpt-5.4-nano | 7/7 | 0.90 | 3/7 (partial) |
+| chatgpt-sample-financial-assistance-intake.pdf | gpt-5.4-nano | 3/7 | 0.38 | 0/7 |
+| chatgpt-sample-case-worker-notes.pdf | gpt-5.4-nano | 1/7 | 0.13 | 0/7 |
+| chatgpt-sample-general-intake.pdf | gpt-5.4-nano | 1/7 | 0.14 | 0/7 |
+| chatgpt-sample-soap-note.pdf | gpt-5.4-nano | 0/7 | 0.00 | 0/7 |
 
 **Key findings:**
-- `gpt-4.1-nano` supports vision — no fallback to mini needed on these samples.
+- `gpt-5.4-nano` supports vision — no fallback to mini needed on these samples.
 - On the actual intake form (`housing-stability`), nano extracted all 7 fields with 0.90 avg confidence and correctly parsed name, DOB, address, household size, income, services, and notes.
 - Case-worker notes and general-intake docs: model correctly identified these aren't structured intake forms and returned only `notes` field (sensible behavior).
 - SOAP note: all nulls — correct, this form uses different fields entirely.
 - PaddleOCR returns flat unstructured text; field extraction requires brittle keyword heuristics with no confidence signal. OpenAI vision returns structured JSON natively, eliminating the normalization stage.
 - Low agreement rate is partially explained by sample mismatch (only 1 of 5 files is an actual intake form). The one real intake showed partial agreement on most fields.
 
-**Recommendation:** OpenAI vision (mini) is a strong candidate for single-step OCR+normalization on actual handwritten intake scans. Evaluate cost/latency vs. staged PaddleOCR+normalizer before committing to production integration.
+**Recommendation:** OpenAI vision is a strong candidate for single-step OCR+normalization on actual handwritten intake scans. Evaluate cost/latency vs. staged PaddleOCR+normalizer before committing to production integration.
 
 ### Task 4 complete: ADR compliance checks and CI workflow — 2026-03-27
 

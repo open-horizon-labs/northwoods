@@ -21,10 +21,17 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = REPO_ROOT / "samples" / "intakes"
-PADDLE_SCRIPT = REPO_ROOT / "src" / "Workers" / "Extraction.Worker" / "scripts" / "paddle_extract.py"
+PADDLE_SCRIPT = (
+    REPO_ROOT
+    / "src"
+    / "Workers"
+    / "Extraction.Worker"
+    / "scripts"
+    / "paddle_extract.py"
+)
 OUTPUT_DOC = REPO_ROOT / "docs" / "spike-openai-vision-ocr.md"
 
-MODELS_PRIORITY = ["gpt-4.1-nano", "gpt-4.1-mini"]
+MODELS_PRIORITY = ["gpt-5.4-nano", "gpt-5.4-mini"]
 
 EXTRACT_FIELDS = [
     "applicantName",
@@ -76,6 +83,7 @@ def load_env_local() -> None:
 
 def get_openai_client():
     import openai  # type: ignore
+
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY not set")
@@ -221,7 +229,7 @@ def parse_paddle_fields_from_text(text: str) -> dict:
         for kw in keywords:
             idx = lower.find(kw.lower())
             if idx != -1:
-                fragment = haystack[idx + len(kw):].strip().lstrip(":").strip()
+                fragment = haystack[idx + len(kw) :].strip().lstrip(":").strip()
                 # Take up to next newline or 80 chars
                 end = fragment.find("\n")
                 return fragment[:end].strip() if end != -1 else fragment[:80].strip()
@@ -241,7 +249,9 @@ def parse_paddle_fields_from_text(text: str) -> dict:
             "confidence": 0.5,
         },
         "householdSize": {
-            "value": find_after(["household size", "# in household", "number in household"], joined),
+            "value": find_after(
+                ["household size", "# in household", "number in household"], joined
+            ),
             "confidence": 0.5,
         },
         "monthlyIncome": {
@@ -249,7 +259,9 @@ def parse_paddle_fields_from_text(text: str) -> dict:
             "confidence": 0.5,
         },
         "requestedServices": {
-            "value": find_after(["requested services", "services requested", "request:"], joined),
+            "value": find_after(
+                ["requested services", "services requested", "request:"], joined
+            ),
             "confidence": 0.5,
         },
         "notes": {
@@ -318,7 +330,9 @@ def build_file_section(
     else:
         chars = paddle_raw.get("chars", 0)
         line_count = paddle_raw.get("lineCount", 0)
-        lines.append(f"**PaddleOCR raw:** {chars} chars, {line_count} lines extracted\n")
+        lines.append(
+            f"**PaddleOCR raw:** {chars} chars, {line_count} lines extracted\n"
+        )
         paddle_available = True
 
     if openai_errors:
@@ -347,8 +361,14 @@ def build_file_section(
         ov = o.get("value") or ""
         oc = o.get("confidence", 0.0)
 
-        agreement = score_agreement(pv or None, ov or None) if paddle_available else "n/a"
-        plausible = more_plausible(field, pv or None, ov or None, oc) if paddle_available else "openai only"
+        agreement = (
+            score_agreement(pv or None, ov or None) if paddle_available else "n/a"
+        )
+        plausible = (
+            more_plausible(field, pv or None, ov or None, oc)
+            if paddle_available
+            else "openai only"
+        )
 
         # Truncate long values for table readability
         pv_disp = (pv[:60] + "…") if len(pv) > 60 else pv
@@ -410,7 +430,9 @@ def main() -> int:
             Path(png_path).unlink(missing_ok=True)
         except Exception as e:
             print(f"  PDF→PNG failed: {e}")
-            detail_sections.append(f"\n## {pdf_path.name}\n\n**PDF conversion failed:** {e}\n")
+            detail_sections.append(
+                f"\n## {pdf_path.name}\n\n**PDF conversion failed:** {e}\n"
+            )
             continue
 
         # OpenAI extraction
@@ -418,8 +440,12 @@ def main() -> int:
         openai_model = "none"
         openai_errors = []
         try:
-            openai_fields, openai_model, openai_errors = extract_with_fallback(client, image_b64)
-            print(f"  OpenAI ({openai_model}): {sum(1 for f in openai_fields.values() if f.get('value'))} fields")
+            openai_fields, openai_model, openai_errors = extract_with_fallback(
+                client, image_b64
+            )
+            print(
+                f"  OpenAI ({openai_model}): {sum(1 for f in openai_fields.values() if f.get('value'))} fields"
+            )
         except Exception as e:
             openai_errors.append(str(e))
             print(f"  OpenAI FAILED: {e}")
@@ -431,12 +457,16 @@ def main() -> int:
         paddle_raw = run_paddle_baseline(pdf_path)
         if "error" in paddle_raw:
             print(f"  PaddleOCR: {paddle_raw['error']}")
-            paddle_fields = {f: {"value": None, "confidence": 0.0} for f in EXTRACT_FIELDS}
+            paddle_fields = {
+                f: {"value": None, "confidence": 0.0} for f in EXTRACT_FIELDS
+            }
         else:
             paddle_text = paddle_raw.get("text", "")
             paddle_fields = parse_paddle_fields_from_text(paddle_text)
             found = sum(1 for f in paddle_fields.values() if f.get("value"))
-            print(f"  PaddleOCR: {paddle_raw.get('chars', 0)} chars, ~{found} fields heuristically matched")
+            print(
+                f"  PaddleOCR: {paddle_raw.get('chars', 0)} chars, ~{found} fields heuristically matched"
+            )
 
         # Build section
         section = build_file_section(
@@ -452,7 +482,9 @@ def main() -> int:
         # Summary row
         if openai_fields:
             n_extracted = sum(1 for f in openai_fields.values() if f.get("value"))
-            avg_conf = sum(f.get("confidence", 0.0) for f in openai_fields.values()) / len(openai_fields)
+            avg_conf = sum(
+                f.get("confidence", 0.0) for f in openai_fields.values()
+            ) / len(openai_fields)
             agreements = [
                 score_agreement(
                     (paddle_fields.get(field, {}).get("value") or None),

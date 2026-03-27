@@ -1,18 +1,18 @@
 # Spike: OpenAI Vision OCR vs PaddleOCR Baseline
 
 **Date:** 2026-03-27  
-**Models tried:** gpt-4.1-nano, gpt-4.1-mini  
+**Models tried:** gpt-5.4-nano, gpt-5.4-mini  
 **Samples:** 5 files
 
 ## Summary
 
 | File | OpenAI model | Fields extracted | Avg OpenAI conf | Agreement rate |
 |------|-------------|-----------------|-----------------|---------------|
-| chatgpt-sample-case-worker-notes.pdf | gpt-4.1-nano | 1/7 | 0.13 | 0/7 |
-| chatgpt-sample-financial-assistance-intake.pdf | gpt-4.1-nano | 3/7 | 0.38 | 0/7 |
-| chatgpt-sample-general-intake.pdf | gpt-4.1-nano | 1/7 | 0.14 | 0/7 |
-| chatgpt-sample-housing-stability-intake.pdf | gpt-4.1-nano | 7/7 | 0.90 | 3/7 |
-| chatgpt-sample-soap-note.pdf | gpt-4.1-nano | 0/7 | 0.00 | 0/7 |
+| chatgpt-sample-case-worker-notes.pdf | gpt-5.4-nano | 1/7 | 0.13 | 0/7 |
+| chatgpt-sample-financial-assistance-intake.pdf | gpt-5.4-nano | 3/7 | 0.38 | 0/7 |
+| chatgpt-sample-general-intake.pdf | gpt-5.4-nano | 1/7 | 0.14 | 0/7 |
+| chatgpt-sample-housing-stability-intake.pdf | gpt-5.4-nano | 7/7 | 0.90 | 3/7 |
+| chatgpt-sample-soap-note.pdf | gpt-5.4-nano | 0/7 | 0.00 | 0/7 |
 
 ---
 
@@ -23,7 +23,7 @@
 
 **PaddleOCR raw:** 525 chars, 14 lines extracted
 
-**OpenAI model used:** `gpt-4.1-nano`
+**OpenAI model used:** `gpt-5.4-nano`
 
 
 | Field | PaddleOCR value | Paddle conf | OpenAI value | OpenAI conf | Agreement | More plausible |
@@ -79,7 +79,7 @@
 
 **PaddleOCR raw:** 519 chars, 24 lines extracted
 
-**OpenAI model used:** `gpt-4.1-nano`
+**OpenAI model used:** `gpt-5.4-nano`
 
 
 | Field | PaddleOCR value | Paddle conf | OpenAI value | OpenAI conf | Agreement | More plausible |
@@ -137,7 +137,7 @@
 
 **PaddleOCR raw:** 586 chars, 14 lines extracted
 
-**OpenAI model used:** `gpt-4.1-nano`
+**OpenAI model used:** `gpt-5.4-nano`
 
 
 | Field | PaddleOCR value | Paddle conf | OpenAI value | OpenAI conf | Agreement | More plausible |
@@ -193,7 +193,7 @@
 
 **PaddleOCR raw:** 392 chars, 16 lines extracted
 
-**OpenAI model used:** `gpt-4.1-nano`
+**OpenAI model used:** `gpt-5.4-nano`
 
 
 | Field | PaddleOCR value | Paddle conf | OpenAI value | OpenAI conf | Agreement | More plausible |
@@ -250,7 +250,7 @@
 
 **PaddleOCR raw:** 572 chars, 16 lines extracted
 
-**OpenAI model used:** `gpt-4.1-nano`
+**OpenAI model used:** `gpt-5.4-nano`
 
 
 | Field | PaddleOCR value | Paddle conf | OpenAI value | OpenAI conf | Agreement | More plausible |
