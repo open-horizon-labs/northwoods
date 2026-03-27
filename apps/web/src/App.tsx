@@ -122,6 +122,20 @@ const formatFieldConfidence = (confidence: number) => {
   return `${label} confidence (${score})`
 }
 
+const renderHighlightedSnippet = (snippet: string) => {
+  const parts = snippet.split('**')
+  return parts.map((part, index) => {
+    if (index % 2 === 1) {
+      return (
+        <mark key={index} className="bg-amber-100 px-0.5 rounded">
+          {part}
+        </mark>
+      )
+    }
+    return part
+  })
+}
+
 const SectionTitle = ({
   eyebrow,
   title,
@@ -1148,13 +1162,9 @@ export default function App() {
                                 Template {item.templateId} · Status {item.status}
                               </p>
                               {item.snippet ? (
-                                <p className="mt-1 text-xs leading-relaxed text-slate-700"
-                                  dangerouslySetInnerHTML={{
-                                    __html: item.snippet
-                                      .replace(/\*\*/g, '<mark class="bg-amber-100 px-0.5 rounded">')
-                                      .replace(/<mark[^>]*>[^<]*$/g, (m) => m + '</mark>')
-                                  }}
-                                />
+                                <p className="mt-1 text-xs leading-relaxed text-slate-700">
+                                  {renderHighlightedSnippet(item.snippet)}
+                                </p>
                               ) : null}
                             </div>
                             <span

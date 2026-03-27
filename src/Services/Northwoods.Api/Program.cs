@@ -79,6 +79,8 @@ var app = builder.Build();
 var observability = new ApiObservability();
 
 const string correlationIdHeader = "X-Correlation-Id";
+const double SearchFuzzySimilarityThreshold = 0.3;
+const double CaseAggregateSimilarityThreshold = 0.6;
 
 app.Use(async (httpContext, next) =>
 {
@@ -502,14 +504,15 @@ app.MapGet("/search", async (HttpContext httpContext, DbConnectionFactory dbFact
                 'StartSel=**, StopSel=**, MaxWords=30, MinWords=15') AS Snippet
         FROM case_profiles cp
         JOIN documents d ON d.id = cp.document_id AND d.tenant_id = cp.tenant_id
-        WHERE cp.search_tsv @@ websearch_to_tsquery('simple', @Query)
-           OR similarity(lower(COALESCE(cp.applicant_name, '')), lower(@Query)) > 0.3
+        WHERE cp.tenant_id = @TenantId
+          AND (cp.search_tsv @@ websearch_to_tsquery('simple', @Query)
+           OR similarity(lower(COALESCE(cp.applicant_name, '')), lower(@Query)) > @SearchThreshold)
         ORDER BY
             ts_rank_cd(cp.search_tsv, websearch_to_tsquery('simple', @Query)) DESC,
             similarity(lower(COALESCE(cp.applicant_name, '')), lower(@Query)) DESC
         LIMIT 50
         ",
-        new { Query = q, TenantId = authContext.TenantId },
+        new { Query = q, TenantId = authContext.TenantId, SearchThreshold = SearchFuzzySimilarityThreshold },
         session.Transaction)).ToList();
 
     return Results.Ok(new SearchResponse(q, items));
@@ -537,28 +540,31 @@ app.MapGet("/cases/{personKey}", async (string personKey, HttpContext httpContex
         WHERE cp.tenant_id = @TenantId
           AND (
             lower(cp.applicant_name) = lower(@PersonKey)
-            OR similarity(lower(COALESCE(cp.applicant_name, '')), lower(@PersonKey)) > 0.6
+            OR similarity(lower(COALESCE(cp.applicant_name, '')), lower(@PersonKey)) > @CaseThreshold
           )
         ORDER BY d.created_at DESC
         ",
-        new { TenantId = authContext.TenantId, PersonKey = decodedKey },
+        new { TenantId = authContext.TenantId, PersonKey = decodedKey, CaseThreshold = CaseAggregateSimilarityThreshold },
         session.Transaction)).ToList();
+
+    var docIds = docs.Select(d => d.id).ToArray();
+    var allFields = (await session.Connection.QueryAsync<(Guid document_id, string FieldKey, string Value, decimal Confidence, bool RequiresReview)>(
+        @"SELECT document_id,
+               field_key AS FieldKey,
+               COALESCE(corrected_value, extracted_value) AS Value,
+               confidence AS Confidence,
+               requires_review AS RequiresReview
+        FROM extracted_fields
+        WHERE document_id = ANY(@DocIds) AND tenant_id = @TenantId",
+        new { DocIds = docIds, TenantId = authContext.TenantId },
+        session.Transaction)).ToLookup(f => f.document_id);
 
     var caseDocuments = new List<CaseDocumentItem>(docs.Count);
     foreach (var doc in docs)
     {
-        var fields = (await session.Connection.QueryAsync<ConfidenceField>(
-            @"
-            SELECT field_key AS FieldKey,
-                   COALESCE(corrected_value, extracted_value) AS Value,
-                   confidence AS Confidence,
-                   requires_review AS RequiresReview
-            FROM extracted_fields
-            WHERE document_id = @Id AND tenant_id = @TenantId
-            ",
-            new { Id = doc.id, TenantId = authContext.TenantId },
-            session.Transaction)).ToList();
-
+        var fields = allFields[doc.id]
+            .Select(f => new ConfidenceField(f.FieldKey, f.Value, f.Confidence, f.RequiresReview))
+            .ToList();
         caseDocuments.Add(new CaseDocumentItem(doc.id, doc.template_id, doc.status, doc.created_at, fields));
     }
 
