@@ -223,3 +223,26 @@ PR: [#29](https://github.com/open-horizon-labs/northwoods/pull/29) | Branch: `24
 
 **CodeRabbit review:** 3 rounds. Round 1: incomplete validation (Major), eslint-disable pattern (Trivial). Round 2: best-effort storage wrapping (Major), duplicate API calls on login (Major). Round 3: clean ("No actionable comments").
 **Post-merge audit:** All 4 CodeRabbit findings confirmed fixed in merged code. 0 unaddressed comments.
+
+---
+
+### Issue #27 complete: Dual-provider extraction (PaddleOCR + OpenAI vision) -- 2026-03-27
+
+PR: [#32](https://github.com/open-horizon-labs/northwoods/pull/32) | Branch: `27-dual-provider-extraction` | Merged: `c323097`
+
+**Changes:**
+- Added `OpenAiVisionProvider` that sends document image to gpt-5.4-nano via Responses API with vision input
+- Simplified `RunExtractionPipeline` to run ALL providers on ALL fields (no longer escalation-only)
+- Changed `ExtractionCandidate.Metadata` from `Dictionary<string,string>` to `Dictionary<string,object>` for proper JSON types
+- Added `processing_ms` to PaddleOCR extraction_attempts.details
+- Added token usage (prompt_tokens, completion_tokens, total_tokens) to OpenAI extraction_attempts.details
+- Fixed Responses API output parsing for both `output_text` and `output[].content[].text` formats
+- If nano fails, escalates to gpt-5.4-mini with logged escalation reason
+
+**Config flags:** `Extraction__UseOpenAiVision=true`, `Extraction__OpenAi__VisionModel=gpt-5.4-nano`
+
+**Live smoke test:** Housing stability intake PDF processed by 3 providers (tesseract-mock, openai-normalizer, openai-vision). Vision extracted all 7 fields with 0.86-0.99 confidence. Token usage: 1063 prompt, 203 completion, 1266 total.
+
+**Tests:** 15 passing (8 new dual-provider tests + 7 existing updated).
+**CodeRabbit review:** Review incomplete (PR merged during processing). No findings posted.
+**Post-merge audit:** Clean -- 0 unaddressed comments.
