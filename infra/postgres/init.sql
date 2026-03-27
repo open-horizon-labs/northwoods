@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     email TEXT NOT NULL,
-    password_hash TEXT NOT NULL DEFAULT 'dev',
+    password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('IntakeWorker', 'Reviewer')),
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(tenant_id, email)
@@ -260,8 +260,8 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
-    ('tenant-a', 'worker@sunrise.example', 'dev', 'IntakeWorker'),
-    ('tenant-a', 'reviewer@sunrise.example', 'dev', 'Reviewer')
+    ('tenant-a', 'worker@sunrise.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'IntakeWorker'),
+    ('tenant-a', 'reviewer@sunrise.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'Reviewer')
 ON CONFLICT (tenant_id, email) DO NOTHING;
 
 -- ============================================================================
@@ -269,8 +269,8 @@ ON CONFLICT (tenant_id, email) DO NOTHING;
 -- ============================================================================
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
-    ('tenant-b', 'worker@lakewood.example', 'dev', 'IntakeWorker'),
-    ('tenant-b', 'reviewer@lakewood.example', 'dev', 'Reviewer')
+    ('tenant-b', 'worker@lakewood.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'IntakeWorker'),
+    ('tenant-b', 'reviewer@lakewood.example', '$2a$12$bYpmFNkSfHzabIFmIpG9IudkRw0i9MTefOdkPLEw59qjXuV.0hunC', 'Reviewer')
 ON CONFLICT (tenant_id, email) DO NOTHING;
 
 -- ============================================================================

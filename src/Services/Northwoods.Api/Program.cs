@@ -663,13 +663,7 @@ static string CreateJwt(
 
 static bool VerifyPassword(string requestPassword, string passwordHash)
 {
-    var requestBytes = Encoding.UTF8.GetBytes(requestPassword);
-    var storedBytes = Encoding.UTF8.GetBytes(passwordHash);
-
-    if (requestBytes.Length != storedBytes.Length)
-        return false;
-
-    return CryptographicOperations.FixedTimeEquals(requestBytes, storedBytes);
+    return BCrypt.Net.BCrypt.Verify(requestPassword, passwordHash);
 }
 
 static ProcessingStatus ParseStatus(string dbStatus) => dbStatus switch
