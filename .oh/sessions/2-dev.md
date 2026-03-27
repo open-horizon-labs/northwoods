@@ -37,4 +37,12 @@
 
 ## Phase 4: Ship
 - Branch: `2-search-case-view`
-- PR: pending creation
+- PR: #22
+- CodeRabbit review findings addressed:
+  - XSS fix: replaced `dangerouslySetInnerHTML` with safe React snippet highlighting
+  - Added explicit `tenant_id` WHERE clause for defense-in-depth
+  - Fixed N+1 query in case aggregate with batch field fetch via `ANY()`
+  - Extracted similarity thresholds to named constants
+
+## Phase 5: Post-Merge Audit
+- Pending merge
