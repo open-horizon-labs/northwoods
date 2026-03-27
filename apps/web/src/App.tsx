@@ -8,6 +8,7 @@ import type {
   LoginResponse,
   ReviewDetailResponse,
   ReviewQueueItem,
+  SimilarCase,
   UserRole,
 } from './types'
 import { roleLabel, statusLabel } from './types'
@@ -90,6 +91,7 @@ export default function App() {
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
 
   const canReview = useMemo(() => auth !== null && loginForm.tenantId.length > 0, [auth, loginForm.tenantId])
+  const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
 
   const setPreset = (key: keyof typeof loginPresets) => {
     const preset = loginPresets[key]
@@ -532,6 +534,38 @@ export default function App() {
                         />
                       </div>
                     ))}
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-white">Similar cases</p>
+                      <span className="text-xs text-slate-400">Top {reviewSimilarCases.length}</span>
+                    </div>
+                    {reviewSimilarCases.length > 0 ? (
+                      <div className="mt-3 space-y-3">
+                        {reviewSimilarCases.map((item: SimilarCase) => (
+                          <button
+                            key={item.intakeId}
+                            type="button"
+                            onClick={() => setSelectedReviewId(item.reviewId)}
+                            className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-left transition hover:border-sky-400/40 hover:bg-slate-950/80"
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-white">{item.applicantName}</p>
+                                <p className="text-xs text-slate-400">Template {item.templateId}</p>
+                              </div>
+                              <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-200">
+                                {(item.matchScore * 100).toFixed(0)}% match
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs leading-relaxed text-slate-300">{item.summary}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-400">No similar cases found for this document yet.</p>
+                    )}
                   </div>
 
                   <label className="block space-y-2 text-sm text-slate-300">

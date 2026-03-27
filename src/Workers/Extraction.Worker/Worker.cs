@@ -17,7 +17,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
     private const decimal HighConfidenceThreshold = 0.90m;
     private const decimal ReviewRequiredThreshold = 0.75m;
     private const decimal EscalateThreshold = 0.82m;
-
+    private const int CaseEmbeddingDimensions = 16;
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var connectionString = config.GetConnectionString("Default")
@@ -165,6 +165,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 var extractionContext = new ExtractionContext(docId, tenantId, templateId, originalFileKey, tempFile, bytes.Length);
                 var results = await RunExtractionPipeline(extractionContext, fieldKeys, providers, ct);
                 var canPersistAttempts = await SupportsExtractionAttempts(conn, tx);
+                var canPersistCaseProfiles = await SupportsCaseProfiles(conn, tx);
                 var extractionRunId = Guid.NewGuid();
 
                 foreach (var result in results)
@@ -198,11 +199,24 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                     }
                 }
 
+                if (canPersistCaseProfiles)
+                {
+                    var profileText = BuildCaseProfileText(templateId, results);
+                    await PersistCaseProfile(
+                        conn,
+                        tx,
+                        docId,
+                        tenantId,
+                        templateId,
+                        profileText,
+                        results,
+                        ct);
+                }
+
                 await conn.ExecuteAsync(
                     "UPDATE documents SET status = 'review_ready', updated_at = now() WHERE id = @Id",
                     new { Id = docId },
                     tx);
-
                 await conn.ExecuteAsync(
                     """
                     INSERT INTO audit_events (document_id, tenant_id, event_type, details)
@@ -288,6 +302,129 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         {
             // best effort cleanup
         }
+    }
+
+    private static string BuildCaseProfileText(string templateId, IReadOnlyList<FieldExtractionResult> fields)
+    {
+        var extractedPairs = fields
+            .Select(f => $"{f.FieldKey}: {f.FinalValue}")
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .ToArray();
+
+        var ocrPairs = fields
+            .SelectMany(f => f.AllAttempts
+                .Where(a => string.Equals(a.Stage, "ocr", StringComparison.OrdinalIgnoreCase))
+                .Select(a => $"{f.FieldKey}: {a.Value}"))
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToArray();
+
+        var extractedText = extractedPairs.Length > 0 ? string.Join(" | ", extractedPairs) : "(no fields)";
+        var ocrText = ocrPairs.Length > 0 ? string.Join(" | ", ocrPairs) : "(no ocr segments)";
+
+        return $"template={templateId}; fields={extractedText}; ocr={ocrText}";
+    }
+
+    private static async Task<bool> SupportsCaseProfiles(NpgsqlConnection conn, NpgsqlTransaction tx)
+    {
+        var exists = await conn.ExecuteScalarAsync<int>(
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM pg_class
+                WHERE relname = 'case_profiles'
+                  AND relkind = 'r'
+            )::int
+            """,
+            transaction: tx);
+
+        return exists == 1;
+    }
+
+    private static async Task PersistCaseProfile(
+        NpgsqlConnection conn,
+        NpgsqlTransaction tx,
+        Guid docId,
+        string tenantId,
+        string templateId,
+        string caseProfileText,
+        IReadOnlyList<FieldExtractionResult> fields,
+        CancellationToken ct)
+    {
+        static string? GetFieldValue(IReadOnlyList<FieldExtractionResult> results, string key)
+            => results.FirstOrDefault(r => string.Equals(r.FieldKey, key, StringComparison.OrdinalIgnoreCase))?.FinalValue;
+
+        var applicantName = GetFieldValue(fields, "applicantName");
+        var dateOfBirth = GetFieldValue(fields, "dateOfBirth");
+        var address = GetFieldValue(fields, "address");
+        var embedding = GenerateCaseEmbedding(caseProfileText);
+        var embeddingLiteral = ToPgVectorLiteral(embedding);
+
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO case_profiles
+                (document_id, tenant_id, template_id, applicant_name, date_of_birth, address, search_text, embedding)
+            VALUES
+                (@DocId, @TenantId, @TemplateId, @ApplicantName, @DateOfBirth, @Address, @SearchText, CAST(@Embedding AS vector(16)))
+            ON CONFLICT (document_id)
+                DO UPDATE SET
+                    tenant_id = EXCLUDED.tenant_id,
+                    template_id = EXCLUDED.template_id,
+                    applicant_name = EXCLUDED.applicant_name,
+                    date_of_birth = EXCLUDED.date_of_birth,
+                    address = EXCLUDED.address,
+                    search_text = EXCLUDED.search_text,
+                    embedding = EXCLUDED.embedding,
+                    updated_at = now()
+            """,
+            new
+            {
+                DocId = docId,
+                TenantId = tenantId,
+                TemplateId = templateId,
+                ApplicantName = string.IsNullOrWhiteSpace(applicantName) ? null : applicantName,
+                DateOfBirth = string.IsNullOrWhiteSpace(dateOfBirth) ? null : dateOfBirth,
+                Address = string.IsNullOrWhiteSpace(address) ? null : address,
+                SearchText = caseProfileText,
+                Embedding = embeddingLiteral
+            },
+            tx);
+
+        ct.ThrowIfCancellationRequested();
+    }
+
+    private static double[] GenerateCaseEmbedding(string text)
+    {
+        var normalized = (text ?? string.Empty).ToLowerInvariant();
+        var values = new double[CaseEmbeddingDimensions];
+
+        using var sha = SHA256.Create();
+        for (var i = 0; i < values.Length; i++)
+        {
+            var hashInput = Encoding.UTF8.GetBytes($"{i}|{normalized}");
+            var hashBytes = sha.ComputeHash(hashInput);
+            var raw = BitConverter.ToInt32(hashBytes, 0);
+            values[i] = raw / (double)int.MaxValue;
+        }
+
+        var norm = Math.Sqrt(values.Sum(v => v * v));
+        if (norm <= 0.00001)
+        {
+            return values;
+        }
+
+        for (var i = 0; i < values.Length; i++)
+        {
+            values[i] /= norm;
+        }
+
+        return values;
+    }
+
+    private static string ToPgVectorLiteral(double[] values)
+    {
+        return $"[{string.Join(',', values.Select(v => v.ToString(CultureInfo.InvariantCulture)))}]";
     }
 
     private static IEnumerable<string> ExtractTemplateKeys(string? schemaJson)

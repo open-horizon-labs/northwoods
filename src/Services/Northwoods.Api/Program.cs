@@ -1,4 +1,5 @@
 using Dapper;
+using Npgsql;
 using Northwoods.Contracts;
 using Northwoods.Tenancy;
 
@@ -206,10 +207,12 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpRequest httpRequest, DbConn
         new { Id = id },
         session.Transaction)).ToList();
 
+    var similarCases = await FindSimilarCasesAsync(session.Connection, session.Transaction, id, tenantId, doc.template_id, fields, 5);
+
     var sourceUrl = objectStore.GetPresignedUrl(doc.original_file_key, TimeSpan.FromMinutes(15));
     var status = ParseStatus(doc.status);
 
-    return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, fields, auditEvents));
+    return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, fields, similarCases, auditEvents));
 })
 .WithName("GetReview").WithTags("Reviews")
 .WithSummary("Returns the document, extracted fields, and audit trail for a review task.");
@@ -265,3 +268,238 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
 .WithSummary("Persists reviewer corrections and finalizes the intake record.");
 
 app.Run();
+
+static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
+    NpgsqlConnection connection,
+    NpgsqlTransaction transaction,
+    Guid sourceDocumentId,
+    string tenantId,
+    string sourceTemplateId,
+    IReadOnlyList<ConfidenceField> sourceFields,
+    int limit)
+{
+    if (!await SupportsCaseProfiles(connection, transaction))
+    {
+        return [];
+    }
+
+    var targetApplicant = sourceFields.FirstOrDefault(f => string.Equals(f.FieldKey, "applicantName", StringComparison.OrdinalIgnoreCase))?.Value;
+    var targetDob = sourceFields.FirstOrDefault(f => string.Equals(f.FieldKey, "dateOfBirth", StringComparison.OrdinalIgnoreCase))?.Value;
+    var targetAddress = sourceFields.FirstOrDefault(f => string.Equals(f.FieldKey, "address", StringComparison.OrdinalIgnoreCase))?.Value;
+
+    var sourceExists = await connection.ExecuteScalarAsync<int>(
+        "SELECT EXISTS(SELECT 1 FROM case_profiles WHERE document_id = @Id AND tenant_id = @TenantId)::int",
+        new { Id = sourceDocumentId, TenantId = tenantId },
+        transaction);
+
+    if (sourceExists == 0)
+    {
+        return [];
+    }
+
+    var ranked = (await connection.QueryAsync<SimilarCaseCandidate>(
+        """
+        WITH target AS (
+            SELECT tenant_id, template_id, search_tsv, search_text, embedding, applicant_name, date_of_birth, address
+            FROM case_profiles
+            WHERE document_id = @Id AND tenant_id = @TenantId
+            LIMIT 1
+        ),
+        fts AS (
+            SELECT cp.document_id, row_number() OVER (
+                ORDER BY ts_rank_cd(cp.search_tsv, websearch_to_tsquery('simple', COALESCE(t.search_text, '')))
+                    DESC,
+                    cp.document_id
+            ) AS rank
+            FROM case_profiles cp
+            CROSS JOIN target t
+            WHERE cp.tenant_id = t.tenant_id
+              AND cp.document_id <> @Id
+              AND cp.search_tsv @@ websearch_to_tsquery('simple', COALESCE(t.search_text, ''))
+        ),
+        vector AS (
+            SELECT cp.document_id, row_number() OVER (
+                ORDER BY (cp.embedding <=> t.embedding) ASC,
+                         cp.document_id
+            ) AS rank
+            FROM case_profiles cp
+            CROSS JOIN target t
+            WHERE cp.tenant_id = t.tenant_id
+              AND cp.document_id <> @Id
+              AND cp.embedding IS NOT NULL
+              AND t.embedding IS NOT NULL
+        ),
+        name_fuzzy AS (
+            SELECT cp.document_id, row_number() OVER (
+                ORDER BY similarity(lower(cp.applicant_name), lower(t.applicant_name)) DESC,
+                         cp.document_id
+            ) AS rank
+            FROM case_profiles cp
+            CROSS JOIN target t
+            WHERE cp.tenant_id = t.tenant_id
+              AND cp.document_id <> @Id
+              AND cp.applicant_name IS NOT NULL
+              AND t.applicant_name IS NOT NULL
+              AND similarity(lower(cp.applicant_name), lower(t.applicant_name)) > 0.25
+        ),
+        address_fuzzy AS (
+            SELECT cp.document_id, row_number() OVER (
+                ORDER BY similarity(lower(cp.address), lower(t.address)) DESC,
+                         cp.document_id
+            ) AS rank
+            FROM case_profiles cp
+            CROSS JOIN target t
+            WHERE cp.tenant_id = t.tenant_id
+              AND cp.document_id <> @Id
+              AND cp.address IS NOT NULL
+              AND t.address IS NOT NULL
+              AND similarity(lower(cp.address), lower(t.address)) > 0.2
+        ),
+        dob_exact AS (
+            SELECT cp.document_id, 1 AS rank
+            FROM case_profiles cp
+            CROSS JOIN target t
+            WHERE cp.tenant_id = t.tenant_id
+              AND cp.document_id <> @Id
+              AND cp.date_of_birth IS NOT NULL
+              AND t.date_of_birth IS NOT NULL
+              AND cp.date_of_birth = t.date_of_birth
+        ),
+        fused AS (
+            SELECT document_id, SUM(1.0 / (60.0 + rank)) AS match_score
+            FROM (
+                SELECT document_id, rank FROM fts
+                UNION ALL
+                SELECT document_id, rank FROM vector
+                UNION ALL
+                SELECT document_id, rank FROM name_fuzzy
+                UNION ALL
+                SELECT document_id, rank FROM address_fuzzy
+                UNION ALL
+                SELECT document_id, rank FROM dob_exact
+            ) x
+            GROUP BY document_id
+        )
+        SELECT
+            cp.document_id AS IntakeId,
+            cp.template_id AS TemplateId,
+            cp.applicant_name AS ApplicantName,
+            cp.date_of_birth AS DateOfBirth,
+            cp.address AS Address,
+            ROUND(f.match_score::numeric, 4) AS MatchScore
+        FROM fused f
+        JOIN case_profiles cp ON cp.document_id = f.document_id
+        ORDER BY f.match_score DESC, cp.applicant_name NULLS LAST
+        LIMIT @Limit;
+        """,
+        new { Id = sourceDocumentId, TenantId = tenantId, Limit = limit },
+        transaction)).ToList();
+
+    if (ranked.Count == 0)
+    {
+        return [];
+    }
+
+    var candidateIds = ranked.Select(r => r.IntakeId).ToArray();
+    var fieldsByCase = (await connection.QueryAsync<CaseFieldValue>(
+        """
+        SELECT document_id AS IntakeId,
+               field_key AS FieldKey,
+               COALESCE(corrected_value, extracted_value) AS Value
+        FROM extracted_fields
+        WHERE document_id = ANY(@CandidateIds)
+        """,
+        new { CandidateIds = candidateIds },
+        transaction))
+        .ToLookup(r => r.IntakeId, r => r)
+        .ToDictionary(g => g.Key, g => g.ToDictionary(f => f.FieldKey, f => f.Value, StringComparer.OrdinalIgnoreCase));
+
+    var result = new List<SimilarCaseItem>(ranked.Count);
+    foreach (var caseItem in ranked)
+    {
+        var candidateFields = fieldsByCase.GetValueOrDefault(caseItem.IntakeId, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        var summary = BuildCaseSummary(caseItem, sourceTemplateId, targetApplicant, targetDob, targetAddress, candidateFields);
+        result.Add(new SimilarCaseItem(caseItem.IntakeId, caseItem.IntakeId, caseItem.ApplicantName ?? "Unknown applicant", caseItem.TemplateId, caseItem.MatchScore, summary));
+    }
+
+    return result;
+}
+
+static string BuildCaseSummary(
+    SimilarCaseCandidate candidate,
+    string sourceTemplateId,
+    string? sourceApplicant,
+    string? sourceDob,
+    string? sourceAddress,
+    IReadOnlyDictionary<string, string> candidateFields)
+{
+    var signals = new List<string>();
+
+    var candidateApplicant = candidate.ApplicantName;
+    if (!string.IsNullOrWhiteSpace(candidateApplicant) && string.Equals(candidateApplicant, sourceApplicant, StringComparison.OrdinalIgnoreCase))
+    {
+        signals.Add("same applicant");
+    }
+
+    var candidateDob = candidate.DateOfBirth;
+    if (!string.IsNullOrWhiteSpace(candidateDob) && !string.IsNullOrWhiteSpace(sourceDob) && candidateDob == sourceDob)
+    {
+        signals.Add("matching DOB");
+    }
+
+    var candidateAddress = candidate.Address;
+    if (!string.IsNullOrWhiteSpace(candidateAddress) && !string.IsNullOrWhiteSpace(sourceAddress) &&
+        string.Equals(candidateAddress, sourceAddress, StringComparison.OrdinalIgnoreCase))
+    {
+        signals.Add("matching address");
+    }
+
+    if (string.Equals(candidate.TemplateId, sourceTemplateId, StringComparison.OrdinalIgnoreCase))
+    {
+        signals.Add("same template");
+    }
+
+    if (signals.Count == 0)
+    {
+        signals.Add("cross-field lexical overlap");
+    }
+
+    var requestedServices = candidateFields.TryGetValue("requestedServices", out var services) && !string.IsNullOrWhiteSpace(services)
+        ? services
+        : candidateFields.TryGetValue("notes", out var notes) && !string.IsNullOrWhiteSpace(notes)
+            ? notes
+            : "review case context available";
+
+    var evidence = string.Join(", ", signals);
+    var maxSnippet = requestedServices.Length > 120 ? requestedServices[..117] + "…" : requestedServices;
+    return $"{evidence}; top hints: {maxSnippet}";
+}
+
+static async Task<bool> SupportsCaseProfiles(NpgsqlConnection connection, NpgsqlTransaction transaction)
+{
+    var exists = await connection.ExecuteScalarAsync<int>(
+        """
+        SELECT EXISTS(
+            SELECT 1
+            FROM pg_class
+            WHERE relname = 'case_profiles'
+              AND relkind = 'r'
+        )::int
+        """,
+        transaction: transaction);
+
+    return exists == 1;
+}
+
+file sealed record SimilarCaseCandidate(
+    Guid IntakeId,
+    string TemplateId,
+    string? ApplicantName,
+    string? DateOfBirth,
+    string? Address,
+    decimal MatchScore);
+
+file sealed record CaseFieldValue(
+    Guid IntakeId,
+    string FieldKey,
+    string Value);

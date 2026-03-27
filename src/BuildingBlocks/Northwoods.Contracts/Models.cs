@@ -34,6 +34,14 @@ public sealed record IntakeStatusResponse(
 
 public sealed record ReviewQueueItem(Guid ReviewId, Guid IntakeId, string ApplicantName, string TemplateId, int UncertainFieldCount);
 
+public sealed record SimilarCaseItem(
+    Guid ReviewId,
+    Guid IntakeId,
+    string ApplicantName,
+    string TemplateId,
+    decimal MatchScore,
+    string Summary);
+
 public sealed record ReviewDetailResponse(
     Guid ReviewId,
     Guid IntakeId,
@@ -42,8 +50,8 @@ public sealed record ReviewDetailResponse(
     string SourceDocumentUrl,
     ProcessingStatus Status,
     IReadOnlyList<ConfidenceField> Fields,
+    IReadOnlyList<SimilarCaseItem> SimilarCases,
     IReadOnlyList<string> AuditEvents);
-
 public sealed record FinalizeReviewRequest(IReadOnlyList<ConfidenceField> Fields, string ReviewerNote);
 
 public sealed record FinalizeReviewResponse(Guid ReviewId, ProcessingStatus Status);
