@@ -71,7 +71,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         var useMock = configuration.GetValue("Extraction:UseMockProvider", false);
         if (useMock)
         {
-            providers.Add(new MockTesseractProvider());
+            // Mock mode is mutually exclusive: return only the mock provider
+            return [new MockTesseractProvider()];
         }
 
         var usePaddle = configuration.GetValue("Extraction:UsePaddleOcr", false);
@@ -279,36 +280,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 var minFieldConfidence = results.Count > 0
                     ? results.Min(r => r.SystemConfidence)
                     : 0m;
-                var noResolvedFields = results.Count == 0;
-                var hasMissingFields = results.Count < fieldKeys.Count;
-                var allFieldsHighConfidence = !noResolvedFields && !hasMissingFields && results.All(r => r.SystemConfidence >= HighConfidenceThreshold);
-                var anyFieldLowConfidence = noResolvedFields || hasMissingFields || results.Any(r => r.SystemConfidence < ReviewRequiredThreshold);
-
-                string documentStatus;
-                bool autoAccepted;
-                bool requiresAttention;
-
-                if (allFieldsHighConfidence)
-                {
-                    // All fields >= 0.90: auto-accept (still auditable, still visible in review queue)
-                    documentStatus = "completed";
-                    autoAccepted = true;
-                    requiresAttention = false;
-                }
-                else if (anyFieldLowConfidence)
-                {
-                    // Any field < 0.75: forced review with attention flag
-                    documentStatus = "review_ready";
-                    autoAccepted = false;
-                    requiresAttention = true;
-                }
-                else
-                {
-                    // Fields between 0.75-0.90: warning review path
-                    documentStatus = "review_ready";
-                    autoAccepted = false;
-                    requiresAttention = false;
-                }
+                var (documentStatus, autoAccepted, requiresAttention) = DetermineDocumentStatus(results, fieldKeys.Count);
 
                 await conn.ExecuteAsync(
                     "UPDATE documents SET status = @Status, updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
