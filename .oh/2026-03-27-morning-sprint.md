@@ -133,3 +133,23 @@ All 5 queued tasks completed serially:
 - Fix F-01 first (unblocks all authenticated endpoint testing)
 - Then run #9 review fix loop to address remaining fuzz findings systematically
 - OpenAI vision spike suggests gpt-5.4-mini as potential single-step OCR replacement — worth a follow-up ADR
+
+### Issue #23 complete: Fix JWT claim mapping (F-01) -- 2026-03-27
+
+PR: [#28](https://github.com/open-horizon-labs/northwoods/pull/28) (merged)
+Commit: `43825ff`
+
+**Fix:** Added `options.MapInboundClaims = false` to JWT bearer config in `Program.cs`.
+`MapInboundClaims` (default: true) remapped JWT `role` claim to the long `ClaimTypes.Role` URI,
+causing `FindFirstValue("role")` to return null and all authenticated endpoints to 401.
+
+**Smoke test results:**
+| Endpoint | Status |
+|----------|--------|
+| `POST /auth/login` | 200 |
+| `POST /intakes` (upload) | 202 |
+| `GET /review-queue` | 200 |
+| `POST /reviews/{id}/finalize` | 200 |
+
+**CodeRabbit review:** APPROVED, no actionable findings.
+**Post-merge audit:** Clean -- 0 unaddressed comments.
