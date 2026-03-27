@@ -232,14 +232,22 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
                 id="template-select"
                 value={selectedTemplateId}
                 onChange={(e) => setSelectedTemplateId(e.target.value)}
-                disabled={isLoadingTemplates || uploadBusy}
+                disabled={isLoadingTemplates || templates.length === 0 || uploadBusy}
                 required
                 aria-required="true"
                 className={`${inputInteractive} disabled:bg-slate-50 disabled:text-slate-500`}
               >
                 {isLoadingTemplates ? (
                   <option value="" disabled>
-                    Loading form types\u2026
+                    Loading form types…
+                  </option>
+                ) : templatesError ? (
+                  <option value="" disabled>
+                    Unable to load form types
+                  </option>
+                ) : templates.length === 0 ? (
+                  <option value="" disabled>
+                    No form types available
                   </option>
                 ) : null}
                 {templates.map((t) => (
