@@ -340,6 +340,10 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 metrics.IncrementExtractionSuccess();
                 return;
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex) when (attempt < maxRetryAttempts && IsTransientFailure(ex))
             {
                 var delay = TimeSpan.FromMilliseconds(Math.Min(30_000, retryDelayMs * (1 << (attempt - 1))));
@@ -379,12 +383,16 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
 
     private static bool IsTransientFailure(Exception ex)
     {
+        if (ex is TaskCanceledException taskCanceled)
+        {
+            return !taskCanceled.CancellationToken.IsCancellationRequested;
+        }
+
         return ex is TransientExtractionException
                || ex is NpgsqlException
                || ex is HttpRequestException
                || ex is IOException
                || ex is SocketException
-               || ex is TaskCanceledException
                || ex is TimeoutException;
     }
 
