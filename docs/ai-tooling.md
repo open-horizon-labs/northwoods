@@ -36,9 +36,12 @@ This project was developed with an AI-assisted workflow. The goal was not to out
   - Local fork used as the coding harness.
   - Handles context assembly so the model can work with repository state, skill guidance, artifacts, and tool outputs in a more grounded way.
 
-- **ChatGPT-5.4 family (`gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`)**
-  - Primary development models used for coding support.
-  - Different variants are useful for different cost/speed/quality trade-offs: deeper reasoning for architectural work, lighter models for fast mechanical steps.
+- **ChatGPT Pro + Claude Code Max subscriptions**
+  - Due to rate-limit throttling on either platform alone, both ChatGPT Pro and Claude Code Max (x20) subscriptions were used throughout the project.
+  - ChatGPT-5.4 family (`gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`) for coding, architectural reasoning, and extraction normalization.
+  - Codex-5.3 Spark model for lightweight inline code generation tasks.
+  - Claude (Sonnet/Opus) via Claude Code for extended coding sessions, multi-file refactors, and execution-heavy phases.
+  - Switching between platforms depending on which had available capacity kept throughput high during intensive build sessions.
 
 ## How these tools were used
 
