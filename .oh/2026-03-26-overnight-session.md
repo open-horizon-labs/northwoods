@@ -253,9 +253,10 @@
 
 - **Session file:** `.oh/sessions/8-dev.md`
 - **Branch:** `8-self-assessment`
-- **PR:** pending
-- **Merged:** pending
-- **Issue status:** pending
+- **Commit:** `a05ce41` (`docs: add issue 8 self-assessment`)
+- **PR:** #19 (`https://github.com/open-horizon-labs/northwoods/pull/19`)
+- **Merged:** yes (merge commit `a5cf16a1cd39ecb19bd33e27eb31c78ca9bf5781`)
+- **Issue status:** closed (`2026-03-27T06:57:40Z`)
 
 ### Major decisions
 - Deliverable is documentation-only but includes explicit completeness/deferment and rubric score calibration.
@@ -266,13 +267,20 @@
   - Reviewer-rubric score reflections
   - Concrete AI usage examples with example prompts
 
-### Verification plan and blockers
-- Runtime smoke is out of scope for this issue itself but remains blocked globally by environment (`docker`/`curl` timeouts seen in earlier issues), so this file explicitly calls those out.
-- Post-merge phase-5 audit will be run after PR creation against:
-  - `gh api repos/open-horizon-labs/northwoods/pulls/<PR>/comments --paginate`
-  - `gh api repos/open-horizon-labs/northwoods/issues/<PR>/comments --paginate`
-  - `gh api repos/open-horizon-labs/northwoods/pulls/<PR>/reviews --paginate`
-- Any critical findings from external channels must trigger follow-up PR before closure.
+### Verification outcomes
+- PR #19 and issue #8 were merged; issue closed at `2026-03-27T06:57:40Z`.
+- Runtime smoke is still not executable in this environment due platform responsiveness limits:
+  - `docker compose ps` (timeout)
+  - `docker info` (timeout)
+  - `curl --max-time 10 -sS http://localhost:5100/healthz` (timeout)
+  - `curl --max-time 10 -sS -F 'file=@samples/intakes/chatgpt-sample-general-intake.pdf' -F 'templateId=general-assessment' -H 'X-Tenant-Id: tenant-a' http://localhost:5100/intakes` (timeout)
+- Post-merge comment audit for PR #19:
+  - `gh api repos/open-horizon-labs/northwoods/pulls/19/comments --paginate` -> `[]`
+  - `gh api repos/open-horizon-labs/northwoods/issues/19/comments --paginate` -> `[]`
+  - `gh api repos/open-horizon-labs/northwoods/pulls/19/reviews --paginate` -> `[]`
+- Unresolved external findings: none.
 
 ### Next-step gate
-- Issue #8 will close when PR is merged and audit comment check is complete.
+- Issue #8 is merged and verified by this pass. Remaining runway:
+  - Execute live intake/review smoke when local docker/curl responsiveness returns.
+  - Complete remaining open issues #9–#11.
