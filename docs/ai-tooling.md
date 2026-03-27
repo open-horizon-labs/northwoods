@@ -22,6 +22,16 @@ This project was developed with an AI-assisted workflow. The goal was not to out
   - Used to automate browser interactions for intake/review flow validation against the running local stack.
   - Helped verify end-to-end behavior (upload → extraction → review) with reproducible scripted runs instead of ad-hoc manual clicks.
 
+
+- **CodeRabbit**
+  - Automated PR review service integrated into the GitHub workflow.
+  - Provides severity-classified findings (Critical, Major, Minor) on every PR marked ready for review.
+  - Used as part of the dev-pipeline ship step to catch issues before merge.
+
+- **Dev-pipeline agents (`.claude/agents/`)**
+  - `dev-pipeline` runs the full issue lifecycle: problem-statement, solution-space, execute, ship.
+  - `dev-pipeline-oversight` wraps dev-pipeline with a post-merge comment audit that verifies all external review findings (CodeRabbit, human, review skill) were addressed.
+  - Ensures no PR merges with unresolved Critical or Major findings.
 - **Oh My Pi fork (`.oh-omp/`)**
   - Local fork used as the coding harness.
   - Handles context assembly so the model can work with repository state, skill guidance, artifacts, and tool outputs in a more grounded way.
