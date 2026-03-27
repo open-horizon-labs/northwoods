@@ -73,7 +73,31 @@ CREATE TABLE IF NOT EXISTS extracted_fields (
     UNIQUE(document_id, field_key)
 );
 
--- ============================================================================
+-- ==========================================================================
+-- Create extraction attempts table for consensus/audit trail
+-- ==========================================================================
+CREATE TABLE IF NOT EXISTS extraction_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    extraction_run_id UUID NOT NULL,
+    field_key TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    technique TEXT NOT NULL,
+    raw_value TEXT,
+    raw_confidence DECIMAL(5, 4) NOT NULL,
+    normalized_value TEXT,
+    normalized_confidence DECIMAL(5, 4) NOT NULL,
+    requires_review BOOLEAN NOT NULL DEFAULT false,
+    details JSONB,
+    created_at TIMESTAMPTZ DEFAULT now(),
+);
+
+CREATE INDEX IF NOT EXISTS idx_extraction_attempts_document_id ON extraction_attempts(document_id);
+CREATE INDEX IF NOT EXISTS idx_extraction_attempts_tenant_id ON extraction_attempts(tenant_id);
+
+-- ==========================================================================
 -- Create audit_events table
 -- ============================================================================
 
@@ -123,6 +147,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON templates TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON documents TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON extracted_fields TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON extraction_attempts TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON audit_events TO app_user;
 
 -- Grant sequence permissions for UUID generation
@@ -137,6 +162,7 @@ ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE extracted_fields ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE extraction_attempts ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- RLS Policies for users table
@@ -167,6 +193,13 @@ CREATE POLICY documents_tenant_isolation ON documents
 -- ============================================================================
 
 CREATE POLICY extracted_fields_tenant_isolation ON extracted_fields
+    USING (tenant_id = current_setting('app.tenant_id', true))
+    WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+
+-- ============================================================================
+-- RLS Policies for extraction_attempts table
+-- ============================================================================
+CREATE POLICY extraction_attempts_tenant_isolation ON extraction_attempts
     USING (tenant_id = current_setting('app.tenant_id', true))
     WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 

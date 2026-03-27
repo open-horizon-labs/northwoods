@@ -54,6 +54,15 @@ public sealed class ObjectStore
         return _publicS3Client.GetPreSignedURL(request).Replace("https://", "http://");
     }
 
+    public async Task<byte[]> DownloadAsync(string key)
+    {
+        var response = await _s3Client.GetObjectAsync(_bucketName, key);
+        await using var stream = response.ResponseStream;
+        await using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        return buffer.ToArray();
+    }
+
     public async Task EnsureBucketAsync()
     {
         try

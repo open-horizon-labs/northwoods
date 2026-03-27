@@ -17,4 +17,11 @@
     <ProjectReference Include="..\..\BuildingBlocks\Northwoods.Contracts\Northwoods.Contracts.csproj" />
     <ProjectReference Include="..\..\BuildingBlocks\Northwoods.Tenancy\Northwoods.Tenancy.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="scripts/**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
