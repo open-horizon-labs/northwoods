@@ -45,4 +45,16 @@
   - Extracted similarity thresholds to named constants
 
 ## Phase 5: Post-Merge Audit
-- Pending merge
+
+PR #22 merged at 2026-03-27T12:02:21Z. Audit of all CodeRabbit findings:
+
+| # | Finding | Severity | Status |
+|---|---------|----------|--------|
+| 1 | Markdown formatting in session file | Trivial | Skipped (no code impact) |
+| 2 | XSS via dangerouslySetInnerHTML | Critical | Fixed (renderHighlightedSnippet) |
+| 3 | Explicit tenant_id WHERE clause | Major | Fixed (both queries) |
+| 4 | Centralize similarity thresholds | Trivial | Fixed (named constants) |
+| 5 | N+1 query in case aggregate | Trivial | Fixed (batch with ANY) |
+
+All critical and major findings addressed before merge. No follow-up PR needed.
+No human reviewer comments to address.
