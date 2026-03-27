@@ -1,38 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 
+import { clearStoredAuth, readStoredAuth, storeAuth } from './lib/auth'
 import type { LoginResponse } from './types'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const WorkerDashboard = lazy(() => import('./pages/WorkerDashboard'))
 const ReviewerDashboard = lazy(() => import('./pages/ReviewerDashboard'))
 const DevPage = lazy(() => import('./pages/DevPage'))
-
-const AUTH_STORAGE_KEY = 'northwoods:auth'
-
-function readStoredAuth(): LoginResponse | null {
-  try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as unknown
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      'accessToken' in parsed &&
-      typeof (parsed as Record<string, unknown>).accessToken === 'string' &&
-      (parsed as Record<string, unknown>).accessToken &&
-      'tenantId' in parsed &&
-      typeof (parsed as Record<string, unknown>).tenantId === 'string' &&
-      (parsed as Record<string, unknown>).tenantId &&
-      'role' in parsed &&
-      [0, 1, 'IntakeWorker', 'Reviewer'].includes((parsed as Record<string, unknown>).role as string | number)
-    ) {
-      return parsed as LoginResponse
-    }
-    return null
-  } catch {
-    return null
-  }
-}
 
 /** Hash-based routing: #dev opens the developer scaffold. */
 function useIsDevRoute(): boolean {
@@ -60,15 +34,12 @@ export default function App() {
   const [auth, setAuth] = useState<LoginResponse | null>(readStoredAuth)
 
   const handleLogin = (nextAuth: LoginResponse) => {
+    storeAuth(nextAuth)
     setAuth(nextAuth)
   }
 
   const handleLogout = () => {
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY)
-    } catch {
-      // best-effort
-    }
+    clearStoredAuth()
     setAuth(null)
   }
 

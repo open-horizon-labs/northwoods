@@ -99,8 +99,10 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
       for (const intakeId of activePolling) {
         try {
           const status = await api.getIntake(auth.accessToken, intakeId)
-          const label = statusLabel(status.status)
-          const done = label === 'ReviewReady' || label === 'Finalized' || label === 'Failed'
+          // Compare status codes directly; statusLabel returns display strings with spaces
+          const s = status.status
+          const done =
+            s === 'ReviewReady' || s === 2 || s === 'Finalized' || s === 3 || s === 'Failed' || s === 4
 
           setUploads((prev) =>
             prev.map((u) => (u.intakeId === intakeId ? { ...u, status: status.status } : u)),

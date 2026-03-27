@@ -39,8 +39,8 @@ export type ReviewQueueItem = {
   applicantName: string
   templateId: string
   uncertainFieldCount: number
+  uploadDate: string
 }
-
 export type SimilarCase = {
   reviewId: string
   intakeId: string

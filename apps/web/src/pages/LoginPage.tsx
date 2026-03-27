@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 
 import { api } from '../api'
+import { storeAuth } from '../lib/auth'
 import type { LoginResponse } from '../types'
 
 const FOCUS_RING =
@@ -15,8 +16,6 @@ type Props = {
   onLogin: (auth: LoginResponse) => void
 }
 
-const AUTH_STORAGE_KEY = 'northwoods:auth'
-
 export default function LoginPage({ onLogin }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,11 +29,7 @@ export default function LoginPage({ onLogin }: Props) {
 
     try {
       const auth = await api.login({ email: email.trim(), password })
-      try {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth))
-      } catch {
-        // best-effort
-      }
+      storeAuth(auth)
       onLogin(auth)
     } catch (err) {
       setError(

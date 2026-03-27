@@ -118,25 +118,30 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
     }
   }, [auth.accessToken])
 
+  // request seq prevents stale async responses from a previous review overwriting a newer one
+  const reviewReqSeq = useRef(0)
   const loadReview = useCallback(
     async (reviewId: string) => {
+      const seq = ++reviewReqSeq.current
       setReviewLoading(true)
       setReviewLoadError(null)
       setFinalizeSuccess(false)
       setFinalizeError(null)
       try {
         const detail = await api.getReview(auth.accessToken, reviewId)
+        if (seq !== reviewReqSeq.current) return
         setReviewDetail(detail)
         setEditableFields(
           detail.fields.map((f) => ({ ...f })).sort((a, b) => a.confidence - b.confidence),
         )
         setReviewerNote('')
       } catch (err) {
+        if (seq !== reviewReqSeq.current) return
         setReviewDetail(null)
         setEditableFields([])
         setReviewLoadError(err instanceof Error ? err.message : 'Unable to load review details.')
       } finally {
-        setReviewLoading(false)
+        if (seq === reviewReqSeq.current) setReviewLoading(false)
       }
     },
     [auth.accessToken],
@@ -159,13 +164,14 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
 
   // Scroll detail pane to top when review changes
   useEffect(() => {
-    detailPaneRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    detailPaneRef.current?.scrollTo({ top: 0, behavior: prefersReduced ? 'instant' : 'smooth' })
   }, [selectedReviewId])
 
   const handleFieldChange = (index: number, value: string) => {
     setEditableFields((prev) =>
       prev.map((f, i) =>
-        i === index ? { ...f, value, requiresReview: false, confidence: Math.max(f.confidence, 0.99) } : f,
+        i === index ? { ...f, value, requiresReview: false } : f,
       ),
     )
   }
@@ -306,7 +312,18 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
                             <p className={`truncate text-sm font-medium ${isSelected ? 'text-sky-900' : 'text-slate-900'}`}>
                               {item.applicantName}
                             </p>
-                            <p className="mt-0.5 truncate text-xs text-slate-500">{item.templateId}</p>
+                            <p className="mt-0.5 truncate text-xs text-slate-500">
+                              {item.templateId}
+                              {item.uploadDate ? (
+                                <>
+                                  {' · '}
+                                  {new Date(item.uploadDate).toLocaleDateString([], {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })}
+                                </>
+                              ) : null}
+                            </p>
                           </div>
                           {item.uncertainFieldCount > 0 ? (
                             <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">

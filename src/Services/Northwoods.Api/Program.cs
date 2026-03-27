@@ -181,12 +181,14 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
     if (string.IsNullOrWhiteSpace(tenantId))
     {
         await using var global = await dbFactory.OpenUnscopedSessionAsync();
-        tenantId = await global.Connection.QueryFirstOrDefaultAsync<string>(
-            "SELECT tenant_id FROM users WHERE email = @Email LIMIT 1",
+        var tenants = (await global.Connection.QueryAsync<string>(
+            "SELECT tenant_id FROM users WHERE email = @Email",
             new { request.Email },
-            global.Transaction);
-        if (string.IsNullOrWhiteSpace(tenantId))
+            global.Transaction)).AsList();
+        // Ambiguous (multiple tenants) or missing → 401; do not reveal existence across tenants.
+        if (tenants.Count != 1)
             return Results.Unauthorized();
+        tenantId = tenants[0];
     }
 
     await using var session = await dbFactory.OpenSessionAsync(tenantId);
@@ -399,7 +401,8 @@ app.MapGet("/review-queue", async (HttpContext httpContext, DbConnectionFactory 
         SELECT d.id AS ReviewId, d.id AS IntakeId,
                COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.field_key = 'applicantName' LIMIT 1), '(unknown)') AS ApplicantName,
                d.template_id AS TemplateId,
-               (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount
+               (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount,
+               d.created_at AS UploadDate
         FROM documents d
         WHERE d.tenant_id = @TenantId AND d.status = 'review_ready'
         ORDER BY d.created_at
