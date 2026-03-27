@@ -4,6 +4,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
 
 using System.Net.Http.Headers;
 using Dapper;
@@ -18,6 +21,9 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
     private const decimal ReviewRequiredThreshold = 0.75m;
     private const decimal EscalateThreshold = 0.82m;
     private const int CaseEmbeddingDimensions = 16;
+    private const int DefaultMaxRetryAttempts = 3;
+    private const int DefaultRetryDelayMilliseconds = 1_000;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var connectionString = config.GetConnectionString("Default")
@@ -25,12 +31,15 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
 
         var objectStore = BuildObjectStore(config);
         var providers = BuildProviders(config);
+        var maxRetryAttempts = Math.Max(1, config.GetValue("Extraction:MaxRetryAttempts", DefaultMaxRetryAttempts));
+        var retryDelayMs = Math.Max(0, config.GetValue("Extraction:RetryDelayMs", DefaultRetryDelayMilliseconds));
+        var metrics = new WorkerMetrics();
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await ProcessPendingDocuments(connectionString, objectStore, providers, stoppingToken);
+                await ProcessPendingDocuments(connectionString, objectStore, providers, maxRetryAttempts, retryDelayMs, metrics, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -86,6 +95,9 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         string connectionString,
         ObjectStore objectStore,
         IReadOnlyList<IExtractionProvider> providers,
+        int maxRetryAttempts,
+        int retryDelayMs,
+        WorkerMetrics metrics,
         CancellationToken ct)
     {
         await using var conn = new NpgsqlConnection(connectionString);
@@ -107,8 +119,24 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
 
         foreach (var doc in docs)
         {
-            await ExtractDocument(conn, objectStore, doc.id, doc.tenant_id, doc.template_id, doc.original_file_key, providers, ct);
+            await ExtractDocumentWithRetry(
+                conn,
+                objectStore,
+                doc.id,
+                doc.tenant_id,
+                doc.template_id,
+                doc.original_file_key,
+                providers,
+                maxRetryAttempts,
+                retryDelayMs,
+                metrics,
+                ct);
         }
+
+        logger.LogInformation(
+            "Extraction metrics snapshot Success={ExtractionSuccessCount} Failure={ExtractionFailureCount}",
+            metrics.ExtractionSuccessCount,
+            metrics.ExtractionFailureCount);
     }
 
     private async Task ExtractDocument(
@@ -119,6 +147,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         string templateId,
         string originalFileKey,
         IReadOnlyList<IExtractionProvider> providers,
+        Guid extractionRunId,
+        string correlationId,
         CancellationToken ct)
     {
         await using var tx = await conn.BeginTransactionAsync(ct);
@@ -132,10 +162,19 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
 
             await conn.ExecuteAsync(
                 """
-                INSERT INTO audit_events (document_id, tenant_id, event_type)
-                VALUES (@DocId, @TenantId, 'extraction_started')
+                INSERT INTO audit_events (document_id, tenant_id, event_type, details)
+                VALUES (@DocId, @TenantId, 'extraction_started', @Details::jsonb)
                 """,
-                new { DocId = docId, TenantId = tenantId },
+                new
+                {
+                    DocId = docId,
+                    TenantId = tenantId,
+                    Details = JsonSerializer.Serialize(new
+                    {
+                        correlation_id = correlationId,
+                        extraction_run_id = extractionRunId
+                    })
+                },
                 tx);
 
             var fieldSchemaJson = await conn.QueryFirstOrDefaultAsync<string>(
@@ -166,7 +205,6 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 var results = await RunExtractionPipeline(extractionContext, fieldKeys, providers, ct);
                 var canPersistAttempts = await SupportsExtractionAttempts(conn, tx);
                 var canPersistCaseProfiles = await SupportsCaseProfiles(conn, tx);
-                var extractionRunId = Guid.NewGuid();
 
                 foreach (var result in results)
                 {
@@ -228,6 +266,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                         TenantId = tenantId,
                         Details = JsonSerializer.Serialize(new
                         {
+                            correlation_id = correlationId,
+                            extraction_run_id = extractionRunId,
                             provider_count = providers.Count,
                             fields_extracted = results.Count,
                             high_confidence_fields = results.Count(r => r.SystemConfidence >= HighConfidenceThreshold),
@@ -252,28 +292,137 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         {
             await tx.RollbackAsync(ct);
             logger.LogError(ex, "Failed to extract document {DocId}", docId);
-
-            await using var failTx = await conn.BeginTransactionAsync(ct);
-            await conn.ExecuteAsync(
-                "UPDATE documents SET status = 'failed', updated_at = now() WHERE id = @Id",
-                new { Id = docId },
-                failTx);
-
-            await conn.ExecuteAsync(
-                """
-                INSERT INTO audit_events (document_id, tenant_id, event_type, details)
-                VALUES (@DocId, @TenantId, 'extraction_failed', @Details::jsonb)
-                """,
-                new
-                {
-                    DocId = docId,
-                    TenantId = tenantId,
-                    Details = JsonSerializer.Serialize(new { error = ex.Message })
-                },
-                failTx);
-
-            await failTx.CommitAsync(ct);
+            throw;
         }
+    }
+
+    private async Task ExtractDocumentWithRetry(
+        NpgsqlConnection conn,
+        ObjectStore objectStore,
+        Guid docId,
+        string tenantId,
+        string templateId,
+        string originalFileKey,
+        IReadOnlyList<IExtractionProvider> providers,
+        int maxRetryAttempts,
+        int retryDelayMs,
+        WorkerMetrics metrics,
+        CancellationToken ct)
+    {
+        var extractionRunId = Guid.NewGuid();
+        var correlationId = await GetCorrelationIdFromUploadEvent(conn, docId) ?? docId.ToString("N");
+
+        for (var attempt = 1; attempt <= maxRetryAttempts; attempt++)
+        {
+            try
+            {
+                using (logger.BeginScope(new Dictionary<string, object?>
+                       {
+                           ["CorrelationId"] = correlationId,
+                           ["DocumentId"] = docId,
+                           ["Attempt"] = attempt,
+                           ["ExtractionRunId"] = extractionRunId
+                       }))
+                {
+                    await ExtractDocument(
+                        conn,
+                        objectStore,
+                        docId,
+                        tenantId,
+                        templateId,
+                        originalFileKey,
+                        providers,
+                        extractionRunId,
+                        correlationId,
+                        ct);
+                }
+
+                metrics.IncrementExtractionSuccess();
+                return;
+            }
+            catch (Exception ex) when (attempt < maxRetryAttempts && IsTransientFailure(ex))
+            {
+                var delay = TimeSpan.FromMilliseconds(Math.Min(30_000, retryDelayMs * (1 << (attempt - 1))));
+                logger.LogWarning(
+                    ex,
+                    "Transient extraction failure for {DocId}; retrying in {Delay} (attempt {Attempt}/{MaxAttempts})",
+                    docId,
+                    delay,
+                    attempt,
+                    maxRetryAttempts);
+                await Task.Delay(delay, ct);
+            }
+            catch (Exception ex)
+            {
+                metrics.IncrementExtractionFailure();
+                await RecordExtractionFailure(conn, docId, tenantId, extractionRunId, correlationId, ex, ct);
+                return;
+            }
+        }
+    }
+
+    private static async Task<string?> GetCorrelationIdFromUploadEvent(NpgsqlConnection conn, Guid docId)
+    {
+        var correlationId = await conn.QueryFirstOrDefaultAsync<string?>(
+            """
+            SELECT details ->> 'correlation_id'
+            FROM audit_events
+            WHERE document_id = @DocId
+              AND event_type = 'intake_uploaded'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            new { DocId = docId });
+
+        return string.IsNullOrWhiteSpace(correlationId) ? null : correlationId;
+    }
+
+    private static bool IsTransientFailure(Exception ex)
+    {
+        return ex is TransientExtractionException
+               || ex is NpgsqlException
+               || ex is HttpRequestException
+               || ex is IOException
+               || ex is SocketException
+               || ex is TaskCanceledException
+               || ex is TimeoutException;
+    }
+
+    private static async Task RecordExtractionFailure(
+        NpgsqlConnection conn,
+        Guid docId,
+        string tenantId,
+        Guid extractionRunId,
+        string correlationId,
+        Exception error,
+        CancellationToken ct)
+    {
+        await using var failTx = await conn.BeginTransactionAsync(ct);
+        await conn.ExecuteAsync(
+            "UPDATE documents SET status = 'failed', updated_at = now() WHERE id = @Id",
+            new { Id = docId },
+            failTx);
+
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO audit_events (document_id, tenant_id, event_type, details)
+            VALUES (@DocId, @TenantId, 'extraction_failed', @Details::jsonb)
+            """,
+            new
+            {
+                DocId = docId,
+                TenantId = tenantId,
+                Details = JsonSerializer.Serialize(new
+                {
+                    correlation_id = correlationId,
+                    extraction_run_id = extractionRunId,
+                    error = error.Message,
+                    error_type = error.GetType().Name
+                })
+            },
+            failTx);
+
+        await failTx.CommitAsync(ct);
     }
 
     private static string WriteTempFile(string key, byte[] bytes)
@@ -302,6 +451,24 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         {
             // best effort cleanup
         }
+    }
+
+    private sealed class WorkerMetrics
+    {
+        private long _extractionSuccessCount;
+        private long _extractionFailureCount;
+
+        public void IncrementExtractionSuccess() => Interlocked.Increment(ref _extractionSuccessCount);
+
+        public void IncrementExtractionFailure() => Interlocked.Increment(ref _extractionFailureCount);
+
+        public long ExtractionSuccessCount => Interlocked.Read(ref _extractionSuccessCount);
+
+        public long ExtractionFailureCount => Interlocked.Read(ref _extractionFailureCount);
+    }
+
+    private sealed class TransientExtractionException(string message) : Exception(message)
+    {
     }
 
     private static string BuildCaseProfileText(string templateId, IReadOnlyList<FieldExtractionResult> fields)
@@ -824,7 +991,16 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
             using var res = await Http.SendAsync(req, ct);
             var body = await res.Content.ReadAsStringAsync(ct);
             if (!res.IsSuccessStatusCode)
+            {
+                var isTransient = (int)res.StatusCode >= 500 || res.StatusCode == HttpStatusCode.TooManyRequests || res.StatusCode == HttpStatusCode.RequestTimeout;
+
+                if (isTransient)
+                {
+                    throw new TransientExtractionException($"OpenAI normalization failed ({(int)res.StatusCode}).");
+                }
+
                 throw new InvalidOperationException($"OpenAI normalization failed ({(int)res.StatusCode}).");
+            }
 
             var outputText = TryGetOutputText(body);
             if (string.IsNullOrWhiteSpace(outputText))

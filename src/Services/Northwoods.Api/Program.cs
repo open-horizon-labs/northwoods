@@ -13,6 +13,13 @@ using Northwoods.Tenancy;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+});
+
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("ConnectionStrings:Default is required.");
 
@@ -69,6 +76,29 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var app = builder.Build();
+var observability = new ApiObservability();
+
+const string correlationIdHeader = "X-Correlation-Id";
+
+app.Use(async (httpContext, next) =>
+{
+    var correlationId = httpContext.Request.Headers.TryGetValue(correlationIdHeader, out var provided)
+        && !string.IsNullOrWhiteSpace(provided)
+            ? provided.ToString()
+            : Guid.NewGuid().ToString("N");
+
+    httpContext.Items["CorrelationId"] = correlationId;
+    httpContext.Response.Headers[correlationIdHeader] = correlationId;
+    observability.IncrementRequestCount();
+
+    using (app.Logger.BeginScope(new Dictionary<string, object?>
+           {
+               ["CorrelationId"] = correlationId
+           }))
+    {
+        await next();
+    }
+});
 
 // Ensure the MinIO bucket exists on startup
 await store.EnsureBucketAsync();
@@ -78,6 +108,35 @@ app.UseAuthorization();
 
 app.MapOpenApi();
 app.MapHealthChecks("/healthz");
+
+app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFactory) =>
+{
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+    var extractionCounts = await session.Connection.QueryFirstOrDefaultAsync<ExtractionCounts>(
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE status IN ('review_ready', 'finalized'))::bigint AS ExtractionSuccessCount,
+            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS ExtractionFailureCount
+        FROM documents
+        """,
+        transaction: session.Transaction);
+
+    return Results.Ok(new ApiMetricsResponse(
+        observability.RequestCount,
+        observability.ReviewFinalizationCount,
+        extractionCounts?.ExtractionSuccessCount ?? 0,
+        extractionCounts?.ExtractionFailureCount ?? 0));
+})
+    .WithName("GetMetrics")
+    .WithSummary("Returns basic service metrics for tenant-scoped requests.")
+    .RequireAuthorization();
 
 // --- Auth ---
 app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFactory) =>
@@ -175,6 +234,8 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
     if (!CanUpload(authContext.Role, reviewersCanUpload))
         return Results.Forbid();
 
+    var correlationId = GetCorrelationId(httpContext);
+
     var form = await httpContext.Request.ReadFormAsync();
     var file = form.Files["file"];
     var templateId = form["templateId"].ToString();
@@ -225,7 +286,12 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
             DocId = docId,
             TenantId = authContext.TenantId,
             ActorId = authContext.UserId,
-            Details = JsonSerializer.Serialize(new { template = templateId, file = file.FileName })
+            Details = JsonSerializer.Serialize(new
+            {
+                correlation_id = correlationId,
+                template = templateId,
+                file = file.FileName
+            })
         },
         session.Transaction);
 
@@ -350,6 +416,8 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
     if (authContext.Role != UserRole.Reviewer)
         return Results.Forbid();
 
+    var correlationId = GetCorrelationId(httpContext);
+
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string status)>(
@@ -389,11 +457,16 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
             DocId = id,
             TenantId = authContext.TenantId,
             ActorId = authContext.UserId,
-            Details = JsonSerializer.Serialize(new { note = request.ReviewerNote })
+            Details = JsonSerializer.Serialize(new
+            {
+                correlation_id = correlationId,
+                note = request.ReviewerNote
+            })
         },
         session.Transaction);
 
     await session.CommitAsync();
+    observability.IncrementReviewFinalizationCount();
     return Results.Ok(new FinalizeReviewResponse(id, ProcessingStatus.Finalized));
 })
     .WithName("FinalizeReview").WithTags("Reviews")
@@ -401,6 +474,22 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
     .RequireAuthorization();
 
 app.Run();
+
+static string GetCorrelationId(HttpContext httpContext)
+{
+    if (httpContext.Items.TryGetValue("CorrelationId", out var item) && item is string existing && !string.IsNullOrWhiteSpace(existing))
+    {
+        return existing;
+    }
+
+    if (httpContext.Request.Headers.TryGetValue("X-Correlation-Id", out var header) && !string.IsNullOrWhiteSpace(header))
+    {
+        return header.ToString();
+    }
+
+    return Guid.NewGuid().ToString("N");
+}
+
 
 static bool CanUpload(UserRole role, bool reviewersCanUpload) =>
     role == UserRole.IntakeWorker || (reviewersCanUpload && role == UserRole.Reviewer);
@@ -847,6 +936,28 @@ static async Task<bool> SupportsCaseProfiles(NpgsqlConnection connection, Npgsql
 
     return exists == 1;
 }
+
+file sealed class ApiObservability
+{
+    private long _requestCount;
+    private long _reviewFinalizationCount;
+
+    public void IncrementRequestCount() => Interlocked.Increment(ref _requestCount);
+
+    public void IncrementReviewFinalizationCount() => Interlocked.Increment(ref _reviewFinalizationCount);
+
+    public long RequestCount => Interlocked.Read(ref _requestCount);
+
+    public long ReviewFinalizationCount => Interlocked.Read(ref _reviewFinalizationCount);
+}
+
+file sealed record ApiMetricsResponse(
+    long RequestCount,
+    long ReviewFinalizationCount,
+    long ExtractionSuccessCount,
+    long ExtractionFailureCount);
+
+file sealed record ExtractionCounts(long ExtractionSuccessCount, long ExtractionFailureCount);
 
 file sealed record AuthContext(Guid UserId, string TenantId, UserRole Role);
 file sealed record SimilarCaseCandidate(
