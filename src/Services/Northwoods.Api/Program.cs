@@ -13,6 +13,13 @@ using Northwoods.Tenancy;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+});
+
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("ConnectionStrings:Default is required.");
 
@@ -69,6 +76,29 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var app = builder.Build();
+var observability = new ApiObservability();
+
+const string correlationIdHeader = "X-Correlation-Id";
+
+app.Use(async (httpContext, next) =>
+{
+    var correlationId = httpContext.Request.Headers.TryGetValue(correlationIdHeader, out var provided)
+        && !string.IsNullOrWhiteSpace(provided)
+            ? provided.ToString()
+            : Guid.NewGuid().ToString("N");
+
+    httpContext.Items["CorrelationId"] = correlationId;
+    httpContext.Response.Headers[correlationIdHeader] = correlationId;
+    observability.IncrementRequestCount();
+
+    using (app.Logger.BeginScope(new Dictionary<string, object?>
+           {
+               ["CorrelationId"] = correlationId
+           }))
+    {
+        await next();
+    }
+});
 
 // Ensure the MinIO bucket exists on startup
 await store.EnsureBucketAsync();
@@ -78,6 +108,37 @@ app.UseAuthorization();
 
 app.MapOpenApi();
 app.MapHealthChecks("/healthz");
+
+app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFactory) =>
+{
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+    var extractionCounts = await session.Connection.QueryFirstOrDefaultAsync<ExtractionCounts>(
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE status IN ('review_ready', 'finalized'))::bigint AS ExtractionSuccessCount,
+            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS ExtractionFailureCount
+        FROM documents
+        WHERE tenant_id = @TenantId
+        """,
+        new { TenantId = authContext.TenantId },
+        transaction: session.Transaction);
+
+    return Results.Ok(new ApiMetricsResponse(
+        observability.RequestCount,
+        observability.ReviewFinalizationCount,
+        extractionCounts?.ExtractionSuccessCount ?? 0,
+        extractionCounts?.ExtractionFailureCount ?? 0));
+})
+    .WithName("GetMetrics")
+    .WithSummary("Returns basic service metrics for tenant-scoped requests.")
+    .RequireAuthorization();
 
 // --- Auth ---
 app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFactory) =>
@@ -175,6 +236,8 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
     if (!CanUpload(authContext.Role, reviewersCanUpload))
         return Results.Forbid();
 
+    var correlationId = GetCorrelationId(httpContext);
+
     var form = await httpContext.Request.ReadFormAsync();
     var file = form.Files["file"];
     var templateId = form["templateId"].ToString();
@@ -225,7 +288,12 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
             DocId = docId,
             TenantId = authContext.TenantId,
             ActorId = authContext.UserId,
-            Details = JsonSerializer.Serialize(new { template = templateId, file = file.FileName })
+            Details = JsonSerializer.Serialize(new
+            {
+                correlation_id = correlationId,
+                template = templateId,
+                file = file.FileName
+            })
         },
         session.Transaction);
 
@@ -246,8 +314,8 @@ app.MapGet("/intakes/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string tenant_id, string template_id, string status)>(
-        "SELECT id, tenant_id, template_id, status FROM documents WHERE id = @Id",
-        new { Id = id },
+        "SELECT id, tenant_id, template_id, status FROM documents WHERE id = @Id AND tenant_id = @TenantId",
+        new { Id = id, TenantId = authContext.TenantId },
         session.Transaction);
 
     if (doc == default) return Results.NotFound();
@@ -259,9 +327,9 @@ app.MapGet("/intakes/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
                confidence AS Confidence,
                requires_review AS RequiresReview
         FROM extracted_fields
-        WHERE document_id = @Id
+        WHERE document_id = @Id AND tenant_id = @TenantId
         """,
-        new { Id = id },
+        new { Id = id, TenantId = authContext.TenantId },
         session.Transaction)).ToList();
 
     var status = ParseStatus(doc.status);
@@ -283,15 +351,15 @@ app.MapGet("/review-queue", async (HttpContext httpContext, DbConnectionFactory 
     var items = (await session.Connection.QueryAsync<ReviewQueueItem>(
         """
         SELECT d.id AS ReviewId, d.id AS IntakeId,
-               COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.field_key = 'applicantName' LIMIT 1), '(unknown)') AS ApplicantName,
+               COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.field_key = 'applicantName' LIMIT 1), '(unknown)') AS ApplicantName,
                d.template_id AS TemplateId,
-               (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.requires_review) AS UncertainFieldCount
+               (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount
         FROM documents d
-        WHERE d.status = 'review_ready'
+        WHERE d.tenant_id = @TenantId AND d.status = 'review_ready'
         ORDER BY d.created_at
         """,
+        new { TenantId = authContext.TenantId },
         transaction: session.Transaction)).ToList();
-
     return Results.Ok(items);
 })
     .WithName("GetReviewQueue").WithTags("Reviews")
@@ -307,8 +375,8 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string tenant_id, string template_id, string status, string original_file_key)>(
-        "SELECT id, tenant_id, template_id, status, original_file_key FROM documents WHERE id = @Id",
-        new { Id = id },
+        "SELECT id, tenant_id, template_id, status, original_file_key FROM documents WHERE id = @Id AND tenant_id = @TenantId",
+        new { Id = id, TenantId = authContext.TenantId },
         session.Transaction);
 
     if (doc == default) return Results.NotFound();
@@ -320,14 +388,14 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
                confidence AS Confidence,
                requires_review AS RequiresReview
         FROM extracted_fields
-        WHERE document_id = @Id
+        WHERE document_id = @Id AND tenant_id = @TenantId
         """,
-        new { Id = id },
+        new { Id = id, TenantId = authContext.TenantId },
         session.Transaction)).ToList();
 
     var auditEvents = (await session.Connection.QueryAsync<string>(
-        "SELECT event_type FROM audit_events WHERE document_id = @Id ORDER BY created_at",
-        new { Id = id },
+        "SELECT event_type FROM audit_events WHERE document_id = @Id AND tenant_id = @TenantId ORDER BY created_at",
+        new { Id = id, TenantId = authContext.TenantId },
         session.Transaction)).ToList();
 
     var similarCases = await FindSimilarCasesAsync(session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5);
@@ -350,11 +418,13 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
     if (authContext.Role != UserRole.Reviewer)
         return Results.Forbid();
 
+    var correlationId = GetCorrelationId(httpContext);
+
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string status)>(
-        "SELECT id, status FROM documents WHERE id = @Id",
-        new { Id = id },
+        "SELECT id, status FROM documents WHERE id = @Id AND tenant_id = @TenantId",
+        new { Id = id, TenantId = authContext.TenantId },
         session.Transaction);
 
     if (doc == default) return Results.NotFound();
@@ -367,16 +437,16 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
             """
             UPDATE extracted_fields
             SET corrected_value = @Value, requires_review = false, updated_at = now()
-            WHERE document_id = @DocId AND field_key = @FieldKey
+            WHERE document_id = @DocId AND tenant_id = @TenantId AND field_key = @FieldKey
             """,
-            new { DocId = id, field.FieldKey, field.Value },
+            new { DocId = id, TenantId = authContext.TenantId, field.FieldKey, field.Value },
             session.Transaction);
     }
 
     // Finalize
     await session.Connection.ExecuteAsync(
-        "UPDATE documents SET status = 'finalized', updated_at = now() WHERE id = @Id",
-        new { Id = id },
+        "UPDATE documents SET status = 'finalized', updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
+        new { Id = id, TenantId = authContext.TenantId },
         session.Transaction);
 
     await session.Connection.ExecuteAsync(
@@ -389,11 +459,16 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
             DocId = id,
             TenantId = authContext.TenantId,
             ActorId = authContext.UserId,
-            Details = JsonSerializer.Serialize(new { note = request.ReviewerNote })
+            Details = JsonSerializer.Serialize(new
+            {
+                correlation_id = correlationId,
+                note = request.ReviewerNote
+            })
         },
         session.Transaction);
 
     await session.CommitAsync();
+    observability.IncrementReviewFinalizationCount();
     return Results.Ok(new FinalizeReviewResponse(id, ProcessingStatus.Finalized));
 })
     .WithName("FinalizeReview").WithTags("Reviews")
@@ -401,6 +476,22 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
     .RequireAuthorization();
 
 app.Run();
+
+static string GetCorrelationId(HttpContext httpContext)
+{
+    if (httpContext.Items.TryGetValue("CorrelationId", out var item) && item is string existing && !string.IsNullOrWhiteSpace(existing))
+    {
+        return existing;
+    }
+
+    if (httpContext.Request.Headers.TryGetValue("X-Correlation-Id", out var header) && !string.IsNullOrWhiteSpace(header))
+    {
+        return header.ToString();
+    }
+
+    return Guid.NewGuid().ToString("N");
+}
+
 
 static bool CanUpload(UserRole role, bool reviewersCanUpload) =>
     role == UserRole.IntakeWorker || (reviewersCanUpload && role == UserRole.Reviewer);
@@ -847,6 +938,28 @@ static async Task<bool> SupportsCaseProfiles(NpgsqlConnection connection, Npgsql
 
     return exists == 1;
 }
+
+file sealed class ApiObservability
+{
+    private long _requestCount;
+    private long _reviewFinalizationCount;
+
+    public void IncrementRequestCount() => Interlocked.Increment(ref _requestCount);
+
+    public void IncrementReviewFinalizationCount() => Interlocked.Increment(ref _reviewFinalizationCount);
+
+    public long RequestCount => Interlocked.Read(ref _requestCount);
+
+    public long ReviewFinalizationCount => Interlocked.Read(ref _reviewFinalizationCount);
+}
+
+file sealed record ApiMetricsResponse(
+    long RequestCount,
+    long ReviewFinalizationCount,
+    long ExtractionSuccessCount,
+    long ExtractionFailureCount);
+
+file sealed record ExtractionCounts(long ExtractionSuccessCount, long ExtractionFailureCount);
 
 file sealed record AuthContext(Guid UserId, string TenantId, UserRole Role);
 file sealed record SimilarCaseCandidate(

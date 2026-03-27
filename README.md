@@ -69,6 +69,16 @@ Notable flags:
 - `Extraction__UsePaddleOcr=true|false`
 - `Extraction__UseOpenAiNormalizer=true|false`
 - `OPENAI_API_KEY=...`
+- `Extraction__MaxRetryAttempts=3`
+- `Extraction__RetryDelayMs=1000`
+
+
+## Observability
+
+- API and worker now emit structured JSON logs with scope metadata.
+- API generates/echoes `X-Correlation-Id` per request and persists `correlation_id` into `audit_events` (`intake_uploaded`, `extraction_started`, `extraction_completed`, `extraction_failed`, `finalized`).
+- Tenant-authenticated `GET /metrics` returns basic counters: request count, review finalization count, extraction success count, extraction failure count.
+- Existing `GET /healthz` remains the health endpoint for service readiness/liveness.
 
 ## API smoke flow
 
