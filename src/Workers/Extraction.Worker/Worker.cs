@@ -280,8 +280,9 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                     ? results.Min(r => r.SystemConfidence)
                     : 0m;
                 var noResolvedFields = results.Count == 0;
-                var allFieldsHighConfidence = !noResolvedFields && results.All(r => r.SystemConfidence >= HighConfidenceThreshold);
-                var anyFieldLowConfidence = noResolvedFields || results.Any(r => r.SystemConfidence < ReviewRequiredThreshold);
+                var hasMissingFields = results.Count < fieldKeys.Count;
+                var allFieldsHighConfidence = !noResolvedFields && !hasMissingFields && results.All(r => r.SystemConfidence >= HighConfidenceThreshold);
+                var anyFieldLowConfidence = noResolvedFields || hasMissingFields || results.Any(r => r.SystemConfidence < ReviewRequiredThreshold);
 
                 string documentStatus;
                 bool autoAccepted;
@@ -1246,7 +1247,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 "Return ONLY a JSON object where keys are field names and values are objects with \"value\" (string or null) and \"confidence\" (number 0-1). " +
                 "If a field is not present in the form, use null value with 0 confidence. Do not include markdown fences.";
 
-            var (model, body, escalated, escalationReason) = await CallWithFallback(context, prompt, fieldKeys.Count, ct);
+            var (model, body, escalated, escalationReason) = await CallWithFallback(context, prompt, fieldKeys, ct);
             var outputText = TryGetResponseText(body);
             if (string.IsNullOrWhiteSpace(outputText))
                 throw new InvalidOperationException($"OpenAI vision returned empty output_text. Model={model}. Response (first 500 chars): {body[..Math.Min(body.Length, 500)]}");
@@ -1296,7 +1297,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         }
 
         private async Task<(string Model, string Body, bool Escalated, string? Reason)> CallWithFallback(
-            ExtractionContext context, string prompt, int expectedFieldCount, CancellationToken ct)
+            ExtractionContext context, string prompt, IReadOnlyCollection<string> expectedFields, CancellationToken ct)
         {
             // Phase 1: Try nano with retry for transient errors
             string? nanoBody = null;
@@ -1355,16 +1356,17 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 return (modelMini, miniBody, true, "nano_unparseable_json");
             }
 
-            // Compute average confidence including missing fields as 0
+            // Compute average confidence over expected fields only (ignore hallucinated keys)
             if (parsed.Count > 0)
             {
-                // Account for missing fields: treat omitted fields as 0 confidence
-                var totalConfidence = parsed.Values.Sum(v => v.Confidence);
-                var effectiveCount = Math.Max(parsed.Count, expectedFieldCount);
-                var avgConfidence = totalConfidence / effectiveCount;
+                // Sum confidence only for expected fields; missing fields count as 0
+                var totalConfidence = expectedFields
+                    .Sum(key => parsed.TryGetValue(key, out var v) ? v.Confidence : 0m);
+                var avgConfidence = totalConfidence / expectedFields.Count;
                 if (avgConfidence < ReviewRequiredThreshold)
                 {
-                    var reason = $"low_confidence:nano_avg={avgConfidence:F4},parsed={parsed.Count}/{expectedFieldCount}";
+                    var matchedCount = expectedFields.Count(key => parsed.ContainsKey(key));
+                    var reason = $"low_confidence:nano_avg={avgConfidence:F4},matched={matchedCount}/{expectedFields.Count}";
                     var miniBody = await CallVisionApi(modelMini, context, prompt, ct);
                     return (modelMini, miniBody, true, reason);
                 }

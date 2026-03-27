@@ -32,13 +32,14 @@ public sealed partial class Worker
     /// Returns (status, autoAccepted, requiresAttention).
     /// </summary>
     internal static (string Status, bool AutoAccepted, bool RequiresAttention) DetermineDocumentStatus(
-        IReadOnlyList<FieldExtractionResult> results)
+        IReadOnlyList<FieldExtractionResult> results, int expectedFieldCount = 0)
     {
         if (results.Count == 0)
             return ("review_ready", false, true);
 
-        var allHigh = results.All(r => r.SystemConfidence >= HighConfidenceThreshold);
-        var anyLow = results.Any(r => r.SystemConfidence < ReviewRequiredThreshold);
+        var hasMissingFields = expectedFieldCount > 0 && results.Count < expectedFieldCount;
+        var allHigh = !hasMissingFields && results.All(r => r.SystemConfidence >= HighConfidenceThreshold);
+        var anyLow = hasMissingFields || results.Any(r => r.SystemConfidence < ReviewRequiredThreshold);
 
         if (allHigh)
             return ("completed", true, false);
