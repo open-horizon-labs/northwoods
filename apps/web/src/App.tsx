@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api } from './api'
 import type {
@@ -172,9 +172,32 @@ const formatAuditEvent = (eventName: string) => {
   return pretty.join(' ')
 }
 
+const AUTH_STORAGE_KEY = 'northwoods:auth'
+
+function readStoredAuth(): LoginResponse | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (
+      parsed &&
+      typeof parsed.accessToken === 'string' &&
+      parsed.accessToken &&
+      typeof parsed.tenantId === 'string' &&
+      parsed.tenantId &&
+      (parsed.role === 0 || parsed.role === 1 || parsed.role === 'IntakeWorker' || parsed.role === 'Reviewer')
+    ) {
+      return parsed as LoginResponse
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   const [loginForm, setLoginForm] = useState<LoginForm>(initialLogin)
-  const [auth, setAuth] = useState<LoginResponse | null>(null)
+  const [auth, setAuth] = useState<LoginResponse | null>(readStoredAuth)
   const [authError, setAuthError] = useState<string | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
 
@@ -265,6 +288,7 @@ export default function App() {
       email: preset.email,
       password: preset.password,
     })
+    try { localStorage.removeItem(AUTH_STORAGE_KEY) } catch { /* best-effort */ }
     setAuth(null)
     setAuthError(null)
     setTemplates([])
@@ -363,6 +387,7 @@ export default function App() {
 
     try {
       const nextAuth = await api.login(loginForm as LoginRequest)
+      try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth)) } catch { /* best-effort */ }
       setAuth(nextAuth)
       await Promise.all([refreshTemplates(nextAuth.accessToken), refreshQueue(nextAuth.accessToken)])
     } catch (error) {
@@ -393,6 +418,17 @@ export default function App() {
       setUploadBusy(false)
     }
   }
+
+  const restoredAuthOnMountRef = useRef(auth)
+
+  // Restore session after page reload: if auth was recovered from localStorage,
+  // fetch templates and review queue so the UI is ready without re-login.
+  useEffect(() => {
+    const restoredAuth = restoredAuthOnMountRef.current
+    if (!restoredAuth) return
+    restoredAuthOnMountRef.current = null
+    void Promise.all([refreshTemplates(restoredAuth.accessToken), refreshQueue(restoredAuth.accessToken)])
+  }, [refreshTemplates, refreshQueue])
 
   useEffect(() => {
     if (!auth || !activeIntakeId) {
