@@ -14,4 +14,4 @@ coverage/
 *.suo
 
 .playwright/
-.playwright-cli/
+.playwright-cli/__pycache__/
