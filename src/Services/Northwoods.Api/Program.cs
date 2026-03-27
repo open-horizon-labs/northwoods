@@ -961,9 +961,9 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
                field_key AS FieldKey,
                COALESCE(corrected_value, extracted_value) AS Value
         FROM extracted_fields
-        WHERE document_id = ANY(@CandidateIds)
+        WHERE document_id = ANY(@CandidateIds) AND tenant_id = @TenantId
         ",
-        new { CandidateIds = candidateIds },
+        new { CandidateIds = candidateIds, TenantId = tenantId },
         transaction))
         .ToLookup(r => r.IntakeId, r => r)
         .ToDictionary(g => g.Key, g => g.ToDictionary(f => f.FieldKey, f => f.Value, StringComparer.OrdinalIgnoreCase));

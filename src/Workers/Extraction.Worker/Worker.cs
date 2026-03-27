@@ -170,8 +170,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         try
         {
             await conn.ExecuteAsync(
-                "UPDATE documents SET status = 'extracting', updated_at = now() WHERE id = @Id",
-                new { Id = docId },
+                "UPDATE documents SET status = 'extracting', updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
+                new { Id = docId, TenantId = tenantId },
                 tx);
 
             await conn.ExecuteAsync(
@@ -273,8 +273,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 }
 
                 await conn.ExecuteAsync(
-                    "UPDATE documents SET status = 'review_ready', updated_at = now() WHERE id = @Id",
-                    new { Id = docId },
+                    "UPDATE documents SET status = 'review_ready', updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
+                    new { Id = docId, TenantId = tenantId },
                     tx);
                 await conn.ExecuteAsync(
                     """
@@ -428,8 +428,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
     {
         await using var failTx = await conn.BeginTransactionAsync(ct);
         await conn.ExecuteAsync(
-            "UPDATE documents SET status = 'failed', updated_at = now() WHERE id = @Id",
-            new { Id = docId },
+            "UPDATE documents SET status = 'failed', updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
+            new { Id = docId, TenantId = tenantId },
             failTx);
 
         await conn.ExecuteAsync(

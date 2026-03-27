@@ -370,7 +370,7 @@ export default function App() {
     try {
       const detail = await api.getReview(accessToken, reviewId)
       setReviewDetail(detail)
-      setEditableFields(detail.fields.map((field) => ({ ...field })))
+      setEditableFields(detail.fields.map((field) => ({ ...field })).sort((a, b) => a.confidence - b.confidence))
     } catch (error) {
       setReviewDetail(null)
       setEditableFields([])
@@ -1007,8 +1007,17 @@ export default function App() {
                         rel="noreferrer"
                         className={focusableSecondary}
                       >
-                        Open source document
+                        Open in new tab
                       </a>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                      <p className="bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700">Source document</p>
+                      <iframe
+                        src={reviewDetail.sourceDocumentUrl}
+                        title="Source intake document"
+                        className="h-[480px] w-full border-0"
+                      />
                     </div>
 
                     <div className="grid gap-4">
