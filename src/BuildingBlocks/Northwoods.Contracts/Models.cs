@@ -55,3 +55,10 @@ public sealed record ReviewDetailResponse(
 public sealed record FinalizeReviewRequest(IReadOnlyList<ConfidenceField> Fields, string ReviewerNote);
 
 public sealed record FinalizeReviewResponse(Guid ReviewId, ProcessingStatus Status);
+
+public sealed record TemplateField(string Key, string Type, bool Required = false);
+
+public sealed record TemplateDescriptor(
+    string Id,
+    string Name,
+    IReadOnlyList<TemplateField> Fields);

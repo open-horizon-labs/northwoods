@@ -288,6 +288,38 @@ INSERT INTO templates (id, tenant_id, name, field_schema) VALUES
             {"key": "requestedServices", "type": "array", "required": true},
             {"key": "notes", "type": "string", "required": false}
         ]}'::JSONB),
+    ('housing-stability', 'tenant-a', 'Housing Stability Intake',
+        '{"fields": [
+            {"key": "applicantName", "type": "string", "required": true},
+            {"key": "dateOfBirth", "type": "date", "required": true},
+            {"key": "currentAddress", "type": "string", "required": true},
+            {"key": "householdMembers", "type": "integer", "required": true},
+            {"key": "monthlyRent", "type": "decimal", "required": true},
+            {"key": "evictionRiskLevel", "type": "string", "required": false},
+            {"key": "requestedAssistance", "type": "string", "required": true}
+        ]}'::JSONB),
+    ('financial-assistance', 'tenant-a', 'Financial Assistance Intake',
+        '{"fields": [
+            {"key": "applicantName", "type": "string", "required": true},
+            {"key": "dateOfBirth", "type": "date", "required": true},
+            {"key": "incomeType", "type": "string", "required": true},
+            {"key": "totalMonthlyIncome", "type": "decimal", "required": true},
+            {"key": "supportType", "type": "array", "required": true},
+            {"key": "employmentStatus", "type": "string", "required": false},
+            {"key": "caseNotes", "type": "string", "required": false}
+        ]}'::JSONB),
+    ('clinical-soap-note', 'tenant-a', 'Clinical SOAP Note',
+        '{"fields": [
+            {"key": "patientName", "type": "string", "required": true},
+            {"key": "visitDate", "type": "date", "required": true},
+            {"key": "encounterType", "type": "string", "required": true},
+            {"key": "subjective", "type": "string", "required": false},
+            {"key": "objective", "type": "string", "required": false},
+            {"key": "assessment", "type": "string", "required": false},
+            {"key": "plan", "type": "string", "required": false},
+            {"key": "clinicianName", "type": "string", "required": true}
+        ]}'::JSONB),
+
     ('general-assistance', 'tenant-b', 'General Assistance Intake',
         '{"fields": [
             {"key": "applicantName", "type": "string", "required": true},
@@ -297,6 +329,37 @@ INSERT INTO templates (id, tenant_id, name, field_schema) VALUES
             {"key": "monthlyIncome", "type": "decimal", "required": true},
             {"key": "requestedServices", "type": "array", "required": true},
             {"key": "notes", "type": "string", "required": false}
+        ]}'::JSONB),
+    ('housing-stability', 'tenant-b', 'Housing Stability Intake',
+        '{"fields": [
+            {"key": "applicantName", "type": "string", "required": true},
+            {"key": "dateOfBirth", "type": "date", "required": true},
+            {"key": "currentAddress", "type": "string", "required": true},
+            {"key": "householdMembers", "type": "integer", "required": true},
+            {"key": "monthlyRent", "type": "decimal", "required": true},
+            {"key": "evictionRiskLevel", "type": "string", "required": false},
+            {"key": "requestedAssistance", "type": "string", "required": true}
+        ]}'::JSONB),
+    ('financial-assistance', 'tenant-b', 'Financial Assistance Intake',
+        '{"fields": [
+            {"key": "applicantName", "type": "string", "required": true},
+            {"key": "dateOfBirth", "type": "date", "required": true},
+            {"key": "incomeType", "type": "string", "required": true},
+            {"key": "totalMonthlyIncome", "type": "decimal", "required": true},
+            {"key": "supportType", "type": "array", "required": true},
+            {"key": "employmentStatus", "type": "string", "required": false},
+            {"key": "caseNotes", "type": "string", "required": false}
+        ]}'::JSONB),
+    ('clinical-soap-note', 'tenant-b', 'Clinical SOAP Note',
+        '{"fields": [
+            {"key": "patientName", "type": "string", "required": true},
+            {"key": "visitDate", "type": "date", "required": true},
+            {"key": "encounterType", "type": "string", "required": true},
+            {"key": "subjective", "type": "string", "required": false},
+            {"key": "objective", "type": "string", "required": false},
+            {"key": "assessment", "type": "string", "required": false},
+            {"key": "plan", "type": "string", "required": false},
+            {"key": "clinicianName", "type": "string", "required": true}
         ]}'::JSONB)
 ON CONFLICT DO NOTHING;
 

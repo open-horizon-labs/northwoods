@@ -10,6 +10,7 @@ import type {
   ReviewDetailResponse,
   ReviewQueueItem,
   SimilarCase,
+  TemplateDescriptor,
   UserRole,
 } from './types'
 import { roleLabel, statusLabel } from './types'
@@ -82,6 +83,11 @@ export default function App() {
   const [activeIntakeId, setActiveIntakeId] = useState<string | null>(null)
   const [intakeStatus, setIntakeStatus] = useState<IntakeStatusResponse | null>(null)
 
+  const [templates, setTemplates] = useState<TemplateDescriptor[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('general-assistance')
+  const [templatesBusy, setTemplatesBusy] = useState(false)
+  const [templatesError, setTemplatesError] = useState<string | null>(null)
+
   const [reviewQueue, setReviewQueue] = useState<ReviewQueueItem[]>([])
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
@@ -98,6 +104,11 @@ export default function App() {
   )
   const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
 
+  const templateFormUrl = useCallback((templateId: string, download: boolean) => {
+    const mode = download ? '?download=true' : ''
+    return `/api/templates/${encodeURIComponent(templateId)}/blank${mode}`
+  }, [])
+
   const setPreset = (key: keyof typeof loginPresets) => {
     const preset = loginPresets[key]
     setLoginForm({
@@ -107,6 +118,10 @@ export default function App() {
     })
     setAuth(null)
     setAuthError(null)
+    setTemplates([])
+    setTemplatesBusy(false)
+    setTemplatesError(null)
+    setSelectedTemplateId('general-assistance')
     setSelectedFile(null)
     setUploadError(null)
     setActiveIntakeId(null)
@@ -132,6 +147,27 @@ export default function App() {
     }
   }, [])
 
+  const refreshTemplates = useCallback(async (accessToken: string) => {
+    setTemplatesBusy(true)
+    setTemplatesError(null)
+
+    try {
+      const nextTemplates = await api.getTemplates(accessToken)
+      setTemplates(nextTemplates)
+
+      if (nextTemplates.length > 0) {
+        setSelectedTemplateId((current) => nextTemplates.find((template) => template.id === current)?.id ?? nextTemplates[0].id)
+      } else {
+        setSelectedTemplateId('general-assistance')
+      }
+    } catch (error) {
+      setTemplatesError(error instanceof Error ? error.message : 'Failed to load template catalog.')
+      setTemplates([])
+    } finally {
+      setTemplatesBusy(false)
+    }
+  }, [])
+
   const refreshReview = useCallback(async (accessToken: string, reviewId: string) => {
     const detail = await api.getReview(accessToken, reviewId)
     setReviewDetail(detail)
@@ -146,7 +182,7 @@ export default function App() {
     try {
       const nextAuth = await api.login(loginForm as LoginRequest)
       setAuth(nextAuth)
-      await refreshQueue(nextAuth.accessToken)
+      await Promise.all([refreshTemplates(nextAuth.accessToken), refreshQueue(nextAuth.accessToken)])
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Login failed.')
     } finally {
@@ -162,7 +198,7 @@ export default function App() {
     setUploadError(null)
 
     try {
-      const created = await api.createIntake(auth.accessToken, 'general-assistance', selectedFile)
+      const created = await api.createIntake(auth.accessToken, selectedTemplateId, selectedFile)
       setActiveIntakeId(created.intakeId)
       const status = await api.getIntake(auth.accessToken, created.intakeId)
       setIntakeStatus(status)
@@ -349,19 +385,81 @@ export default function App() {
 
             <section className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-slate-950/30">
               <SectionTitle
-                eyebrow="2 · Upload"
-                title="Create a new intake"
-                description="Upload one representative form to start the asynchronous extraction flow and produce a review-ready draft."
+                eyebrow="2 · Template catalog"
+                title="Choose a template"
+                description="All tenant-available templates are listed with preview and download options."
               />
+
+              <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                {templatesError ? <p className="text-sm text-rose-300">{templatesError}</p> : null}
+
+                {templatesBusy ? (
+                  <p className="text-sm text-slate-400">Loading available templates…</p>
+                ) : templates.length === 0 ? (
+                  <p className="text-sm text-slate-400">No templates are available for this tenant.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {templates.map((template) => {
+                      const isSelected = template.id === selectedTemplateId
+                      return (
+                        <div
+                          key={template.id}
+                          className={`rounded-2xl border p-4 transition ${
+                            isSelected ? 'border-sky-400/50 bg-sky-500/10' : 'border-white/10 bg-slate-950/60'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{template.name}</p>
+                              <p className="text-xs text-slate-400">Template ID: {template.id}</p>
+                              <p className="mt-2 text-xs text-slate-300">{template.fields.length} fields</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTemplateId(template.id)}
+                                className="rounded-full border border-white/10 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-sky-400/40 hover:text-white"
+                              >
+                                {isSelected ? 'Selected' : 'Select'}
+                              </button>
+                              <a
+                                href={templateFormUrl(template.id, false)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-full border border-white/10 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-sky-400/40 hover:text-white"
+                              >
+                                View blank
+                              </a>
+                              <a
+                                href={templateFormUrl(template.id, true)}
+                                className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-100 transition hover:border-emerald-300 hover:text-emerald-50"
+                              >
+                                Download blank
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
 
               <form className="mt-5 space-y-4" onSubmit={handleUpload}>
                 <label className="block space-y-2 text-sm text-slate-300">
                   <span>Template</span>
-                  <input
-                    value="general-assistance"
-                    disabled
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-slate-300"
-                  />
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(event) => setSelectedTemplateId(event.target.value)}
+                    disabled={!auth || templates.length === 0}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none focus:border-sky-400/50 disabled:cursor-not-allowed disabled:bg-slate-900 disabled:text-slate-500"
+                  >
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="block space-y-2 text-sm text-slate-300">
@@ -376,7 +474,7 @@ export default function App() {
 
                 <button
                   type="submit"
-                  disabled={!auth || !selectedFile || uploadBusy}
+                  disabled={!auth || !selectedFile || uploadBusy || templates.length === 0}
                   className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
                 >
                   {uploadBusy ? 'Uploading…' : 'Upload intake'}
