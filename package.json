@@ -8,6 +8,10 @@
     "lint:web": "pnpm --dir apps/web lint",
     "restore:dotnet": "mise exec -- dotnet restore src/Northwoods.slnx",
     "build:dotnet": "mise exec -- dotnet build src/Northwoods.slnx",
-    "check": "pnpm build:web && pnpm build:dotnet"
+    "check": "pnpm build:web && pnpm build:dotnet",
+    "test:unit": "dotnet test tests/Northwoods.Worker.UnitTests/Northwoods.Worker.UnitTests.csproj && dotnet test tests/Northwoods.Tenancy.UnitTests/Northwoods.Tenancy.UnitTests.csproj && dotnet test tests/Northwoods.Api.IntegrationTests/Northwoods.Api.IntegrationTests.csproj --filter \"Category!=runtime\"",
+    "test:runtime": "dotnet test tests/Northwoods.Api.IntegrationTests/Northwoods.Api.IntegrationTests.csproj --filter \"Category=runtime\"",
+    "test": "pnpm test:unit && pnpm test:runtime",
+    "test:web-smoke": "echo \"UI smoke tests deferred; enable runtime stack and Playwright harness when available.\""
   }
 }
