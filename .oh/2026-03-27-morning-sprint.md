@@ -84,3 +84,52 @@ Commit: `7324478`
 - Low agreement rate is partially explained by sample mismatch (only 1 of 5 files is an actual intake form). The one real intake showed partial agreement on most fields.
 
 **Recommendation:** OpenAI vision (mini) is a strong candidate for single-step OCR+normalization on actual handwritten intake scans. Evaluate cost/latency vs. staged PaddleOCR+normalizer before committing to production integration.
+
+### Task 4 complete: ADR compliance checks and CI workflow — 2026-03-27
+
+Commit: `eee82ed`
+
+**Files created:**
+- `scripts/ci/check-rls-compliance.py` — ADR 004: verifies all tenant_id tables have RLS enabled, each has a policy using `current_setting('app.tenant_id', true)`, `app_user` has no BYPASS RLS, no raw `new NpgsqlConnection` outside exempt paths
+- `scripts/ci/check-append-only-attempts.py` — ADR 005: verifies no `ON CONFLICT DO UPDATE` on `extraction_attempts`, no UPDATE/DELETE/TRUNCATE on that table in C# or SQL
+- `scripts/ci/check-no-secrets.sh` — scans git-tracked files for AWS keys, OpenAI keys, GitHub PATs, PEM private keys; verifies `.env.local` is in `.gitignore`
+- `.github/workflows/ci.yml` — four jobs: `build` (dotnet + pnpm), `test` (unit always; integration gated to main-branch push), `adr-compliance`, `secret-scan`
+
+**All three scripts pass against current codebase.** Tables verified: users, templates, documents, extracted_fields, case_profiles, extraction_attempts, audit_events.
+
+**Worker exemption:** `Workers/Extraction.Worker/` is excluded from the direct-connection check (uses superuser intentionally). `DbConnectionFactory.cs` and `PostgresHealthCheck.cs` also exempt.
+
+**Design notes:**
+- False-positive bias for secret scan: only high-confidence patterns (AKIA prefix, sk- prefix, ghp_ prefix, PEM headers). Excludes `.env.example`, lockfiles, markdown.
+- `ON CONFLICT DO UPDATE` on `extracted_fields` is allowed (upsert on reprocess); only `extraction_attempts` is guarded.
+- Integration tests skip on PR forks (require `TEST_DB_CONNECTION_STRING` secret); unit tests always run.
+
+---
+
+## Sprint Summary
+
+All 5 queued tasks completed serially:
+
+| # | Task | Status | Commit | Key output |
+|---|---|---|---|---|
+| 1 | API fuzz testing | Done | `c7aaa50` | 11 findings, critical auth breakdown F-01 |
+| 2 | Browser fuzz testing | Done | `2d1dd79` | 9 findings, B-01 token persistence, B-03 F-01 cascade |
+| 3 | Markdown wiki-links | Done | `e48dd58` | 7 files updated, all cross-refs navigable |
+| 4 | OpenAI vision OCR spike | Done | `7324478` | nano handles vision; strong on real intake forms |
+| 5 | ADR compliance + CI | Done | `eee82ed` | 3 check scripts + GitHub Actions workflow |
+
+### Remaining open issues
+- **#9** Review fix loop round 1 — can now proceed (all implementation issues merged)
+- **#10** Review fix loop round 2 — blocked on #9
+
+### Critical findings requiring attention before submission
+1. **F-01 / B-03**: JWT claim mapping broken — `MapInboundClaims=true` remaps `role` to `ClaimTypes.Role`, but handler looks for `role`. All authenticated endpoints return 401.
+2. **F-05**: Passwords stored as plaintext.
+3. **B-01**: Auth token not persisted in browser — lost on reload.
+4. **F-02/F-03**: Login crashes on missing password or missing tenantId.
+5. **F-04**: Null byte in email causes unhandled Postgres error.
+
+### Recommendations
+- Fix F-01 first (unblocks all authenticated endpoint testing)
+- Then run #9 review fix loop to address remaining fuzz findings systematically
+- OpenAI vision spike suggests gpt-5.4-mini as potential single-step OCR replacement — worth a follow-up ADR
