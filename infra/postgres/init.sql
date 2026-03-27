@@ -124,7 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_extraction_attempts_tenant_id ON extraction_attem
 
 CREATE TABLE IF NOT EXISTS audit_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_type TEXT NOT NULL,
     details JSONB,

@@ -324,8 +324,8 @@ app.MapPost("/templates", async (CreateTemplateRequest request, HttpContext http
 
     await session.Connection.ExecuteAsync(
         """
-        INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
-        VALUES ('00000000-0000-0000-0000-000000000000', @TenantId, 'template_created', @ActorId, @Details::jsonb)
+        INSERT INTO audit_events (tenant_id, event_type, actor_id, details)
+        VALUES (@TenantId, 'template_created', @ActorId, @Details::jsonb)
         """,
         new
         {
@@ -379,8 +379,8 @@ app.MapPut("/templates/{templateId}", async (string templateId, UpdateTemplateRe
 
     await session.Connection.ExecuteAsync(
         """
-        INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
-        VALUES ('00000000-0000-0000-0000-000000000000', @TenantId, 'template_updated', @ActorId, @Details::jsonb)
+        INSERT INTO audit_events (tenant_id, event_type, actor_id, details)
+        VALUES (@TenantId, 'template_updated', @ActorId, @Details::jsonb)
         """,
         new
         {
@@ -423,8 +423,8 @@ app.MapDelete("/templates/{templateId}", async (string templateId, HttpContext h
 
     await session.Connection.ExecuteAsync(
         """
-        INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
-        VALUES ('00000000-0000-0000-0000-000000000000', @TenantId, 'template_archived', @ActorId, @Details::jsonb)
+        INSERT INTO audit_events (tenant_id, event_type, actor_id, details)
+        VALUES (@TenantId, 'template_archived', @ActorId, @Details::jsonb)
         """,
         new
         {
@@ -477,8 +477,8 @@ app.MapPost("/templates/{templateId}/blank-pdf", async (string templateId, HttpC
 
     await session.Connection.ExecuteAsync(
         """
-        INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
-        VALUES ('00000000-0000-0000-0000-000000000000', @TenantId, 'template_blank_pdf_uploaded', @ActorId, @Details::jsonb)
+        INSERT INTO audit_events (tenant_id, event_type, actor_id, details)
+        VALUES (@TenantId, 'template_blank_pdf_uploaded', @ActorId, @Details::jsonb)
         """,
         new
         {
