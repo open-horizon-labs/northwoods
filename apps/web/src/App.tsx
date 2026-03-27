@@ -84,7 +84,7 @@ export default function App() {
   const [intakeStatus, setIntakeStatus] = useState<IntakeStatusResponse | null>(null)
 
   const [templates, setTemplates] = useState<TemplateDescriptor[]>([])
-  const [selectedTemplateId, setSelectedTemplateId] = useState('general-assistance')
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [templatesBusy, setTemplatesBusy] = useState(false)
   const [templatesError, setTemplatesError] = useState<string | null>(null)
 
@@ -145,7 +145,7 @@ export default function App() {
     setTemplates([])
     setTemplatesBusy(false)
     setTemplatesError(null)
-    setSelectedTemplateId('general-assistance')
+    setSelectedTemplateId('')
     setSelectedFile(null)
     setUploadError(null)
     setActiveIntakeId(null)
@@ -182,11 +182,12 @@ export default function App() {
       if (nextTemplates.length > 0) {
         setSelectedTemplateId((current) => nextTemplates.find((template) => template.id === current)?.id ?? nextTemplates[0].id)
       } else {
-        setSelectedTemplateId('general-assistance')
+        setSelectedTemplateId('')
       }
     } catch (error) {
       setTemplatesError(error instanceof Error ? error.message : 'Failed to load template catalog.')
       setTemplates([])
+      setSelectedTemplateId('')
     } finally {
       setTemplatesBusy(false)
     }
@@ -478,6 +479,11 @@ export default function App() {
                     disabled={!auth || templates.length === 0}
                     className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none focus:border-sky-400/50 disabled:cursor-not-allowed disabled:bg-slate-900 disabled:text-slate-500"
                   >
+                    {templates.length === 0 ? (
+                      <option value="" disabled>
+                        {auth ? 'No templates available' : 'Sign in to load templates'}
+                      </option>
+                    ) : null}
                     {templates.map((template) => (
                       <option key={template.id} value={template.id}>
                         {template.name}

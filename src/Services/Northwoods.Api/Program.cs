@@ -62,6 +62,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
+});
 
 var app = builder.Build();
 
@@ -529,6 +534,32 @@ static bool ReadTemplateFieldBool(JsonElement field, string propertyName)
     return property.GetBoolean();
 }
 
+static string BuildTemplateInputName(string key)
+{
+    if (string.IsNullOrWhiteSpace(key))
+        return "field";
+
+    var builder = new StringBuilder();
+    var wroteSeparator = false;
+
+    foreach (var ch in key.Trim())
+    {
+        if (char.IsLetterOrDigit(ch))
+        {
+            builder.Append(char.ToLowerInvariant(ch));
+            wroteSeparator = false;
+        }
+        else if (!wroteSeparator && builder.Length > 0)
+        {
+            builder.Append('-');
+            wroteSeparator = true;
+        }
+    }
+
+    var normalized = builder.ToString().Trim('-');
+    return string.IsNullOrWhiteSpace(normalized) ? "field" : normalized;
+}
+
 static string BuildBlankTemplateHtml(string templateName, IReadOnlyList<TemplateField> fields)
 {
     var displayName = WebUtility.HtmlEncode(templateName);
@@ -540,11 +571,13 @@ static string BuildBlankTemplateHtml(string templateName, IReadOnlyList<Template
     }
     else
     {
-        foreach (var field in fields)
+        for (var index = 0; index < fields.Count; index++)
         {
+            var field = fields[index];
             var label = WebUtility.HtmlEncode(field.Key);
             var type = WebUtility.HtmlEncode(field.Type);
             var requiredText = field.Required ? " *" : string.Empty;
+            var requiredAttribute = field.Required ? " required" : string.Empty;
             var inputType = field.Type switch
             {
                 "date" => "date",
@@ -553,13 +586,14 @@ static string BuildBlankTemplateHtml(string templateName, IReadOnlyList<Template
                 _ => "text"
             };
 
+            var fieldId = WebUtility.HtmlEncode($"{BuildTemplateInputName(field.Key)}-{index + 1}");
             var inputHint = field.Type.Equals("array", StringComparison.OrdinalIgnoreCase)
                 ? "Separate multiple values with commas"
                 : string.Empty;
 
             fieldRows.AppendLine($"    <div style=\"margin-bottom: 14px;\">\n" +
-                             $"      <label style=\"font-size:12px;display:block;color:#444;letter-spacing:.02em;margin-bottom:4px;text-transform:uppercase;\">{label}{requiredText} <span style=\"color:#666;font-style:italic;\">({type})</span></label>\n" +
-                             $"      <input type=\"{inputType}\" style=\"width:100%;height:36px;border:1px solid #bdbdbd;border-radius:6px;padding:6px 10px;box-sizing:border-box;font-size:14px;\" />\n" +
+                             $"      <label for=\"{fieldId}\" style=\"font-size:12px;display:block;color:#444;letter-spacing:.02em;margin-bottom:4px;text-transform:uppercase;\">{label}{requiredText} <span style=\"color:#666;font-style:italic;\">({type})</span></label>\n" +
+                             $"      <input type=\"{inputType}\" id=\"{fieldId}\" name=\"{fieldId}\"{requiredAttribute} style=\"width:100%;height:36px;border:1px solid #bdbdbd;border-radius:6px;padding:6px 10px;box-sizing:border-box;font-size:14px;\" />\n" +
                              (string.IsNullOrWhiteSpace(inputHint)
                                  ? ""
                                  : $"      <small style=\"color:#666;\">{inputHint}</small>\n") +
