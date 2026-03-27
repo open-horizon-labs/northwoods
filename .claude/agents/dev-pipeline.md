@@ -209,10 +209,21 @@ After execution completes:
 
 ### Ship steps
 
-1. **Review** -- Run `/review` against the diff. Post findings as a PR comment.
-2. **Dissent** -- Run `/dissent` to challenge assumptions. Post as PR comment.
+1. **Review** -- Run `/review` against the diff. Post findings as a PR comment with the **exact header `## /review findings`**.
+2. **Dissent** -- Run `/dissent` to challenge assumptions. Post as a PR comment with the **exact header `## /dissent challenge`**.
 3. **Fix** -- Address all review + dissent findings.
-3b. **Mark ready** -- `gh pr ready <number>`. This triggers CodeRabbit review.
+
+3b. **Gate check -- REQUIRED before `gh pr ready`:**
+   ```bash
+   OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+   PR=<number>
+   REVIEW=$(gh api repos/$OWNER_REPO/issues/$PR/comments | jq '[.[] | select(.body | startswith("## /review findings"))] | length')
+   DISSENT=$(gh api repos/$OWNER_REPO/issues/$PR/comments | jq '[.[] | select(.body | startswith("## /dissent challenge"))] | length')
+   echo "review=$REVIEW dissent=$DISSENT"
+   ```
+   **Do not call `gh pr ready` until both counts are >= 1. If either is 0, the comment was not posted -- post it now before continuing.**
+
+3c. **Mark ready** -- `gh pr ready <number>`. This triggers CodeRabbit review.
 4. **Wait for CodeRabbit** -- Poll PR comments until CodeRabbit posts its review (typically 1-3 minutes).
 5. **Address CodeRabbit findings** -- Fix Critical and Major findings. Document Minor findings if not fixing. Push fixes.
 6. **Verify builds** -- `pnpm check` and `docker compose up --build -d` if infra changed.

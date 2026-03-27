@@ -69,9 +69,21 @@ Agent(subagent_type="dev-pipeline", prompt="<full args passed to this agent>")
 
 3. **Categorize each comment:**
    - **CodeRabbit findings** -- look for severity markers (Critical, Major, Minor)
-   - **Review skill findings** -- look for "Ship Step" or review-style assessments
+   - **Review skill findings** -- look for `## /review findings` header (required; absence = gate skipped)
+   - **Dissent findings** -- look for `## /dissent challenge` header (required; absence = gate skipped)
    - **Human comments** -- anything from non-bot users
    - **Ship agent posts** -- the agent's own step reports (already addressed)
+
+3b. **Verify the gates ran.** Check for the two required pre-merge comments:
+   ```bash
+   OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+   PR=<number>
+   REVIEW=$(gh api repos/$OWNER_REPO/issues/$PR/comments | jq '[.[] | select(.body | startswith("## /review findings"))] | length')
+   DISSENT=$(gh api repos/$OWNER_REPO/issues/$PR/comments | jq '[.[] | select(.body | startswith("## /dissent challenge"))] | length')
+   echo "review=$REVIEW dissent=$DISSENT"
+   ```
+   - If `review=0`: subagent skipped `/review`. Run `/review` now against the merged diff, post the findings comment retroactively, then assess whether any findings require a followup PR.
+   - If `dissent=0`: subagent skipped `/dissent`. Run `/dissent` now against the merged diff. If dissent surfaces anything real, include fixes in the followup PR.
 
 4. **For each non-ship-agent finding, verify it was addressed:**
    - Was the specific code change suggested actually made?
