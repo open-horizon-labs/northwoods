@@ -67,4 +67,17 @@ public sealed class DbConnectionFactory
 
         return new DbSession(conn, tx);
     }
+
+    /// <summary>
+    /// Opens an unscoped session without RLS tenant context.
+    /// The connection runs as the database owner, which bypasses RLS.
+    /// Use only for pre-authentication lookups (e.g., resolving tenant from email).
+    /// </summary>
+    public async Task<DbSession> OpenUnscopedSessionAsync()
+    {
+        var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
+        var tx = await conn.BeginTransactionAsync();
+        return new DbSession(conn, tx);
+    }
 }

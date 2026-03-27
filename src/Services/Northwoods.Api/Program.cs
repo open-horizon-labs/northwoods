@@ -167,7 +167,6 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
     var errors = new List<string>();
     if (string.IsNullOrWhiteSpace(request.Email)) errors.Add("Email is required.");
     if (string.IsNullOrWhiteSpace(request.Password)) errors.Add("Password is required.");
-    if (string.IsNullOrWhiteSpace(request.TenantId)) errors.Add("TenantId is required.");
 
     static bool ContainsNullByte(string? value) => value is not null && value.Contains('\0');
     if (ContainsNullByte(request.Email) || ContainsNullByte(request.Password) || ContainsNullByte(request.TenantId))
@@ -176,10 +175,24 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
     if (errors.Count > 0)
         return Results.BadRequest(new { errors });
 
-    await using var session = await dbFactory.OpenSessionAsync(request.TenantId);
+    // Resolve tenant: if TenantId is absent, look it up from the email globally.
+    // The unscoped session runs as the DB owner (bypasses RLS).
+    var tenantId = request.TenantId;
+    if (string.IsNullOrWhiteSpace(tenantId))
+    {
+        await using var global = await dbFactory.OpenUnscopedSessionAsync();
+        tenantId = await global.Connection.QueryFirstOrDefaultAsync<string>(
+            "SELECT tenant_id FROM users WHERE email = @Email LIMIT 1",
+            new { request.Email },
+            global.Transaction);
+        if (string.IsNullOrWhiteSpace(tenantId))
+            return Results.Unauthorized();
+    }
+
+    await using var session = await dbFactory.OpenSessionAsync(tenantId);
     var user = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string role, string password_hash)>(
         "SELECT id, role, password_hash FROM users WHERE email = @Email AND tenant_id = @TenantId",
-        new { request.Email, request.TenantId },
+        new { request.Email, TenantId = tenantId },
         session.Transaction);
 
     if (user == default || !VerifyPassword(request.Password, user.password_hash))
@@ -190,14 +203,14 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
 
     var token = CreateJwt(
         user.id,
-        request.TenantId,
+        tenantId,
         role,
         jwtSigningCredentials,
         jwtIssuer,
         jwtAudience,
         jwtExpiration);
 
-    return Results.Ok(new LoginResponse(token, request.TenantId, role));
+    return Results.Ok(new LoginResponse(token, tenantId, role));
 })
     .WithName("Login").WithTags("Auth")
     .WithSummary("Authenticates a user and returns a signed JWT access token.");
