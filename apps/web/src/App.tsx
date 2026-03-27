@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api } from './api'
 import type {
@@ -15,13 +15,40 @@ import type {
 } from './types'
 import { roleLabel, statusLabel } from './types'
 
-type LoginForm = {
+const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-700 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50'
+
+const focusableButton =
+  'inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition disabled:cursor-not-allowed disabled:opacity-60 disabled:pointer-events-none hover:bg-slate-50'
+
+const focusablePrimary = `${focusableButton} bg-sky-700 text-white border-sky-700 hover:bg-sky-800 ${FOCUS_RING}`
+const focusableDanger = `${focusableButton} bg-emerald-700 text-white border-emerald-700 hover:bg-emerald-800 ${FOCUS_RING}`
+const focusableSecondary = `${focusableButton} bg-white ${FOCUS_RING}`
+const navLinkClass =
+  'inline-flex min-h-11 items-center rounded-lg border border-transparent px-3 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 text-sm'
+
+const inputStyle =
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500'
+const inputInteractive = `${inputStyle} ${FOCUS_RING} focus:border-sky-700`
+
+const panelClass = 'rounded-2xl border border-slate-200 bg-white'
+
+const sectionClass = `${panelClass} p-5 sm:p-6`
+const labelClass = 'text-sm font-medium text-slate-700'
+const helperClass = 'text-xs text-slate-600'
+
+export type LoginForm = {
   tenantId: string
   email: string
   password: string
 }
 
 type LoginPreset = LoginForm & { role: UserRole }
+
+type ConfidenceTier = {
+  tone: 'high' | 'good' | 'low' | 'review'
+  label: string
+  className: string
+}
 
 const loginPresets: Record<string, LoginPreset> = {
   'tenant-a:worker': {
@@ -52,23 +79,80 @@ const loginPresets: Record<string, LoginPreset> = {
 
 const initialLogin = loginPresets['tenant-a:worker']
 
-const confidenceTone = (confidence: number) => {
-  if (confidence >= 0.9) return 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30'
-  if (confidence >= 0.8) return 'bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30'
-  if (confidence >= 0.65) return 'bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30'
-  return 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30'
+const confidenceTone = (confidence: number): ConfidenceTier => {
+  if (confidence >= 0.9) {
+    return {
+      tone: 'high',
+      label: 'High',
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-200/80',
+    }
+  }
+
+  if (confidence >= 0.8) {
+    return {
+      tone: 'good',
+      label: 'Good',
+      className: 'bg-sky-50 text-sky-700 border-sky-200 ring-sky-200/80',
+    }
+  }
+
+  if (confidence >= 0.65) {
+    return {
+      tone: 'low',
+      label: 'Needs Review',
+      className: 'bg-amber-50 text-amber-700 border-amber-200 ring-amber-200/80',
+    }
+  }
+
+  return {
+    tone: 'review',
+    label: 'Review Required',
+    className: 'bg-rose-50 text-rose-700 border-rose-200 ring-rose-200/80',
+  }
 }
 
-const SectionTitle = ({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) => {
+const confidencePercent = (confidence: number) => `${Math.round(confidence * 100)}%`
+
+const formatFieldConfidence = (confidence: number) => {
+  const score = confidencePercent(confidence)
+  const { label } = confidenceTone(confidence)
+  return `${label} confidence (${score})`
+}
+
+const SectionTitle = ({
+  eyebrow,
+  title,
+  description,
+  titleId,
+}: {
+  eyebrow: string
+  title: string
+  description?: string
+  titleId: string
+}) => {
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">{eyebrow}</p>
+    <header className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
-        {description ? <p className="text-sm text-slate-300">{description}</p> : null}
+        <h2 id={titleId} className="text-xl font-semibold text-slate-900">
+          {title}
+        </h2>
+        {description ? <p className="text-sm text-slate-600">{description}</p> : null}
       </div>
-    </div>
+    </header>
   )
+}
+
+const formatAuditEvent = (eventName: string) => {
+  const pretty = eventName
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((segment) => {
+      const normalized = segment.toLowerCase()
+      return normalized === 'id' ? 'ID' : normalized.charAt(0).toUpperCase() + normalized.slice(1)
+    })
+
+  return pretty.join(' ')
 }
 
 export default function App() {
@@ -89,20 +173,34 @@ export default function App() {
   const [templatesError, setTemplatesError] = useState<string | null>(null)
 
   const [reviewQueue, setReviewQueue] = useState<ReviewQueueItem[]>([])
+  const [reviewQueueSearch, setReviewQueueSearch] = useState('')
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null)
+
   const [reviewDetail, setReviewDetail] = useState<ReviewDetailResponse | null>(null)
   const [editableFields, setEditableFields] = useState<ConfidenceField[]>([])
   const [reviewerNote, setReviewerNote] = useState('')
   const [finalizeBusy, setFinalizeBusy] = useState(false)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewLoadError, setReviewLoadError] = useState<string | null>(null)
 
-  const canReview = useMemo(
-    () => auth?.role === 1 || auth?.role === 'Reviewer',
-    [auth],
-  )
+  const canReview = useMemo(() => auth?.role === 1 || auth?.role === 'Reviewer', [auth])
+
   const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
+
+  const filteredReviewQueue = useMemo(() => {
+    const query = reviewQueueSearch.trim().toLowerCase()
+    if (!query) {
+      return reviewQueue
+    }
+
+    return reviewQueue.filter((item) => {
+      const haystack = `${item.applicantName} ${item.templateId} ${item.reviewId}`.toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [reviewQueue, reviewQueueSearch])
 
   const openTemplateBlank = useCallback(async (templateId: string, download: boolean) => {
     if (!auth) {
@@ -153,19 +251,35 @@ export default function App() {
     setReviewQueue([])
     setSelectedReviewId(null)
     setReviewDetail(null)
+    setReviewLoadError(null)
     setEditableFields([])
     setReviewerNote('')
+    setReviewQueueSearch('')
   }
 
   const refreshQueue = useCallback(async (accessToken: string) => {
     setQueueBusy(true)
     setQueueError(null)
+
     try {
       const queue = await api.getReviewQueue(accessToken)
       setReviewQueue(queue)
-      setSelectedReviewId((current) => current ?? queue[0]?.reviewId ?? null)
+      setSelectedReviewId((current) => {
+        const nextReview = queue[0]?.reviewId ?? null
+        if (!current) {
+          return nextReview
+        }
+
+        if (queue.some((item) => item.reviewId === current)) {
+          return current
+        }
+
+        return nextReview
+      })
     } catch (error) {
       setQueueError(error instanceof Error ? error.message : 'Failed to load review queue.')
+      setReviewQueue([])
+      setSelectedReviewId(null)
     } finally {
       setQueueBusy(false)
     }
@@ -178,7 +292,6 @@ export default function App() {
     try {
       const nextTemplates = await api.getTemplates(accessToken)
       setTemplates(nextTemplates)
-
       if (nextTemplates.length > 0) {
         setSelectedTemplateId((current) => nextTemplates.find((template) => template.id === current)?.id ?? nextTemplates[0].id)
       } else {
@@ -194,12 +307,23 @@ export default function App() {
   }, [])
 
   const refreshReview = useCallback(async (accessToken: string, reviewId: string) => {
-    const detail = await api.getReview(accessToken, reviewId)
-    setReviewDetail(detail)
-    setEditableFields(detail.fields.map((field) => ({ ...field })))
+    setReviewLoading(true)
+    setReviewLoadError(null)
+
+    try {
+      const detail = await api.getReview(accessToken, reviewId)
+      setReviewDetail(detail)
+      setEditableFields(detail.fields.map((field) => ({ ...field })))
+    } catch (error) {
+      setReviewDetail(null)
+      setEditableFields([])
+      setReviewLoadError(error instanceof Error ? error.message : 'Unable to load review details.')
+    } finally {
+      setReviewLoading(false)
+    }
   }, [])
 
-  const handleLogin = async (event: React.FormEvent) => {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setAuthBusy(true)
     setAuthError(null)
@@ -215,9 +339,11 @@ export default function App() {
     }
   }
 
-  const handleUpload = async (event: React.FormEvent) => {
+  const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!auth || !selectedFile) return
+    if (!auth || !selectedFile) {
+      return
+    }
 
     setUploadBusy(true)
     setUploadError(null)
@@ -236,7 +362,9 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!auth || !activeIntakeId) return
+    if (!auth || !activeIntakeId) {
+      return
+    }
 
     if (statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Review Ready' || statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Finalized') {
       return
@@ -246,10 +374,8 @@ export default function App() {
       try {
         const status = await api.getIntake(auth.accessToken, activeIntakeId)
         setIntakeStatus(status)
-        if (
-          statusLabel(status.status) === 'Review Ready' ||
-          statusLabel(status.status) === 'Finalized'
-        ) {
+
+        if (statusLabel(status.status) === 'Review Ready' || statusLabel(status.status) === 'Finalized') {
           await refreshQueue(auth.accessToken)
           window.clearInterval(timer)
         }
@@ -262,12 +388,27 @@ export default function App() {
   }, [activeIntakeId, auth, intakeStatus?.status, refreshQueue])
 
   useEffect(() => {
-    if (!auth || !selectedReviewId) return
+    if (!auth || !selectedReviewId) {
+      return
+    }
 
-    refreshReview(auth.accessToken, selectedReviewId).catch(() => {
-      setReviewDetail(null)
-    })
+    setReviewDetail(null)
+    void refreshReview(auth.accessToken, selectedReviewId)
   }, [auth, refreshReview, selectedReviewId])
+
+  useEffect(() => {
+    if (!auth) {
+      document.title = 'Northwoods · Intake Review Console'
+      return
+    }
+
+    if (reviewDetail?.reviewId) {
+      document.title = `Review ${reviewDetail.reviewId} · Northwoods`
+      return
+    }
+
+    document.title = `Northwoods · ${auth.tenantId}`
+  }, [auth, reviewDetail?.reviewId])
 
   const handleFieldChange = (index: number, value: string) => {
     setEditableFields((current) =>
@@ -280,7 +421,9 @@ export default function App() {
   }
 
   const handleFinalize = async () => {
-    if (!auth || !selectedReviewId || !reviewDetail) return
+    if (!auth || !selectedReviewId || !reviewDetail) {
+      return
+    }
 
     setFinalizeBusy(true)
     setFinalizeError(null)
@@ -306,434 +449,583 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur">
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">Northwoods · review-ready intake loop</p>
-            <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr] lg:items-end">
-              <div className="space-y-3">
-                <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  Upload a handwritten intake, extract a reviewable draft, and finalize uncertainty.
+    <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-slate-900 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      >
+        Skip to main content
+      </a>
+
+      <main id="main-content" className="min-h-screen bg-slate-50 text-slate-900">
+        <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
+          <header className={`${panelClass} p-6`}>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Northwoods</p>
+                <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
+                  Review-ready intake queue and field correction workflow
                 </h1>
-                <p className="max-w-3xl text-base leading-7 text-slate-300">
-                  This frontend drives the exact vertical slice we chose: one tenant-safe workflow from login to upload,
-                  asynchronous extraction, reviewer correction, and finalization.
+                <p className="max-w-3xl text-sm leading-6 text-slate-600">
+                  Login with a seeded tenant role, upload a template-matched intake form, and correct uncertain extracted fields.
                 </p>
               </div>
-              <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-300">
-                <div className="flex items-center justify-between gap-4">
-                  <span>API</span>
-                  <code className="rounded bg-slate-800 px-2 py-1 text-sky-200">/api via Vite proxy</code>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Storage</span>
-                  <code className="rounded bg-slate-800 px-2 py-1 text-sky-200">MinIO</code>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span>Persistence</span>
-                  <code className="rounded bg-slate-800 px-2 py-1 text-sky-200">Postgres 18 + RLS</code>
-                </div>
-              </div>
+
+              <nav aria-label="Primary sections" className="flex flex-wrap gap-2 text-sm">
+                <a href="#section-auth" className={`${navLinkClass} ${FOCUS_RING}`}>
+                  1. Authentication
+                </a>
+                <a href="#section-templates" className={`${navLinkClass} ${FOCUS_RING}`}>
+                  2. Intake workflow
+                </a>
+                <a href="#section-queue" className={`${navLinkClass} ${FOCUS_RING}`}>
+                  3. Review queue
+                </a>
+                <a href="#section-review" className={`${navLinkClass} ${FOCUS_RING}`}>
+                  4. Review detail
+                </a>
+              </nav>
             </div>
-          </div>
-        </header>
+          </header>
 
-        <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-          <div className="space-y-6">
-            <section className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-slate-950/30">
-              <SectionTitle
-                eyebrow="1 · Authenticate"
-                title="Login as a seeded tenant user"
-                description="Choose one of the seeded worker/reviewer accounts and establish the tenant boundary for the rest of the workflow."
-              />
+          <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+            <div className="space-y-6">
+              <section id="section-auth" className={sectionClass} aria-labelledby="section-auth-title">
+                <SectionTitle
+                  titleId="section-auth-title"
+                  eyebrow="1 · Authenticate"
+                  title="Sign in with seeded credentials"
+                  description="Use the preset buttons or edit credentials manually to establish tenant context."
+                />
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                {Object.entries(loginPresets).map(([key, preset]) => (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {Object.entries(loginPresets).map(([key, preset]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setPreset(key as keyof typeof loginPresets)}
+                      className={`${focusableSecondary} text-xs`}
+                      aria-pressed={preset.email === loginForm.email && preset.tenantId === loginForm.tenantId}
+                    >
+                      {preset.tenantId} · {roleLabel(preset.role)}
+                    </button>
+                  ))}
+                </div>
+
+                <form className="mt-5 space-y-4" onSubmit={handleLogin} noValidate>
+                  <div className="space-y-1">
+                    <label htmlFor="tenant-id" className="block space-y-2">
+                      <span className={labelClass}>
+                        Tenant ID <span aria-hidden="true" className="text-red-600">*</span>
+                        <span className="sr-only">required</span>
+                      </span>
+                      <input
+                        id="tenant-id"
+                        value={loginForm.tenantId}
+                        onChange={(event) => setLoginForm((current) => ({ ...current, tenantId: event.target.value }))}
+                        className={inputInteractive}
+                        required
+                        aria-required="true"
+                        autoComplete="organization"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="tenant-email" className="block space-y-2">
+                      <span className={labelClass}>
+                        Email <span aria-hidden="true" className="text-red-600">*</span>
+                        <span className="sr-only">required</span>
+                      </span>
+                      <input
+                        id="tenant-email"
+                        type="email"
+                        value={loginForm.email}
+                        onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
+                        className={inputInteractive}
+                        required
+                        aria-required="true"
+                        autoComplete="email"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="tenant-password" className="block space-y-2">
+                      <span className={labelClass}>
+                        Password <span aria-hidden="true" className="text-red-600">*</span>
+                        <span className="sr-only">required</span>
+                      </span>
+                      <input
+                        id="tenant-password"
+                        type="password"
+                        value={loginForm.password}
+                        onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
+                        className={inputInteractive}
+                        required
+                        aria-required="true"
+                        autoComplete="current-password"
+                      />
+                    </label>
+                  </div>
+
                   <button
-                    key={key}
-                    type="button"
-                    onClick={() => setPreset(key as keyof typeof loginPresets)}
-                    className="rounded-full border border-white/10 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-sky-400/40 hover:text-white"
+                    type="submit"
+                    disabled={authBusy}
+                    className={focusablePrimary}
+                    aria-live="polite"
                   >
-                    {preset.tenantId} · {roleLabel(preset.role)}
+                    {authBusy ? 'Signing in…' : 'Sign in'}
                   </button>
-                ))}
-              </div>
 
-              <form className="mt-5 space-y-4" onSubmit={handleLogin}>
-                <label className="block space-y-2 text-sm text-slate-300">
-                  <span>Tenant ID</span>
-                  <input
-                    value={loginForm.tenantId}
-                    onChange={(event) => setLoginForm((current) => ({ ...current, tenantId: event.target.value }))}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-sky-400/50"
-                  />
-                </label>
+                  <p role="alert" aria-live="assertive" className="min-h-5 text-sm text-rose-700">
+                    {authError}
+                  </p>
 
-                <label className="block space-y-2 text-sm text-slate-300">
-                  <span>Email</span>
-                  <input
-                    type="email"
-                    value={loginForm.email}
-                    onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-sky-400/50"
-                  />
-                </label>
+                  {auth ? (
+                    <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                      Signed in to <strong>{auth.tenantId}</strong> as <strong>{roleLabel(auth.role)}</strong>.
+                    </p>
+                  ) : null}
+                </form>
+              </section>
 
-                <label className="block space-y-2 text-sm text-slate-300">
-                  <span>Password</span>
-                  <input
-                    type="password"
-                    value={loginForm.password}
-                    onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-sky-400/50"
-                  />
-                </label>
+              <section id="section-templates" className={sectionClass} aria-labelledby="section-template-title">
+                <SectionTitle
+                  titleId="section-template-title"
+                  eyebrow="2 · Intake templates"
+                  title="Choose a template"
+                  description="Templates are tenant-scoped and drive field extraction and review schema."
+                />
 
-                <button
-                  type="submit"
-                  disabled={authBusy}
-                  className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
-                >
-                  {authBusy ? 'Signing in…' : 'Sign in'}
-                </button>
+                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  {templatesError ? (
+                    <p role="alert" aria-live="assertive" className="text-sm text-rose-700">
+                      {templatesError}
+                    </p>
+                  ) : null}
 
-                {authError ? <p className="text-sm text-rose-300">{authError}</p> : null}
-                {auth ? (
-                  <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-                    Signed in for <strong>{auth.tenantId}</strong> as <strong>{roleLabel(auth.role)}</strong>.
-                  </div>
-                ) : null}
-              </form>
-            </section>
+                  {templatesBusy ? (
+                    <p className="text-sm text-slate-600">Loading available templates…</p>
+                  ) : templates.length === 0 ? (
+                    <p className="text-sm text-slate-600">
+                      No templates are available for this tenant. Complete authentication to load templates.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {templates.map((template) => {
+                        const isSelected = template.id === selectedTemplateId
 
-            <section className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-slate-950/30">
-              <SectionTitle
-                eyebrow="2 · Template catalog"
-                title="Choose a template"
-                description="All tenant-available templates are listed with preview and download options."
-              />
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-                {templatesError ? <p className="text-sm text-rose-300">{templatesError}</p> : null}
-
-                {templatesBusy ? (
-                  <p className="text-sm text-slate-400">Loading available templates…</p>
-                ) : templates.length === 0 ? (
-                  <p className="text-sm text-slate-400">No templates are available for this tenant.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {templates.map((template) => {
-                      const isSelected = template.id === selectedTemplateId
-                      return (
-                        <div
-                          key={template.id}
-                          className={`rounded-2xl border p-4 transition ${
-                            isSelected ? 'border-sky-400/50 bg-sky-500/10' : 'border-white/10 bg-slate-950/60'
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-medium text-white">{template.name}</p>
-                              <p className="text-xs text-slate-400">Template ID: {template.id}</p>
-                              <p className="mt-2 text-xs text-slate-300">{template.fields.length} fields</p>
+                        return (
+                          <li
+                            key={template.id}
+                            className={`rounded-lg border p-4 transition ${
+                              isSelected
+                                ? 'border-sky-300 bg-sky-50'
+                                : 'border-slate-200 bg-white'
+                            }`}
+                            aria-label={`Template ${template.name}`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">{template.name}</p>
+                                <p className="text-xs text-slate-600">Template ID: {template.id}</p>
+                                <p className="mt-2 text-xs text-slate-600">{template.fields.length} fields</p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedTemplateId(template.id)}
+                                  className={`${focusablePrimary} ${isSelected ? 'bg-sky-800' : ''}`}
+                                  aria-pressed={isSelected}
+                                >
+                                  {isSelected ? 'Selected' : 'Select'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void openTemplateBlank(template.id, false)}
+                                  className={focusableSecondary}
+                                >
+                                  View blank
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void openTemplateBlank(template.id, true)}
+                                  className={focusableSecondary}
+                                >
+                                  Download blank
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedTemplateId(template.id)}
-                                className="rounded-full border border-white/10 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-sky-400/40 hover:text-white"
-                              >
-                                {isSelected ? 'Selected' : 'Select'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void openTemplateBlank(template.id, false)}
-                                className="rounded-full border border-white/10 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-sky-400/40 hover:text-white"
-                              >
-                                View blank
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void openTemplateBlank(template.id, true)}
-                                className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-100 transition hover:border-emerald-300 hover:text-emerald-50"
-                              >
-                                Download blank
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
 
-              <form className="mt-5 space-y-4" onSubmit={handleUpload}>
-                <label className="block space-y-2 text-sm text-slate-300">
-                  <span>Template</span>
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(event) => setSelectedTemplateId(event.target.value)}
-                    disabled={!auth || templates.length === 0}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none focus:border-sky-400/50 disabled:cursor-not-allowed disabled:bg-slate-900 disabled:text-slate-500"
+                <form className="mt-5 space-y-4" onSubmit={handleUpload} noValidate>
+                  <label htmlFor="upload-template" className="block space-y-2">
+                    <span className={labelClass}>
+                      Template <span aria-hidden="true" className="text-red-600">*</span>
+                      <span className="sr-only">required</span>
+                    </span>
+                    <select
+                      id="upload-template"
+                      value={selectedTemplateId}
+                      onChange={(event) => setSelectedTemplateId(event.target.value)}
+                      disabled={!auth || templates.length === 0}
+                      className={`${inputInteractive} ${FOCUS_RING}`}
+                      required
+                      aria-required="true"
+                    >
+                      {templates.length === 0 ? (
+                        <option value="" disabled>
+                          {auth ? 'No templates available' : 'Sign in to load templates'}
+                        </option>
+                      ) : null}
+                      {templates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label htmlFor="upload-file" className="block space-y-2">
+                    <span className={labelClass}>
+                      Handwritten form scan <span aria-hidden="true" className="text-red-600">*</span>
+                      <span className="sr-only">required</span>
+                    </span>
+                    <input
+                      id="upload-file"
+                      type="file"
+                      accept=".pdf,image/*"
+                      onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                      className={`${inputInteractive} border-dashed border-slate-300 py-2.5 file:mr-4 file:rounded-lg file:border-0 file:bg-sky-700 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white file:hover:bg-sky-800`}
+                      required
+                      aria-required="true"
+                      aria-describedby="upload-help upload-file-error"
+                    />
+                    <p id="upload-help" className={helperClass}>
+                      Supported file types: PDF or image uploads.
+                    </p>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={!auth || !selectedFile || uploadBusy || templates.length === 0}
+                    className={focusablePrimary}
                   >
-                    {templates.length === 0 ? (
-                      <option value="" disabled>
-                        {auth ? 'No templates available' : 'Sign in to load templates'}
-                      </option>
-                    ) : null}
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    {uploadBusy ? 'Uploading…' : 'Upload intake'}
+                  </button>
 
-                <label className="block space-y-2 text-sm text-slate-300">
-                  <span>Handwritten form scan</span>
-                  <input
-                    type="file"
-                    accept=".pdf,image/*"
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                    className="block w-full rounded-2xl border border-dashed border-white/15 bg-slate-950 px-4 py-3 text-sm text-slate-200 file:mr-4 file:rounded-full file:border-0 file:bg-sky-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-950 hover:file:bg-sky-400"
-                  />
-                </label>
+                  <p
+                    id="upload-file-error"
+                    role="alert"
+                    aria-live="assertive"
+                    className="min-h-5 text-sm text-rose-700"
+                  >
+                    {uploadError}
+                  </p>
+                </form>
+              </section>
 
-                <button
-                  type="submit"
-                  disabled={!auth || !selectedFile || uploadBusy || templates.length === 0}
-                  className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
-                >
-                  {uploadBusy ? 'Uploading…' : 'Upload intake'}
-                </button>
-
-                {uploadError ? <p className="text-sm text-rose-300">{uploadError}</p> : null}
-              </form>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-                <div className="flex items-center justify-between gap-4">
+              <section className={sectionClass}>
+                <header className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-medium text-white">Current intake status</p>
-                    <p className="text-xs text-slate-400">Worker polling advances uploaded documents to review-ready.</p>
+                    <h2 className="text-lg font-medium text-slate-900">Current intake status</h2>
+                    <p className={helperClass}>Worker polling advances uploaded documents to review-ready.</p>
                   </div>
-                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-slate-200">
+                  <span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
                     {intakeStatus ? statusLabel(intakeStatus.status) : 'No active intake'}
                   </span>
-                </div>
+                </header>
 
                 {activeIntakeId ? (
-                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                  <div className="mt-4 space-y-3 text-sm text-slate-700">
                     <p>
-                      Active intake: <code className="rounded bg-slate-900 px-2 py-1 text-sky-200">{activeIntakeId}</code>
+                      Active intake ID: <span className="font-medium">{activeIntakeId}</span>
                     </p>
                     {intakeStatus?.fields?.length ? (
                       <ul className="space-y-2">
-                        {intakeStatus.fields.map((field) => (
-                          <li key={field.fieldKey} className="flex items-center justify-between gap-3 rounded-xl bg-slate-900/80 px-3 py-2">
-                            <span>{field.fieldKey}</span>
-                            <span className={`rounded-full px-2 py-1 text-xs font-medium ${confidenceTone(field.confidence)}`}>
-                              {(field.confidence * 100).toFixed(0)}%
-                            </span>
+                        {intakeStatus.fields.map((field) => {
+                          const confidence = confidenceTone(field.confidence)
+                          return (
+                            <li
+                              key={field.fieldKey}
+                              className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                            >
+                              <span>{field.fieldKey}</span>
+                              <span
+                                className={`rounded-full border px-2 py-1 text-xs font-medium ${confidence.className}`}
+                                aria-label={formatFieldConfidence(field.confidence)}
+                              >
+                                {confidence.label}
+                              </span>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-slate-600">
+                        No extracted fields yet. Upload a document and wait for extraction to complete.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-600">No intake uploaded in this session yet.</p>
+                )}
+              </section>
+            </div>
+
+            <div className="space-y-6">
+              <section id="section-queue" className={sectionClass} aria-labelledby="section-queue-title">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <SectionTitle
+                    titleId="section-queue-title"
+                    eyebrow="3 · Review queue"
+                    title="Review-ready documents"
+                    description="Select one document to open extracted fields for correction."
+                  />
+                  <button
+                    type="button"
+                    disabled={!auth || queueBusy}
+                    onClick={() => auth && refreshQueue(auth.accessToken)}
+                    className={focusableSecondary}
+                  >
+                    {queueBusy ? 'Refreshing…' : 'Refresh queue'}
+                  </button>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <label htmlFor="review-queue-search" className="w-full text-sm text-slate-700">
+                    <span className="sr-only">Search review queue</span>
+                    <input
+                      id="review-queue-search"
+                      type="search"
+                      value={reviewQueueSearch}
+                      onChange={(event) => setReviewQueueSearch(event.target.value)}
+                      placeholder="Search by applicant, template, or review id"
+                      className={inputInteractive}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-600" role="status" aria-live="polite">
+                    {filteredReviewQueue.length} result{filteredReviewQueue.length === 1 ? '' : 's'}
+                  </p>
+                </div>
+
+                {queueError ? (
+                  <p role="alert" aria-live="assertive" className="mt-4 text-sm text-rose-700">
+                    {queueError}
+                  </p>
+                ) : null}
+
+                {queueBusy ? (
+                  <p className="mt-4 text-sm text-slate-600">Loading review queue…</p>
+                ) : filteredReviewQueue.length ? (
+                  <ul className="mt-4 space-y-3" role="list" aria-live="polite" aria-busy={queueBusy}>
+                    {filteredReviewQueue.map((item) => {
+                      const isSelected = selectedReviewId === item.reviewId
+
+                      return (
+                        <li key={item.reviewId}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReviewId(item.reviewId)}
+                            aria-pressed={isSelected}
+                            aria-current={isSelected ? 'page' : undefined}
+                            aria-label={`Open review for ${item.applicantName} with ${item.uncertainFieldCount} uncertain fields`}
+                            className={`w-full rounded-lg border px-4 py-3 text-left transition ${
+                              isSelected
+                                ? 'border-sky-300 bg-sky-50'
+                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                            } ${focusableSecondary} min-h-11`}
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <p className="font-medium text-slate-900">{item.applicantName}</p>
+                                <p className={helperClass}>Template {item.templateId}</p>
+                              </div>
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                                {item.uncertainFieldCount} uncertain
+                              </span>
+                            </div>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+                    {reviewQueueSearch
+                      ? 'No review items match your search query. Try a different applicant name or template id.'
+                      : 'No review-ready documents yet. Upload an intake and wait for the worker to finish extraction.'}
+                  </div>
+                )}
+              </section>
+
+              <section id="section-review" className={sectionClass} aria-labelledby="section-review-title">
+                <SectionTitle
+                  titleId="section-review-title"
+                  eyebrow="4 · Review detail"
+                  title="Correct uncertain fields and finalize"
+                  description="Use the source confidence, extracted field values, and similar cases as review context."
+                />
+
+                {reviewLoading ? (
+                  <p className="mt-5 text-sm text-slate-600" role="status" aria-live="polite">
+                    Loading review details…
+                  </p>
+                ) : reviewLoadError ? (
+                  <p role="alert" aria-live="assertive" className="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {reviewLoadError}
+                  </p>
+                ) : reviewDetail ? (
+                  <div className="mt-5 space-y-6">
+                    <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-base font-semibold text-slate-900">Review {reviewDetail.reviewId}</p>
+                        <p className={helperClass}>
+                          Template {reviewDetail.templateId} · Status {statusLabel(reviewDetail.status)}
+                        </p>
+                      </div>
+                      <a
+                        href={reviewDetail.sourceDocumentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={focusableSecondary}
+                      >
+                        Open source document
+                      </a>
+                    </div>
+
+                    <div className="grid gap-4">
+                      {editableFields.map((field, index) => {
+                        const confidence = confidenceTone(field.confidence)
+                        const fieldInputId = `review-field-${index}`
+                        const confidenceHintId = `${fieldInputId}-confidence`
+
+                        return (
+                          <div
+                            key={field.fieldKey}
+                            className={`rounded-lg border p-4 ${
+                              field.requiresReview ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="space-y-1">
+                                <label htmlFor={fieldInputId} className="text-sm font-medium text-slate-900">
+                                  {field.fieldKey}
+                                </label>
+                                <p id={confidenceHintId} className={helperClass}>
+                                  {formatFieldConfidence(field.confidence)}
+                                </p>
+                              </div>
+                              <span
+                                className={`inline-flex min-h-11 items-center rounded-full border px-2.5 py-1 text-xs font-medium ${confidence.className}`}
+                                aria-live="polite"
+                              >
+                                {confidence.label}
+                              </span>
+                            </div>
+                            <textarea
+                              id={fieldInputId}
+                              value={field.value}
+                              onChange={(event) => handleFieldChange(index, event.target.value)}
+                              rows={Math.max(2, Math.ceil((field.value.length + 1) / 40))}
+                              aria-describedby={confidenceHintId}
+                              className={`${inputInteractive} mt-4`}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm font-medium text-slate-900">Similar cases</p>
+                        <span className="text-xs text-slate-600">Top {reviewSimilarCases.length}</span>
+                      </div>
+
+                      {reviewSimilarCases.length > 0 ? (
+                        <div className="mt-3 space-y-3">
+                          {reviewSimilarCases.map((item: SimilarCase) => (
+                            <button
+                              key={item.intakeId}
+                              type="button"
+                              onClick={() => setSelectedReviewId(item.reviewId)}
+                              className={`${focusableSecondary} flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left sm:flex-row sm:items-center sm:justify-between`}
+                            >
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">{item.applicantName}</p>
+                                <p className="text-xs text-slate-600">Template {item.templateId}</p>
+                              </div>
+                              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+                                {(item.matchScore * 100).toFixed(0)}% match
+                              </span>
+                              <p className="text-xs leading-relaxed text-slate-700 sm:col-span-2">{item.summary}</p>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-slate-600">No similar cases found for this document yet.</p>
+                      )}
+                    </div>
+
+                    <label htmlFor="reviewer-note" className="block space-y-2 text-sm text-slate-700">
+                      <span>Reviewer note</span>
+                      <textarea
+                        id="reviewer-note"
+                        value={reviewerNote}
+                        onChange={(event) => setReviewerNote(event.target.value)}
+                        rows={3}
+                        className={`${inputInteractive}`}
+                        placeholder="Record the decision or correction rationale"
+                      />
+                    </label>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={!canReview || finalizeBusy}
+                        onClick={handleFinalize}
+                        className={focusableDanger}
+                      >
+                        {finalizeBusy ? 'Finalizing…' : 'Finalize review'}
+                      </button>
+
+                      {finalizeError ? (
+                        <p role="alert" aria-live="assertive" className="text-sm text-rose-700">
+                          {finalizeError}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-medium text-slate-900">Audit trail</p>
+                      <ul className="mt-3 space-y-2 text-sm text-slate-700" aria-live="polite">
+                        {reviewDetail.auditEvents.map((eventName, eventIndex) => (
+                          <li
+                            key={`${eventName}-${eventIndex}`}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                          >
+                            {formatAuditEvent(eventName)}
                           </li>
                         ))}
                       </ul>
-                    ) : (
-                      <p className="text-slate-400">No extracted fields yet. Upload a document and wait for extraction.</p>
-                    )}
+                    </div>
                   </div>
                 ) : (
-                  <p className="mt-4 text-sm text-slate-400">No intake uploaded in this session yet.</p>
-                )}
-              </div>
-            </section>
-          </div>
-
-          <div className="space-y-6">
-            <section className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-slate-950/30">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <SectionTitle
-                  eyebrow="3 · Review queue"
-                  title="Review-ready documents"
-                  description="This queue is sourced from the same tenant-scoped backend data the worker writes after extraction."
-                />
-                <button
-                  type="button"
-                  disabled={!auth || queueBusy}
-                  onClick={() => auth && refreshQueue(auth.accessToken)}
-                  className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-sky-400/40 hover:text-white disabled:cursor-not-allowed disabled:text-slate-500"
-                >
-                  {queueBusy ? 'Refreshing…' : 'Refresh queue'}
-                </button>
-              </div>
-
-              {queueError ? <p className="mt-4 text-sm text-rose-300">{queueError}</p> : null}
-
-              <div className="mt-5 grid gap-3">
-                {reviewQueue.length ? (
-                  reviewQueue.map((item) => {
-                    const selected = selectedReviewId === item.reviewId
-                    return (
-                      <button
-                        key={item.reviewId}
-                        type="button"
-                        onClick={() => setSelectedReviewId(item.reviewId)}
-                        className={`rounded-2xl border px-4 py-4 text-left transition ${
-                          selected
-                            ? 'border-sky-400/50 bg-sky-500/10'
-                            : 'border-white/10 bg-slate-950/60 hover:border-white/20 hover:bg-slate-950'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="font-medium text-white">{item.applicantName}</p>
-                            <p className="text-sm text-slate-400">{item.templateId}</p>
-                          </div>
-                          <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-200 ring-1 ring-amber-500/30">
-                            {item.uncertainFieldCount} uncertain
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  })
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-6 text-sm text-slate-400">
-                    No review-ready documents yet. Upload an intake and wait for the worker to finish extraction.
+                  <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">
+                    Sign in and choose a review-ready document to inspect extracted fields and finalize the record.
                   </div>
                 )}
-              </div>
-            </section>
-
-            <section className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-slate-950/30">
-              <SectionTitle
-                eyebrow="4 · Review detail"
-                title="Correct uncertain fields and finalize"
-                description="Use the source document, confidence cues, and audit history to complete the human-in-the-loop step."
-              />
-
-              {reviewDetail ? (
-                <div className="mt-5 space-y-6">
-                  <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-white">Review {reviewDetail.reviewId}</p>
-                      <p className="text-sm text-slate-400">
-                        Template {reviewDetail.templateId} · Status {statusLabel(reviewDetail.status)}
-                      </p>
-                    </div>
-                    <a
-                      href={reviewDetail.sourceDocumentUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm font-medium text-slate-100 transition hover:border-sky-400/40 hover:text-white"
-                    >
-                      Open source document
-                    </a>
-                  </div>
-
-                  <div className="grid gap-4">
-                    {editableFields.map((field, index) => (
-                      <div
-                        key={field.fieldKey}
-                        className={`rounded-2xl border p-4 ${
-                          field.requiresReview ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/10 bg-slate-950/60'
-                        }`}
-                      >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-white">{field.fieldKey}</p>
-                            <p className="text-xs text-slate-400">Confidence-based extraction result</p>
-                          </div>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${confidenceTone(field.confidence)}`}>
-                            {(field.confidence * 100).toFixed(0)}% confidence
-                          </span>
-                        </div>
-                        <textarea
-                          value={field.value}
-                          onChange={(event) => handleFieldChange(index, event.target.value)}
-                          rows={field.value.length > 40 ? 3 : 2}
-                          className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-sky-400/50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-white">Similar cases</p>
-                      <span className="text-xs text-slate-400">Top {reviewSimilarCases.length}</span>
-                    </div>
-                    {reviewSimilarCases.length > 0 ? (
-                      <div className="mt-3 space-y-3">
-                        {reviewSimilarCases.map((item: SimilarCase) => (
-                          <button
-                            key={item.intakeId}
-                            type="button"
-                            onClick={() => setSelectedReviewId(item.reviewId)}
-                            className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-left transition hover:border-sky-400/40 hover:bg-slate-950/80"
-                          >
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <p className="text-sm font-medium text-white">{item.applicantName}</p>
-                                <p className="text-xs text-slate-400">Template {item.templateId}</p>
-                              </div>
-                              <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-200">
-                                {(item.matchScore * 100).toFixed(0)}% match
-                              </span>
-                            </div>
-                            <p className="mt-2 text-xs leading-relaxed text-slate-300">{item.summary}</p>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-sm text-slate-400">No similar cases found for this document yet.</p>
-                    )}
-                  </div>
-
-                  <label className="block space-y-2 text-sm text-slate-300">
-                    <span>Reviewer note</span>
-                    <textarea
-                      value={reviewerNote}
-                      onChange={(event) => setReviewerNote(event.target.value)}
-                      rows={3}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-sky-400/50"
-                      placeholder="Record the decision or correction rationale"
-                    />
-                  </label>
-
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      disabled={!canReview || finalizeBusy}
-                      onClick={handleFinalize}
-                      className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
-                    >
-                      {finalizeBusy ? 'Finalizing…' : 'Finalize review'}
-                    </button>
-                    {finalizeError ? <p className="text-sm text-rose-300">{finalizeError}</p> : null}
-                  </div>
-
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                    <p className="text-sm font-medium text-white">Audit trail</p>
-                    <ul className="mt-3 space-y-2 text-sm text-slate-300">
-                      {reviewDetail.auditEvents.map((eventName) => (
-                        <li key={eventName} className="rounded-xl bg-slate-900/90 px-3 py-2">
-                          {eventName}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-8 text-sm text-slate-400">
-                  Sign in and choose a review-ready document to inspect extracted fields and finalize the record.
-                </div>
-              )}
-            </section>
-          </div>
-        </section>
-      </div>
-    </main>
+              </section>
+            </div>
+          </section>
+        </div>
+      </main>
+    </>
   )
 }
