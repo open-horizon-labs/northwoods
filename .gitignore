@@ -12,3 +12,6 @@ coverage/
 **/obj/
 *.user
 *.suo
+
+.playwright/
+.playwright-cli/

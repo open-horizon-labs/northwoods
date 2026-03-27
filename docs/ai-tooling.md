@@ -18,6 +18,10 @@ This project was developed with an AI-assisted workflow. The goal was not to out
   - In practice, these support phases like aiming, framing the problem space, execution discipline, recording outcomes/guardrails, and review.
   - They act as lightweight operating procedures for high-judgment work.
 
+- **Playwright CLI skill (`playwright-cli`)**
+  - Used to automate browser interactions for intake/review flow validation against the running local stack.
+  - Helped verify end-to-end behavior (upload → extraction → review) with reproducible scripted runs instead of ad-hoc manual clicks.
+
 - **Oh My Pi fork (`.oh-omp/`)**
   - Local fork used as the coding harness.
   - Handles context assembly so the model can work with repository state, skill guidance, artifacts, and tool outputs in a more grounded way.
