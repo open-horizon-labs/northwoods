@@ -64,7 +64,7 @@
 - Keep `OpenAI` behind a strict schema/JSON validation layer; reject unparseable responses and fall back to review-required.
 - Keep audit rows append-only with explicit provider/stage for each extraction attempt.
 - Add an optional fixture harness with 3–5 sample intake files + expected field outputs.
-- Decision recorded in `docs/ADRs/005-portable-consensus-extraction-pipeline.md`.
+- Decision recorded in [ADR 005: Use a portable multi-stage consensus extraction pipeline](../docs/ADRs/005-portable-consensus-extraction-pipeline.md).
 
 ## Execute
 **Updated:** 2026-03-26

@@ -16,8 +16,8 @@ Issue #8 is the final documentation deliverable for the backlog: a candid accoun
 - **Representative trust-boundary test suite** covers tenant isolation, upload-to-processing transition, review/finalize flow, and confidence-sensitive extraction behavior.
 - **Operational observability** includes structured logging, correlation IDs, metrics, and retry behavior for transient extraction failures.
 - **JWT/RBAC model** is implemented with role-aware upload/review/finalize gates.
-- **Architecture rationale and rationale traceability** are documented in `docs/architecture.md`, with explicit trade-offs and non-negotiables.
-- **AI tooling stack** and process usage are documented in `docs/ai-tooling.md`.
+- **Architecture rationale and rationale traceability** are documented in [Northwoods Architecture Rationale](architecture.md), with explicit trade-offs and non-negotiables.
+- **AI tooling stack** and process usage are documented in [AI Development Tooling Used](ai-tooling.md).
 
 ### Delivery validation currently available
 - Automated checks run and passing in this branch:
@@ -70,7 +70,7 @@ Issue #8 is the final documentation deliverable for the backlog: a candid accoun
 
 ## Rubric scoring reflection
 
-Scoring uses the rubric in `docs/reviewer-rubric.md` (1–4):
+Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1–4):
 
 | Area | Score | Rationale | Gap status |
 |---|---:|---|---|
@@ -92,7 +92,7 @@ The **Case visibility** area is the explicit below-threshold area (`2`). It is t
 
 ### Example 2 — trade-off clarification
 - **Prompt:** “Draft a short trade-off section for an interview-style architecture doc that must prioritize trust, auditability, and tenant safety over convenience.”
-- **Use:** produced the trade-off rationales in this file and informed concise architectural framing in `docs/architecture.md`.
+- **Use:** produced the trade-off rationales in this file and informed concise architectural framing in [Northwoods Architecture Rationale](architecture.md).
 
 ### Example 3 — risk disclosure and deferment wording
 - **Prompt:** “List honestly what should stay explicit as incomplete if we cannot run full runtime smoke checks, without masking risk.”

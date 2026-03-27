@@ -42,7 +42,7 @@
 
 ## Issue #1 — Implement RAG Similar Cases in review workflow
 
-- **Session file:** `.oh/sessions/1-dev.md`
+- **Session file:** [Dev Pipeline -- Implement RAG Similar Cases in review workflow](sessions/1-dev.md)
 - **Branch:** `1-rag-similar-cases`
 - **Implementation commit:** `f494605` (`feat: add similar-case retrieval to review workflow`)
 - **PR:** #12 (`https://github.com/open-horizon-labs/northwoods/pull/12`)
@@ -72,7 +72,7 @@
 
 ## Issue #4 — Implement real JWT authentication with role-based access control
 
-- **Session file:** `.oh/sessions/4-dev.md`
+- **Session file:** [Dev Pipeline -- Implement real JWT authentication with role-based access control](sessions/4-dev.md)
 - **Branch:** `4-jwt-auth-rbac`
 - **Implementation commit:** `aac42a4437bb77458c37f079fafa1652730a0b99` (`feat: implement JWT auth and role-based access control`)
 - **PR:** #13 (`https://github.com/open-horizon-labs/northwoods/pull/13`)
@@ -117,7 +117,7 @@
 
 ## Issue #3 — Add four distinct intake form templates with view/download
 
-- **Session file:** `.oh/sessions/3-dev.md`
+- **Session file:** [Dev Pipeline -- Add four distinct intake form templates with view/download](sessions/3-dev.md)
 - **Branch:** `3-templates-browse-download`
 - **Implementation commits:**
   - `4e507df64e744705bc908d8a73c81947b133c33f` (`feat: add tenant template catalog and blank form download`)
@@ -177,7 +177,7 @@
 
 ## Issue #6 — Add representative test suite: unit, API integration, worker, UI smoke
 
-- **Session file:** `.oh/sessions/6-dev.md`
+- **Session file:** [Issue #6 — Representative test suite](sessions/6-dev.md)
 - **Branch:** `6-representative-test-suite`
 - **Implementation commit:** `479e216a83c104046e7da97a514ff8e6655ae7d0` (`test: add representative trust-boundary suite`)
 - **PR:** #17 (`https://github.com/open-horizon-labs/northwoods/pull/17`)
@@ -223,7 +223,7 @@
 - **Issue status:** closed (`2026-03-27T06:48:16Z`)
 
 ### Major decisions
-- Created `docs/architecture.md` as a single CTO-readable architecture rationale source instead of spreading rationale across ADR fragments.
+- Created [Northwoods Architecture Rationale](../docs/architecture.md) as a single CTO-readable architecture rationale source instead of spreading rationale across ADR fragments.
 - Included Mermaid architecture diagram covering users, frontend, API, extraction worker, Postgres (RLS + retrieval), and MinIO boundaries.
 - Documented component responsibilities and explicit non-responsibilities for frontend, API, worker, Postgres, and MinIO.
 - Captured template/extraction model rationale with append-only attempt history and confidence-tier review gating.
@@ -251,7 +251,7 @@
 
 ## Issue #8 — Write self-assessment: completed, missing, trade-offs, AI usage
 
-- **Session file:** `.oh/sessions/8-dev.md`
+- **Session file:** [Dev Pipeline -- Write self-assessment: completed, missing, trade-offs, AI usage](sessions/8-dev.md)
 - **Branch:** `8-self-assessment`
 - **Commit:** `a05ce41` (`docs: add issue 8 self-assessment`)
 - **PR:** #19 (`https://github.com/open-horizon-labs/northwoods/pull/19`)
@@ -260,7 +260,7 @@
 
 ### Major decisions
 - Deliverable is documentation-only but includes explicit completeness/deferment and rubric score calibration.
-- Added `docs/self-assessment.md` with:
+- Added [Northwoods Self-Assessment (Issue #8)](../docs/self-assessment.md) with:
   - Completed work summary and operational boundaries
   - Explicit missing/deferred items with rationale and blockers
   - Key design trade-offs and their consequences

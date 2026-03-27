@@ -153,14 +153,14 @@ Costs/trade-offs:
 
 5. **AI usage is assistive, not authority**
    - AI accelerates development and extraction stages, but acceptance criteria remain deterministic, testable, and review-gated.
-   - Tooling/process details are documented in `docs/ai-tooling.md`.
+   - Tooling/process details are documented in [AI Development Tooling Used](ai-tooling.md).
 
 ## References
 
-- `docs/ADRs/001-postgres-hybrid-retrieval-with-pgvector-and-pg-trgm.md`
-- `docs/ADRs/002-temporal-for-document-processing-workflows.md`
-- `docs/ADRs/003-minio-for-s3-compatible-document-storage.md`
-- `docs/ADRs/004-shared-postgres-tenancy-with-rls-backstop.md`
-- `docs/ADRs/005-portable-consensus-extraction-pipeline.md`
-- `docs/reviewer-rubric.md`
-- `docs/ai-tooling.md`
+- [ADR 001: Use Postgres hybrid retrieval with `pgvector` and `pg_trgm`](ADRs/001-postgres-hybrid-retrieval-with-pgvector-and-pg-trgm.md)
+- [ADR 002: Use Temporal for document processing workflows](ADRs/002-temporal-for-document-processing-workflows.md)
+- [ADR 003: Use MinIO for S3-compatible document storage](ADRs/003-minio-for-s3-compatible-document-storage.md)
+- [ADR 004: Use shared Postgres tenancy with `tenant_id` and RLS backstop](ADRs/004-shared-postgres-tenancy-with-rls-backstop.md)
+- [ADR 005: Use a portable multi-stage consensus extraction pipeline](ADRs/005-portable-consensus-extraction-pipeline.md)
+- [Reviewer Rubric](reviewer-rubric.md)
+- [AI Development Tooling Used](ai-tooling.md)

@@ -139,6 +139,6 @@ Rejected because it is too heavy for a local-first interview exercise and would 
 ## References
 
 - PostgreSQL Row Security Policies: https://www.postgresql.org/docs/current/ddl-rowsecurity.html
-- ADR 001: `docs/ADRs/001-postgres-hybrid-retrieval-with-pgvector-and-pg-trgm.md`
-- ADR 002: `docs/ADRs/002-temporal-for-document-processing-workflows.md`
-- ADR 003: `docs/ADRs/003-minio-for-s3-compatible-document-storage.md`
+- [ADR 001: Use Postgres hybrid retrieval with `pgvector` and `pg_trgm`](001-postgres-hybrid-retrieval-with-pgvector-and-pg-trgm.md)
+- [ADR 002: Use Temporal for document processing workflows](002-temporal-for-document-processing-workflows.md)
+- [ADR 003: Use MinIO for S3-compatible document storage](003-minio-for-s3-compatible-document-storage.md)

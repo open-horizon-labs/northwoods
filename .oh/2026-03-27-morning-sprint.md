@@ -3,7 +3,7 @@
 ## Status at start
 - All implementation issues (#1-#8, #11) merged
 - Issue #2 (search/case view) merged as PR #22
-- API fuzz report committed (`docs/fuzz-report-api.md`) with 11 findings including critical auth breakdown (F-01)
+- API fuzz report committed ([API Fuzz Report — Northwoods API](../docs/fuzz-report-api.md)) with 11 findings including critical auth breakdown (F-01)
 - Open issues: #9 (review fix loop round 1), #10 (review fix loop round 2)
 - Docker restarted after OrbStack crash; stack confirmed healthy
 
@@ -19,7 +19,7 @@
 
 ### Task 1 complete: Browser fuzz testing — 2026-03-27
 
-Report: `docs/fuzz-report-browser.md`
+Report: [Browser Fuzz Report — Northwoods Web App](../docs/fuzz-report-browser.md)
 
 9 findings across 5 categories:
 

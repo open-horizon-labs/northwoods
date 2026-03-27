@@ -91,6 +91,6 @@ Notable flags:
 
 ## Related docs
 
-- `docs/ADRs/005-portable-consensus-extraction-pipeline.md`
-- `docs/ai-tooling.md`
-- `.oh/ocr-confidence-tiering.md`
+- [ADR 005: Use a portable multi-stage consensus extraction pipeline](docs/ADRs/005-portable-consensus-extraction-pipeline.md)
+- [AI Development Tooling Used](docs/ai-tooling.md)
+- [OCR Confidence Tiering](.oh/ocr-confidence-tiering.md)
