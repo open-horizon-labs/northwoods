@@ -225,7 +225,7 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
             DocId = docId,
             TenantId = authContext.TenantId,
             ActorId = authContext.UserId,
-            Details = $"{{\"template\":\"{templateId}\",\"file\":\"{file.FileName}\"}}"
+            Details = JsonSerializer.Serialize(new { template = templateId, file = file.FileName })
         },
         session.Transaction);
 
@@ -389,7 +389,7 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
             DocId = id,
             TenantId = authContext.TenantId,
             ActorId = authContext.UserId,
-            Details = $"{{\"note\":\"{request.ReviewerNote}\"}}"
+            Details = JsonSerializer.Serialize(new { note = request.ReviewerNote })
         },
         session.Transaction);
 
