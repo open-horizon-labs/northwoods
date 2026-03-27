@@ -1017,6 +1017,7 @@ export default function App() {
                         src={reviewDetail.sourceDocumentUrl}
                         title="Source intake document"
                         className="h-[480px] w-full border-0"
+                        sandbox="allow-same-origin"
                       />
                     </div>
 

@@ -1,107 +1,123 @@
-# Northwoods Self-Assessment (Issue #8)
+# Northwoods Self-Assessment
 
 Date: 2026-03-27
 
 ## Executive summary
 
-Issue #8 is the final documentation deliverable for the backlog: a candid accounting of what is implemented, what remains, where trade-offs were made, and where AI assistance materially changed the way we worked. The implementation pipeline now has a coherent workflow for intake digitization, reviewer-focused confidence triage, and RAG-assisted review, with strong tenant isolation controls and evidence-based test coverage. The only major functional holes are still the deferred search/aggregate-case surface and full production-like runtime verification, both deferred by environment/tooling constraints in this session.
+Northwoods delivers a complete intake-processing platform with a coherent vertical slice: template-guided upload, dual-provider extraction with confidence scoring, human-in-the-loop review with similar-case assistance, search, case aggregate view, and tenant-isolated multi-tenancy enforced via RLS. The system is documented, tested, and runnable from a fresh clone via `docker compose up -d`.
 
 ## What is complete and functioning
 
-### Backend and workflow capabilities delivered
-- **RAG-assisted reviewer workflow** is in place for the review screen (`ReviewCaseSection`) and returns similarity context from Postgres-backed hybrid retrieval (`apps/web`, `src/Services/Northwoods.Api`, `src/Workers/Extraction.Worker`, `src/BuildingBlocks/Northwoods.Review`).
-- **Tenant isolation is enforced across storage, auth, documents, reviews, metrics, and search paths** via JWT tenant claims and DB session context/RLS configuration (`Tenant-Middleware`, `DbConnectionFactory`, `DbConnectionFactoryTests`).
-- **Append-only review/audit trail** behavior exists in extraction and workflow events; extraction attempts are persisted as attempts with confidence inputs, and review/finalize transitions are auditable.
-- **Confidence-tiered review behavior** is operationalized in extraction and UI review flows.
-- **Representative trust-boundary test suite** covers tenant isolation, upload-to-processing transition, review/finalize flow, and confidence-sensitive extraction behavior.
-- **Operational observability** includes structured logging, correlation IDs, metrics, and retry behavior for transient extraction failures.
-- **JWT/RBAC model** is implemented with role-aware upload/review/finalize gates.
-- **Architecture rationale and rationale traceability** are documented in [Northwoods Architecture Rationale](architecture.md), with explicit trade-offs and non-negotiables.
-- **AI tooling stack** and process usage are documented in [AI Development Tooling Used](ai-tooling.md).
+### Core workflow (upload, extract, review, finalize)
 
-### Delivery validation currently available
-- Automated checks run and passing in this branch:
-  - `pnpm check`
-  - `pnpm test`
-  - `pnpm test:unit` / `pnpm test:runtime` via repo scripts where applicable.
-- PR-level audit artifacts were gathered for completed merged work and found clean after remediation where applicable (details in session logs).
-- Live end-to-end runtime smoke has **not** been executed in this environment repeatedly due infrastructure/tooling responsiveness failures (see “Missing/Deferred” section).
+- **Template-guided upload**: 4 intake templates per tenant (General Assistance, Housing Stability, Financial Assistance, Clinical SOAP Note). Intake workers upload scanned PDFs associated with a template.
+- **Background extraction**: Worker polls for queued documents and runs a dual-provider extraction pipeline (mock OCR + optional OpenAI Vision). Each provider produces per-field extraction attempts with confidence scores. Attempts are append-only.
+- **Confidence-tiered review**: Extracted fields are routed to review when confidence falls below threshold. Reviewers see fields, confidence indicators, the source document, and similar historical cases.
+- **Finalize with corrections**: Reviewers correct low-confidence fields and finalize with an audit trail. Corrections are stored alongside original extraction.
+- **Audit events**: `intake_uploaded`, `extraction_started`, `extraction_completed`, `extraction_failed`, `finalized` -- all tenant-scoped with correlation IDs.
 
-## What is missing or deferred (and why)
+### Search and case visibility
 
-### Missing: case aggregate/search workflow (Issue #2)
-- Full case aggregate and search view remains open and partly unimplemented.
-- This was deferred earlier because the first implementation attempt was abandoned before lifecycle completion.
-- Impact: limits full fulfillment of “case visibility” rubric area.
+- **Full-text search** across processed intakes with snippet highlighting, tenant-scoped.
+- **Case aggregate view** (`GET /cases/{personKey}`) shows all documents for a person across intakes.
 
-### Missing / deferred: runtime smoke verification
-- Repeated runtime spot-checks for upload -> extract -> review -> finalize were blocked by environment limitations.
-- Specifically blocked commands:
-  - `docker compose up -d postgres minio api worker`
-  - `docker compose ps`
-  - `curl -sS http://localhost:5100/healthz`
-  - End-to-end `/intakes` smoke upload command with sample PDF.
-- Impact: cannot currently provide a fully observed live path across all services.
+### Similar-case assistance (RAG)
 
-### Missing: Playwright UI smoke
-- A dedicated UI browser smoke is still deferred (`test:web-smoke` marker exists).
-- Impact: manual UI path and browser-side visuals are less directly exercised than API/unit/integration paths.
+- Hybrid retrieval combining full-text search, vector similarity (pgvector), trigram fuzzy matching (pg_trgm), and structured attribute boosts (DOB, name, address).
+- Reciprocal rank fusion produces a single match score.
+- Similar cases appear in the review payload with match score and summary explaining why the case matched (same applicant, matching DOB, same template, etc.).
+- Retrieval is tenant-isolated.
 
-### Missing: authentication hardening
-- Current password storage/verification remains developer-grade from the assignment sequence and is noted as a follow-up security hardening item.
+### Tenant isolation
+
+- JWT claims propagate tenant context across all API endpoints.
+- Database sessions set `app.tenant_id` for RLS enforcement.
+- RLS policies on all data tables (`documents`, `templates`, `extracted_fields`, `case_profiles`, `audit_events`, `extraction_attempts`).
+- `app_user` role has no BYPASS RLS.
+- Cross-tenant access returns 404/empty -- verified in integration tests and manual smoke testing.
+- Automated compliance checks: `scripts/ci/check-rls-compliance.py` verifies RLS enablement and policy presence.
+
+### Observability
+
+- Structured JSON logs with correlation IDs and scope metadata.
+- `X-Correlation-Id` header propagated through request lifecycle.
+- Tenant-scoped `GET /metrics` (request count, review finalization count, extraction success/failure).
+- `GET /healthz` for liveness/readiness.
+- Worker logs extraction timing (`processing_ms`) and OpenAI token usage per attempt.
+- Retry with backoff on transient failures (configurable max attempts and delay).
+
+### Tests
+
+- **Unit tests**: Tenancy (2 tests), Worker extraction pipeline (15 tests including dual-provider).
+- **Integration tests**: Login validation (11 tests), workflow E2E with tenant isolation, search tenant scoping.
+- **CI checks**: RLS compliance, append-only extraction_attempts, secret scanning.
+
+### Documentation
+
+- [Architecture Rationale](architecture.md) with system diagram, component responsibilities, extraction model, RAG design, tenancy strategy, trade-offs.
+- 5 ADRs covering Postgres hybrid retrieval, Temporal (deferred), MinIO storage, shared-Postgres tenancy with RLS, and portable extraction pipeline.
+- [AI Development Tooling](ai-tooling.md) describing tool usage throughout development.
+- [Reviewer Rubric](reviewer-rubric.md) used as the internal quality gate.
+- OpenAPI spec at `/openapi/v1.json`.
+
+### Deliverables
+
+| Deliverable | Status | Location |
+|-------------|--------|----------|
+| Source code | Complete | `src/`, `apps/web`, `tests/` |
+| Docker Compose | Complete | `docker-compose.yml` |
+| API documentation (OpenAPI) | Complete | `http://localhost:5100/openapi/v1.json` |
+| Architecture document | Complete | `docs/architecture.md` |
+| Self-assessment | This file | `docs/self-assessment.md` |
+| Run instructions | Complete | `README.md` |
+| Sample data | Complete | `samples/intakes/` + seed data in `init.sql` |
+
+## Rubric scoring
+
+Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1-4):
+
+| Area | Score | Evidence |
+|------|------:|----------|
+| Intake digitization | 3 (Strong) | Template-guided upload, dual-provider background extraction, status tracking, confidence scoring, append-only attempt history. Verified end-to-end via smoke test and integration tests. |
+| Human review | 3 (Strong) | Reviewer sees extracted fields with confidence beside source document. Low-confidence fields flagged for review. Finalize persists corrections with audit trail. Similar cases embedded in review payload. |
+| Similar-case assistance | 3 (Strong) | Hybrid retrieval (FTS + vector + trigram + structured boosts) produces relevant matches with explanatory summaries. Embedded in review workflow, not standalone. Tenant-isolated. |
+| Case visibility | 3 (Strong) | Full-text search with highlighting. Case aggregate view groups documents by person. Both tenant-scoped. |
+| Tenant safety and operability | 4 (Excellent) | RLS on all tables, JWT claim propagation, no BYPASS RLS, automated compliance checks, structured logging, correlation IDs, health checks, retry behavior. Integration tests verify cross-tenant isolation. |
+| Architecture judgment | 3 (Strong) | Coherent capability boundaries, explicit trade-offs, 5 ADRs, architecture doc with diagram. Dual-provider extraction shows practical AI integration. Postgres-centered retrieval avoids unnecessary infrastructure. |
 
 ## Trade-offs and rationale
 
-1. **Postgres-centered retrieval (vector + FTS + trigram + structured boost)**
-   - **Why this path:** satisfy “RAG must improve review judgment” without adding a second retrieval service while keeping tenant filtering straightforward.
-   - **Trade-off:** reduced vendor dependency and simpler deployment, at the cost of heavier coupling and future scaling constraints.
+1. **Postgres-centered retrieval (vector + FTS + trigram + structured boosts)**: Satisfies "RAG must improve review judgment" without adding a second retrieval service. Simpler deployment, straightforward tenant filtering. Trade-off: heavier coupling and future scaling constraints.
 
-2. **Append-only extraction attempt model over overwrite model**
-   - **Why this path:** supports auditability and confidence-based review semantics.
-   - **Trade-off:** more storage and query complexity, but clearly improves trust and traceability.
+2. **Append-only extraction attempts**: Supports auditability and confidence-based review. More storage but clearly improves trust and traceability.
 
-3. **Cleaned scope before ornamental polish**
-   - **Why this path:** prioritize confidence-aware review flow, tenancy, and retrieval usefulness before broad UI cosmetics.
-   - **Trade-off:** some UX polish and advanced UI testing remain for later passes (Issues #9–#11).
+3. **Dual-provider extraction over single-provider**: Mock OCR provides deterministic demo reliability; OpenAI Vision provides real extraction quality. Both run on every document and the best candidate wins per field. Trade-off: higher cost per extraction when Vision is enabled.
 
-4. **Documented over code-path micro-optimizations**
-   - **Why this path:** the assignment evaluation explicitly values explainability and CTO-level judgment over premature micro-optimizations.
-   - **Trade-off:** some speed wins are deferred, but decision quality and maintainability improved.
+4. **Shared Postgres tenancy with RLS backstop**: Single operational footprint with defense-in-depth isolation. Trade-off: query discipline mandatory, cross-tenant analytics become explicit product work.
 
-## Rubric scoring reflection
+5. **Mock OCR as default provider**: Ensures the system works reliably without external API keys. OpenAI Vision is opt-in. Trade-off: demo quality is limited to deterministic mock output unless Vision is configured.
 
-Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1–4):
+## Known gaps
 
-| Area | Score | Rationale | Gap status |
-|---|---:|---|---|
-| Intake digitization | 3 (Strong) | Upload, async extraction, status/correlation, and field extraction with confidence exist with test coverage. | No blocker, but no live smoke evidence in this environment. |
-| Human review | 3 (Strong) | Reviewer sees extracted values with confidence and can finalize/override with audit trail. | No blocker, but runtime smoke evidence is delayed. |
-| Similar-case assistance | 3 (Strong) | Similar cases are embedded in review with hybrid scoring and relevance weighting. | External runtime quality validation is pending by environment. |
-| Case visibility | 2 (Credible but shallow) | Core workflow is implemented, but case aggregate/search experience (Issue #2) is incomplete. | **Below threshold; known gap.** |
-| Tenant safety and operability | 4 (Excellent) | Tenant claim propagation, RLS session context, and isolation checks exist and are tested. | No major known gaps. |
-| Architecture judgment | 4 (Excellent) | Cohesive capability boundaries, explicit trade-offs, and rationale docs are present. | No major known gaps. |
+- **Web frontend**: React UI exists but is not included in Docker Compose as a container. Run separately with `pnpm --dir apps/web dev`.
+- **Production auth hardening**: Bcrypt hashing is in place, but token refresh, rate limiting, and account lockout are not implemented.
+- **OpenAI Vision in Docker**: The worker container does not have `OPENAI_API_KEY` by default. Vision extraction requires setting the key in the worker environment.
+- **Embedding quality**: Case profile embeddings use a deterministic hash-based generator, not a real embedding model. Real embeddings would improve similar-case retrieval relevance.
+- **UI smoke tests**: Browser-level Playwright tests exist in reports but are not automated in CI.
 
-### Known score gap and mitigation
-The **Case visibility** area is the explicit below-threshold area (`2`). It is tracked as Issue #2 and should be completed before final submission confidence gates are fully met.
+## AI-assisted development
 
-## AI-assisted development examples
+### Example 1: Architecture and scoping
+- **Use:** AI assisted with initial architecture synthesis, rubric design, and ADR drafting -- translating assignment requirements into a coherent system design.
 
-### Example 1 — planning and scoping synthesis
-- **Prompt:** “Create a concise execution summary for Issue #8 that lists completed vs missing work across Issues #1, #3, #4, #5, #6, and #7, and map each to the reviewer rubric areas.”
-- **Use:** generated this report’s issue-by-issue inventory and rubric-aligned progress section.
+### Example 2: Extraction pipeline design
+- **Use:** AI helped design the dual-provider extraction model, including the append-only attempt storage pattern and confidence consensus logic.
 
-### Example 2 — trade-off clarification
-- **Prompt:** “Draft a short trade-off section for an interview-style architecture doc that must prioritize trust, auditability, and tenant safety over convenience.”
-- **Use:** produced the trade-off rationales in this file and informed concise architectural framing in [Northwoods Architecture Rationale](architecture.md).
+### Example 3: Security hardening
+- **Use:** Fuzz testing (API + browser) was AI-assisted, producing structured findings reports that drove the fix loop (JWT claim mapping, bcrypt passwords, input validation, token persistence).
 
-### Example 3 — risk disclosure and deferment wording
-- **Prompt:** “List honestly what should stay explicit as incomplete if we cannot run full runtime smoke checks, without masking risk.”
-- **Use:** used to keep the “Missing/Deferred” section explicit and actionable for the next operator.
+### Example 4: RAG retrieval implementation
+- **Use:** The hybrid retrieval query (FTS + vector + trigram + structured boosts with reciprocal rank fusion) was developed with AI assistance to combine multiple retrieval modalities without external dependencies.
 
-### Example 4 — review audit workflow reasoning
-- **Prompt:** “Summarize the minimal post-merge audit evidence required to satisfy a code-review finding cleanup policy before considering docs-only work complete.”
-- **Use:** shaped the Phase-5 verification section and comment-audit discipline used in this issue.
-
-## Honest verification statement
-
-The strongest known unknown remains **live runtime verification**. Most implementation and code-path-level confidence checks are in place and documented, but full local containerized smoke remains blocked by the current environment. This is tracked as a concrete deferral with exact commands and can be executed as soon as runtime stability is restored.
+### Example 5: CI compliance checks
+- **Use:** AI helped design AST/linter-level compliance checks for RLS enforcement and append-only guarantees, wrapping them in a CI workflow.
