@@ -15,7 +15,7 @@ public enum ProcessingStatus
     Failed
 }
 
-public sealed record LoginRequest(string Email, string Password, string TenantId, UserRole Role);
+public sealed record LoginRequest(string Email, string Password, string TenantId, UserRole? Role = null);
 
 public sealed record LoginResponse(string AccessToken, string TenantId, UserRole Role);
 

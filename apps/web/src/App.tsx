@@ -5,6 +5,7 @@ import type {
   ConfidenceField,
   FinalizeReviewRequest,
   IntakeStatusResponse,
+  LoginRequest,
   LoginResponse,
   ReviewDetailResponse,
   ReviewQueueItem,
@@ -17,10 +18,11 @@ type LoginForm = {
   tenantId: string
   email: string
   password: string
-  role: UserRole
 }
 
-const loginPresets = {
+type LoginPreset = LoginForm & { role: UserRole }
+
+const loginPresets: Record<string, LoginPreset> = {
   'tenant-a:worker': {
     tenantId: 'tenant-a',
     email: 'worker@sunrise.example',
@@ -56,7 +58,7 @@ const confidenceTone = (confidence: number) => {
   return 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-500/30'
 }
 
-function SectionTitle({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) {
+const SectionTitle = ({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) => {
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">{eyebrow}</p>
@@ -90,12 +92,19 @@ export default function App() {
   const [finalizeBusy, setFinalizeBusy] = useState(false)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
 
-  const canReview = useMemo(() => auth !== null && loginForm.tenantId.length > 0, [auth, loginForm.tenantId])
+  const canReview = useMemo(
+    () => auth?.role === 1 || auth?.role === 'Reviewer',
+    [auth],
+  )
   const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
 
   const setPreset = (key: keyof typeof loginPresets) => {
     const preset = loginPresets[key]
-    setLoginForm(preset)
+    setLoginForm({
+      tenantId: preset.tenantId,
+      email: preset.email,
+      password: preset.password,
+    })
     setAuth(null)
     setAuthError(null)
     setSelectedFile(null)
@@ -109,11 +118,11 @@ export default function App() {
     setReviewerNote('')
   }
 
-  const refreshQueue = useCallback(async (tenantId: string) => {
+  const refreshQueue = useCallback(async (accessToken: string) => {
     setQueueBusy(true)
     setQueueError(null)
     try {
-      const queue = await api.getReviewQueue(tenantId)
+      const queue = await api.getReviewQueue(accessToken)
       setReviewQueue(queue)
       setSelectedReviewId((current) => current ?? queue[0]?.reviewId ?? null)
     } catch (error) {
@@ -123,8 +132,8 @@ export default function App() {
     }
   }, [])
 
-  const refreshReview = useCallback(async (tenantId: string, reviewId: string) => {
-    const detail = await api.getReview(tenantId, reviewId)
+  const refreshReview = useCallback(async (accessToken: string, reviewId: string) => {
+    const detail = await api.getReview(accessToken, reviewId)
     setReviewDetail(detail)
     setEditableFields(detail.fields.map((field) => ({ ...field })))
   }, [])
@@ -135,9 +144,9 @@ export default function App() {
     setAuthError(null)
 
     try {
-      const nextAuth = await api.login(loginForm)
+      const nextAuth = await api.login(loginForm as LoginRequest)
       setAuth(nextAuth)
-      await refreshQueue(nextAuth.tenantId)
+      await refreshQueue(nextAuth.accessToken)
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Login failed.')
     } finally {
@@ -153,11 +162,11 @@ export default function App() {
     setUploadError(null)
 
     try {
-      const created = await api.createIntake(auth.tenantId, 'general-assistance', selectedFile)
+      const created = await api.createIntake(auth.accessToken, 'general-assistance', selectedFile)
       setActiveIntakeId(created.intakeId)
-      const status = await api.getIntake(auth.tenantId, created.intakeId)
+      const status = await api.getIntake(auth.accessToken, created.intakeId)
       setIntakeStatus(status)
-      await refreshQueue(auth.tenantId)
+      await refreshQueue(auth.accessToken)
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Upload failed.')
     } finally {
@@ -174,10 +183,13 @@ export default function App() {
 
     const timer = window.setInterval(async () => {
       try {
-        const status = await api.getIntake(auth.tenantId, activeIntakeId)
+        const status = await api.getIntake(auth.accessToken, activeIntakeId)
         setIntakeStatus(status)
-        if (statusLabel(status.status) === 'Review Ready' || statusLabel(status.status) === 'Finalized') {
-          await refreshQueue(auth.tenantId)
+        if (
+          statusLabel(status.status) === 'Review Ready' ||
+          statusLabel(status.status) === 'Finalized'
+        ) {
+          await refreshQueue(auth.accessToken)
           window.clearInterval(timer)
         }
       } catch {
@@ -191,7 +203,7 @@ export default function App() {
   useEffect(() => {
     if (!auth || !selectedReviewId) return
 
-    refreshReview(auth.tenantId, selectedReviewId).catch(() => {
+    refreshReview(auth.accessToken, selectedReviewId).catch(() => {
       setReviewDetail(null)
     })
   }, [auth, refreshReview, selectedReviewId])
@@ -218,13 +230,13 @@ export default function App() {
     }
 
     try {
-      await api.finalizeReview(auth.tenantId, selectedReviewId, payload)
-      await refreshReview(auth.tenantId, selectedReviewId)
+      await api.finalizeReview(auth.accessToken, selectedReviewId, payload)
+      await refreshReview(auth.accessToken, selectedReviewId)
       if (activeIntakeId === selectedReviewId) {
-        const latest = await api.getIntake(auth.tenantId, selectedReviewId)
+        const latest = await api.getIntake(auth.accessToken, selectedReviewId)
         setIntakeStatus(latest)
       }
-      await refreshQueue(auth.tenantId)
+      await refreshQueue(auth.accessToken)
     } catch (error) {
       setFinalizeError(error instanceof Error ? error.message : 'Failed to finalize review.')
     } finally {
@@ -289,32 +301,14 @@ export default function App() {
               </div>
 
               <form className="mt-5 space-y-4" onSubmit={handleLogin}>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-2 text-sm text-slate-300">
-                    <span>Tenant ID</span>
-                    <input
-                      value={loginForm.tenantId}
-                      onChange={(event) => setLoginForm((current) => ({ ...current, tenantId: event.target.value }))}
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none ring-0 placeholder:text-slate-500 focus:border-sky-400/50"
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm text-slate-300">
-                    <span>Role</span>
-                    <select
-                      value={String(loginForm.role)}
-                      onChange={(event) =>
-                        setLoginForm((current) => ({
-                          ...current,
-                          role: Number(event.target.value) as UserRole,
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none focus:border-sky-400/50"
-                    >
-                      <option value="0">Intake Worker</option>
-                      <option value="1">Reviewer</option>
-                    </select>
-                  </label>
-                </div>
+                <label className="block space-y-2 text-sm text-slate-300">
+                  <span>Tenant ID</span>
+                  <input
+                    value={loginForm.tenantId}
+                    onChange={(event) => setLoginForm((current) => ({ ...current, tenantId: event.target.value }))}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-sky-400/50"
+                  />
+                </label>
 
                 <label className="block space-y-2 text-sm text-slate-300">
                   <span>Email</span>
@@ -440,7 +434,7 @@ export default function App() {
                 <button
                   type="button"
                   disabled={!auth || queueBusy}
-                  onClick={() => auth && refreshQueue(auth.tenantId)}
+                  onClick={() => auth && refreshQueue(auth.accessToken)}
                   className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-sky-400/40 hover:text-white disabled:cursor-not-allowed disabled:text-slate-500"
                 >
                   {queueBusy ? 'Refreshing…' : 'Refresh queue'}
@@ -514,7 +508,9 @@ export default function App() {
                     {editableFields.map((field, index) => (
                       <div
                         key={field.fieldKey}
-                        className={`rounded-2xl border p-4 ${field.requiresReview ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/10 bg-slate-950/60'}`}
+                        className={`rounded-2xl border p-4 ${
+                          field.requiresReview ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/10 bg-slate-950/60'
+                        }`}
                       >
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div>
@@ -525,7 +521,6 @@ export default function App() {
                             {(field.confidence * 100).toFixed(0)}% confidence
                           </span>
                         </div>
-
                         <textarea
                           value={field.value}
                           onChange={(event) => handleFieldChange(index, event.target.value)}

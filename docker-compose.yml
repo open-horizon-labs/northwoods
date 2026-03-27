@@ -45,6 +45,10 @@ services:
       Minio__SecretKey: northwoods
       Minio__BucketName: intakes
       Minio__PublicEndpoint: localhost:9000
+      Auth__Jwt__SigningKey: change-me-at-least-32-chars-for-hs256
+      Auth__Jwt__Issuer: northwoods-api
+      Auth__Jwt__Audience: northwoods-web
+      Auth__ReviewerCanUpload: false
     ports:
       - "5100:8080"
     depends_on:

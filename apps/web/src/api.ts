@@ -11,10 +11,13 @@ import type {
 
 const API_BASE = '/api'
 
-const jsonHeaders = (tenantId?: string) => ({
+const jsonHeaders = (accessToken?: string) => ({
   'Content-Type': 'application/json',
-  ...(tenantId ? { 'X-Tenant-Id': tenantId } : {}),
+  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
 })
+
+const authHeader = (accessToken?: string) =>
+  accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -35,44 +38,44 @@ export const api = {
     return handleResponse<LoginResponse>(response)
   },
 
-  createIntake: async (tenantId: string, templateId: string, file: File) => {
+  createIntake: async (accessToken: string, templateId: string, file: File) => {
     const form = new FormData()
     form.append('templateId', templateId)
     form.append('file', file)
 
     const response = await fetch(`${API_BASE}/intakes`, {
       method: 'POST',
-      headers: tenantId ? { 'X-Tenant-Id': tenantId } : undefined,
+      headers: authHeader(accessToken),
       body: form,
     })
     return handleResponse<CreateIntakeResponse>(response)
   },
 
-  getIntake: async (tenantId: string, intakeId: string) => {
+  getIntake: async (accessToken: string, intakeId: string) => {
     const response = await fetch(`${API_BASE}/intakes/${intakeId}`, {
-      headers: tenantId ? { 'X-Tenant-Id': tenantId } : undefined,
+      headers: authHeader(accessToken),
     })
     return handleResponse<IntakeStatusResponse>(response)
   },
 
-  getReviewQueue: async (tenantId: string) => {
+  getReviewQueue: async (accessToken: string) => {
     const response = await fetch(`${API_BASE}/review-queue`, {
-      headers: tenantId ? { 'X-Tenant-Id': tenantId } : undefined,
+      headers: authHeader(accessToken),
     })
     return handleResponse<ReviewQueueItem[]>(response)
   },
 
-  getReview: async (tenantId: string, reviewId: string) => {
+  getReview: async (accessToken: string, reviewId: string) => {
     const response = await fetch(`${API_BASE}/reviews/${reviewId}`, {
-      headers: tenantId ? { 'X-Tenant-Id': tenantId } : undefined,
+      headers: authHeader(accessToken),
     })
     return handleResponse<ReviewDetailResponse>(response)
   },
 
-  finalizeReview: async (tenantId: string, reviewId: string, payload: FinalizeReviewRequest) => {
+  finalizeReview: async (accessToken: string, reviewId: string, payload: FinalizeReviewRequest) => {
     const response = await fetch(`${API_BASE}/reviews/${reviewId}/finalize`, {
       method: 'POST',
-      headers: jsonHeaders(tenantId),
+      headers: jsonHeaders(accessToken),
       body: JSON.stringify(payload),
     })
     return handleResponse<FinalizeReviewResponse>(response)

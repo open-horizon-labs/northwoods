@@ -1,4 +1,10 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Dapper;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using Northwoods.Contracts;
 using Northwoods.Tenancy;
@@ -7,6 +13,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("ConnectionStrings:Default is required.");
+
+var jwtSigningSecret = builder.Configuration["Auth:Jwt:SigningKey"]
+    ?? throw new InvalidOperationException("Auth:Jwt:SigningKey is required.");
+
+var jwtSigningKeyBytes = Encoding.UTF8.GetBytes(jwtSigningSecret);
+if (jwtSigningKeyBytes.Length < 32)
+{
+    throw new InvalidOperationException("Auth:Jwt:SigningKey must be at least 32 bytes when UTF-8 encoded.");
+}
+
+var jwtSigningCredentials = new SigningCredentials(new SymmetricSecurityKey(jwtSigningKeyBytes), SecurityAlgorithms.HmacSha256);
+var jwtIssuer = builder.Configuration["Auth:Jwt:Issuer"] ?? "northwoods-api";
+var jwtAudience = builder.Configuration["Auth:Jwt:Audience"] ?? "northwoods-web";
+var jwtExpiration = TimeSpan.FromMinutes(builder.Configuration.GetValue("Auth:Jwt:ExpiresInMinutes", 120));
+var reviewersCanUpload = builder.Configuration.GetValue("Auth:ReviewerCanUpload", false);
 
 var db = new DbConnectionFactory(connectionString);
 var store = new ObjectStore(
@@ -21,111 +42,135 @@ builder.Services.AddSingleton(store);
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks()
     .AddCheck("postgres", new PostgresHealthCheck(connectionString));
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = jwtSigningCredentials.Key,
+            ClockSkew = TimeSpan.FromMinutes(1),
+            RoleClaimType = AuthClaims.Role
+        };
+    });
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
 // Ensure the MinIO bucket exists on startup
 await store.EnsureBucketAsync();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapOpenApi();
 app.MapHealthChecks("/healthz");
 
-// --- Helpers ---
-
-static string? TenantId(HttpRequest r) =>
-    r.Headers[TenantHeaders.TenantId].ToString() is { Length: > 0 } v ? v : null;
-
-static ProcessingStatus ParseStatus(string dbStatus) => dbStatus switch
-{
-    "uploaded" => ProcessingStatus.Uploaded,
-    "extracting" => ProcessingStatus.Extracting,
-    "review_ready" => ProcessingStatus.ReviewReady,
-    "finalized" => ProcessingStatus.Finalized,
-    "failed" => ProcessingStatus.Failed,
-    _ => throw new ArgumentException($"Unknown status: {dbStatus}")
-};
-
 // --- Auth ---
-
 app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFactory) =>
 {
     await using var session = await dbFactory.OpenSessionAsync(request.TenantId);
-    var user = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string role)>(
-        "SELECT id, role FROM users WHERE email = @Email AND tenant_id = @TenantId",
+    var user = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string role, string password_hash)>(
+        "SELECT id, role, password_hash FROM users WHERE email = @Email AND tenant_id = @TenantId",
         new { request.Email, request.TenantId },
         session.Transaction);
 
-    if (user == default)
+    if (user == default || !VerifyPassword(request.Password, user.password_hash))
         return Results.Unauthorized();
 
-    var token = $"dev-token::{request.TenantId}::{user.role}::{user.id}";
-    var role = Enum.Parse<UserRole>(user.role);
+    if (!Enum.TryParse<UserRole>(user.role, true, out var role))
+        return Results.Unauthorized();
+
+    var token = CreateJwt(
+        user.id,
+        request.TenantId,
+        role,
+        jwtSigningCredentials,
+        jwtIssuer,
+        jwtAudience,
+        jwtExpiration);
+
     return Results.Ok(new LoginResponse(token, request.TenantId, role));
 })
-.WithName("Login").WithTags("Auth")
-.WithSummary("Authenticates a user and returns a dev token with tenant context.");
+    .WithName("Login").WithTags("Auth")
+    .WithSummary("Authenticates a user and returns a signed JWT access token.");
 
 // --- Intakes ---
-
-app.MapPost("/intakes", async (HttpRequest httpRequest, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
+app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
 {
-    var tenantId = TenantId(httpRequest);
-    if (tenantId is null) return Results.BadRequest(new { error = "Missing tenant header." });
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+        return Results.Unauthorized();
 
-    var form = await httpRequest.ReadFormAsync();
+    if (!CanUpload(authContext.Role, reviewersCanUpload))
+        return Results.Forbid();
+
+    var form = await httpContext.Request.ReadFormAsync();
     var file = form.Files["file"];
     var templateId = form["templateId"].ToString();
 
     if (file is null || string.IsNullOrWhiteSpace(templateId))
         return Results.BadRequest(new { error = "file and templateId are required." });
 
-    // Get the acting user (for now, use the first intake worker for this tenant)
-    await using var session = await dbFactory.OpenSessionAsync(tenantId);
-    var userId = await session.Connection.QueryFirstOrDefaultAsync<Guid>(
-        "SELECT id FROM users WHERE tenant_id = @tenantId AND role = 'IntakeWorker' LIMIT 1",
-        new { tenantId },
-        session.Transaction);
-
-    if (userId == default)
-        return Results.Unauthorized();
-
     // Upload to MinIO
     var docId = Guid.NewGuid();
-    var fileKey = $"{tenantId}/{docId}/{file.FileName}";
+    var fileKey = $"{authContext.TenantId}/{docId}/{file.FileName}";
     await using var stream = file.OpenReadStream();
     await objectStore.UploadAsync(fileKey, stream, file.ContentType ?? "application/octet-stream");
 
-    // Insert document record
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
     await session.Connection.ExecuteAsync(
         """
         INSERT INTO documents (id, tenant_id, template_id, uploaded_by, original_file_key, original_file_name, status)
         VALUES (@Id, @TenantId, @TemplateId, @UploadedBy, @FileKey, @FileName, 'uploaded')
         """,
-        new { Id = docId, TenantId = tenantId, TemplateId = templateId, UploadedBy = userId, FileKey = fileKey, FileName = file.FileName },
+        new
+        {
+            Id = docId,
+            TenantId = authContext.TenantId,
+            TemplateId = templateId,
+            UploadedBy = authContext.UserId,
+            FileKey = fileKey,
+            FileName = file.FileName
+        },
         session.Transaction);
 
-    // Audit
     await session.Connection.ExecuteAsync(
         """
         INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
         VALUES (@DocId, @TenantId, 'intake_uploaded', @ActorId, @Details::jsonb)
         """,
-        new { DocId = docId, TenantId = tenantId, ActorId = userId, Details = $"{{\"template\":\"{templateId}\",\"file\":\"{file.FileName}\"}}" },
+        new
+        {
+            DocId = docId,
+            TenantId = authContext.TenantId,
+            ActorId = authContext.UserId,
+            Details = $"{{\"template\":\"{templateId}\",\"file\":\"{file.FileName}\"}}"
+        },
         session.Transaction);
 
     await session.CommitAsync();
+
     return Results.Accepted($"/intakes/{docId}", new CreateIntakeResponse(docId, ProcessingStatus.Uploaded));
 })
-.WithName("CreateIntake").WithTags("Intakes")
-.WithSummary("Uploads a document and creates an intake record.")
-.DisableAntiforgery();
+    .WithName("CreateIntake").WithTags("Intakes")
+    .WithSummary("Uploads a document and creates an intake record.")
+    .RequireAuthorization();
 
-app.MapGet("/intakes/{id:guid}", async (Guid id, HttpRequest httpRequest, DbConnectionFactory dbFactory) =>
+app.MapGet("/intakes/{id:guid}", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory) =>
 {
-    var tenantId = TenantId(httpRequest);
-    if (tenantId is null) return Results.BadRequest(new { error = "Missing tenant header." });
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+        return Results.Unauthorized();
 
-    await using var session = await dbFactory.OpenSessionAsync(tenantId);
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string tenant_id, string template_id, string status)>(
         "SELECT id, tenant_id, template_id, status FROM documents WHERE id = @Id",
@@ -140,7 +185,8 @@ app.MapGet("/intakes/{id:guid}", async (Guid id, HttpRequest httpRequest, DbConn
                COALESCE(corrected_value, extracted_value) AS Value,
                confidence AS Confidence,
                requires_review AS RequiresReview
-        FROM extracted_fields WHERE document_id = @Id
+        FROM extracted_fields
+        WHERE document_id = @Id
         """,
         new { Id = id },
         session.Transaction)).ToList();
@@ -148,17 +194,18 @@ app.MapGet("/intakes/{id:guid}", async (Guid id, HttpRequest httpRequest, DbConn
     var status = ParseStatus(doc.status);
     return Results.Ok(new IntakeStatusResponse(doc.id, doc.tenant_id, doc.template_id, status, fields));
 })
-.WithName("GetIntake").WithTags("Intakes")
-.WithSummary("Returns intake processing state and extracted draft fields.");
+    .WithName("GetIntake").WithTags("Intakes")
+    .WithSummary("Returns intake processing state and extracted draft fields.")
+    .RequireAuthorization();
 
 // --- Reviews ---
-
-app.MapGet("/review-queue", async (HttpRequest httpRequest, DbConnectionFactory dbFactory) =>
+app.MapGet("/review-queue", async (HttpContext httpContext, DbConnectionFactory dbFactory) =>
 {
-    var tenantId = TenantId(httpRequest);
-    if (tenantId is null) return Results.BadRequest(new { error = "Missing tenant header." });
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+        return Results.Unauthorized();
 
-    await using var session = await dbFactory.OpenSessionAsync(tenantId);
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var items = (await session.Connection.QueryAsync<ReviewQueueItem>(
         """
@@ -174,15 +221,17 @@ app.MapGet("/review-queue", async (HttpRequest httpRequest, DbConnectionFactory 
 
     return Results.Ok(items);
 })
-.WithName("GetReviewQueue").WithTags("Reviews")
-.WithSummary("Returns documents awaiting review for the active tenant.");
+    .WithName("GetReviewQueue").WithTags("Reviews")
+    .WithSummary("Returns documents awaiting review for the active tenant.")
+    .RequireAuthorization();
 
-app.MapGet("/reviews/{id:guid}", async (Guid id, HttpRequest httpRequest, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
+app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
 {
-    var tenantId = TenantId(httpRequest);
-    if (tenantId is null) return Results.BadRequest(new { error = "Missing tenant header." });
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+        return Results.Unauthorized();
 
-    await using var session = await dbFactory.OpenSessionAsync(tenantId);
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string tenant_id, string template_id, string status, string original_file_key)>(
         "SELECT id, tenant_id, template_id, status, original_file_key FROM documents WHERE id = @Id",
@@ -197,7 +246,8 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpRequest httpRequest, DbConn
                COALESCE(corrected_value, extracted_value) AS Value,
                confidence AS Confidence,
                requires_review AS RequiresReview
-        FROM extracted_fields WHERE document_id = @Id
+        FROM extracted_fields
+        WHERE document_id = @Id
         """,
         new { Id = id },
         session.Transaction)).ToList();
@@ -207,22 +257,27 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpRequest httpRequest, DbConn
         new { Id = id },
         session.Transaction)).ToList();
 
-    var similarCases = await FindSimilarCasesAsync(session.Connection, session.Transaction, id, tenantId, doc.template_id, fields, 5);
+    var similarCases = await FindSimilarCasesAsync(session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5);
 
     var sourceUrl = objectStore.GetPresignedUrl(doc.original_file_key, TimeSpan.FromMinutes(15));
     var status = ParseStatus(doc.status);
 
     return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, fields, similarCases, auditEvents));
 })
-.WithName("GetReview").WithTags("Reviews")
-.WithSummary("Returns the document, extracted fields, and audit trail for a review task.");
+    .WithName("GetReview").WithTags("Reviews")
+    .WithSummary("Returns the document, extracted fields, and audit trail for a review task.")
+    .RequireAuthorization();
 
-app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest request, HttpRequest httpRequest, DbConnectionFactory dbFactory) =>
+app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest request, HttpContext httpContext, DbConnectionFactory dbFactory) =>
 {
-    var tenantId = TenantId(httpRequest);
-    if (tenantId is null) return Results.BadRequest(new { error = "Missing tenant header." });
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+        return Results.Unauthorized();
 
-    await using var session = await dbFactory.OpenSessionAsync(tenantId);
+    if (authContext.Role != UserRole.Reviewer)
+        return Results.Forbid();
+
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string status)>(
         "SELECT id, status FROM documents WHERE id = @Id",
@@ -233,7 +288,6 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
     if (doc.status != "review_ready")
         return Results.BadRequest(new { error = $"Document is in '{doc.status}' state, not review_ready." });
 
-    // Apply corrections
     foreach (var field in request.Fields)
     {
         await session.Connection.ExecuteAsync(
@@ -252,22 +306,105 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
         new { Id = id },
         session.Transaction);
 
-    // Audit
     await session.Connection.ExecuteAsync(
         """
-        INSERT INTO audit_events (document_id, tenant_id, event_type, details)
-        VALUES (@DocId, @TenantId, 'finalized', @Details::jsonb)
+        INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
+        VALUES (@DocId, @TenantId, 'finalized', @ActorId, @Details::jsonb)
         """,
-        new { DocId = id, TenantId = tenantId, Details = $"{{\"note\":\"{request.ReviewerNote}\"}}" },
+        new
+        {
+            DocId = id,
+            TenantId = authContext.TenantId,
+            ActorId = authContext.UserId,
+            Details = $"{{\"note\":\"{request.ReviewerNote}\"}}"
+        },
         session.Transaction);
 
     await session.CommitAsync();
     return Results.Ok(new FinalizeReviewResponse(id, ProcessingStatus.Finalized));
 })
-.WithName("FinalizeReview").WithTags("Reviews")
-.WithSummary("Persists reviewer corrections and finalizes the intake record.");
+    .WithName("FinalizeReview").WithTags("Reviews")
+    .WithSummary("Persists reviewer corrections and finalizes the intake record.")
+    .RequireAuthorization();
 
 app.Run();
+
+static bool CanUpload(UserRole role, bool reviewersCanUpload) =>
+    role == UserRole.IntakeWorker || (reviewersCanUpload && role == UserRole.Reviewer);
+
+static AuthContext? GetAuthContext(ClaimsPrincipal principal)
+{
+    if (principal.Identity is not { IsAuthenticated: true })
+        return null;
+
+    var tenantId = principal.FindFirstValue(AuthClaims.TenantId);
+    var userIdValue = principal.FindFirstValue(AuthClaims.UserId) ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+    var roleValue = principal.FindFirstValue(AuthClaims.Role);
+
+    if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(userIdValue) || string.IsNullOrWhiteSpace(roleValue))
+        return null;
+
+    if (!Guid.TryParse(userIdValue, out var userId))
+        return null;
+
+    if (!Enum.TryParse<UserRole>(roleValue, true, out var role))
+        return null;
+
+    return new AuthContext(userId, tenantId, role);
+}
+
+static string CreateJwt(
+    Guid userId,
+    string tenantId,
+    UserRole role,
+    SigningCredentials credentials,
+    string issuer,
+    string audience,
+    TimeSpan lifetime)
+{
+    var now = DateTime.UtcNow;
+    var descriptor = new SecurityTokenDescriptor
+    {
+        Subject = new ClaimsIdentity(new[]
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new Claim(AuthClaims.UserId, userId.ToString()),
+            new Claim(AuthClaims.TenantId, tenantId),
+            new Claim(AuthClaims.Role, role.ToString())
+        }),
+        NotBefore = now,
+        IssuedAt = now,
+        Expires = now.Add(lifetime),
+        SigningCredentials = credentials,
+        Issuer = issuer,
+        Audience = audience
+    };
+
+    var handler = new JwtSecurityTokenHandler();
+    var token = handler.CreateToken(descriptor);
+    return handler.WriteToken(token);
+}
+
+static bool VerifyPassword(string requestPassword, string passwordHash)
+{
+    var requestBytes = Encoding.UTF8.GetBytes(requestPassword);
+    var storedBytes = Encoding.UTF8.GetBytes(passwordHash);
+
+    if (requestBytes.Length != storedBytes.Length)
+        return false;
+
+    return CryptographicOperations.FixedTimeEquals(requestBytes, storedBytes);
+}
+
+static ProcessingStatus ParseStatus(string dbStatus) => dbStatus switch
+{
+    "uploaded" => ProcessingStatus.Uploaded,
+    "extracting" => ProcessingStatus.Extracting,
+    "review_ready" => ProcessingStatus.ReviewReady,
+    "finalized" => ProcessingStatus.Finalized,
+    "failed" => ProcessingStatus.Failed,
+    _ => throw new ArgumentException($"Unknown status: {dbStatus}")
+};
 
 static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
     NpgsqlConnection connection,
@@ -291,15 +428,13 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
         "SELECT EXISTS(SELECT 1 FROM case_profiles WHERE document_id = @Id AND tenant_id = @TenantId)::int",
         new { Id = sourceDocumentId, TenantId = tenantId },
         transaction);
-
     if (sourceExists == 0)
     {
         return [];
     }
 
     var ranked = (await connection.QueryAsync<SimilarCaseCandidate>(
-        """
-        WITH target AS (
+        @"WITH target AS (
             SELECT tenant_id, template_id, search_tsv, search_text, embedding, applicant_name, date_of_birth, address
             FROM case_profiles
             WHERE document_id = @Id AND tenant_id = @TenantId
@@ -391,7 +526,7 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
         JOIN case_profiles cp ON cp.document_id = f.document_id
         ORDER BY f.match_score DESC, cp.applicant_name NULLS LAST
         LIMIT @Limit;
-        """,
+        ",
         new { Id = sourceDocumentId, TenantId = tenantId, Limit = limit },
         transaction)).ToList();
 
@@ -402,13 +537,12 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
 
     var candidateIds = ranked.Select(r => r.IntakeId).ToArray();
     var fieldsByCase = (await connection.QueryAsync<CaseFieldValue>(
-        """
-        SELECT document_id AS IntakeId,
+        @"SELECT document_id AS IntakeId,
                field_key AS FieldKey,
                COALESCE(corrected_value, extracted_value) AS Value
         FROM extracted_fields
         WHERE document_id = ANY(@CandidateIds)
-        """,
+        ",
         new { CandidateIds = candidateIds },
         transaction))
         .ToLookup(r => r.IntakeId, r => r)
@@ -478,19 +612,20 @@ static string BuildCaseSummary(
 static async Task<bool> SupportsCaseProfiles(NpgsqlConnection connection, NpgsqlTransaction transaction)
 {
     var exists = await connection.ExecuteScalarAsync<int>(
-        """
+        @"
         SELECT EXISTS(
             SELECT 1
             FROM pg_class
             WHERE relname = 'case_profiles'
               AND relkind = 'r'
         )::int
-        """,
+        ",
         transaction: transaction);
 
     return exists == 1;
 }
 
+file sealed record AuthContext(Guid UserId, string TenantId, UserRole Role);
 file sealed record SimilarCaseCandidate(
     Guid IntakeId,
     string TemplateId,
@@ -498,7 +633,6 @@ file sealed record SimilarCaseCandidate(
     string? DateOfBirth,
     string? Address,
     decimal MatchScore);
-
 file sealed record CaseFieldValue(
     Guid IntakeId,
     string FieldKey,
