@@ -42,6 +42,15 @@ export type ReviewQueueItem = {
   uncertainFieldCount: number
 }
 
+export type SimilarCase = {
+  reviewId: string
+  intakeId: string
+  applicantName: string
+  templateId: string
+  matchScore: number
+  summary: string
+}
+
 export type ReviewDetailResponse = {
   reviewId: string
   intakeId: string
@@ -50,6 +59,7 @@ export type ReviewDetailResponse = {
   sourceDocumentUrl: string
   status: ProcessingStatus
   fields: ConfidenceField[]
+  similarCases: SimilarCase[]
   auditEvents: string[]
 }
 
