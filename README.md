@@ -150,6 +150,48 @@ Notable flags:
 - `OPENAI_API_KEY=...`
 - `Extraction__MaxRetryAttempts=3`
 
+## Live demo
+
+A deployed instance is running at **https://northwoods.muness.com**.
+
+### Demo credentials
+
+| Email | Password | Tenant | Role |
+|---|---|---|---|
+| worker@sunrise.example | password | Sunrise (tenant-a) | Intake Worker |
+| reviewer@sunrise.example | password | Sunrise (tenant-a) | Reviewer |
+| worker@lakewood.example | password | Lakewood (tenant-b) | Intake Worker |
+| reviewer@lakewood.example | password | Lakewood (tenant-b) | Reviewer |
+
+Login as an **Intake Worker** to reach the upload dashboard (mobile-first, template select + file attach + status polling).
+Login as a **Reviewer** to reach the review queue (desktop-optimized, confidence indicators, similar-case panel, finalize action).
+
+### Developer scaffold
+
+The developer scaffold (preset login buttons, raw API explorer) is not linked from the main UI. Navigate directly to:
+
+```
+https://northwoods.muness.com/#dev
+```
+
+### Deployment topology
+
+Hosted on [Render](https://render.com). Blueprint in `render.yaml`.
+
+| Service | Description |
+|---|---|
+| northwoods-api | .NET API (Docker, Render Web Service) |
+| northwoods-worker | .NET extraction worker (Docker, Render Background Worker) |
+| northwoods-minio | MinIO S3-compatible object store (Docker, Render Web Service) |
+| northwoods-web | React/nginx frontend (Docker, Render Web Service) |
+| northwoods-db | Render Managed Postgres 18 |
+
+Custom domain `northwoods.muness.com` is a Cloudflare CNAME pointing to the Render frontend service.
+OpenAI vision extraction is enabled in the live environment (`Extraction__UseOpenAiVision=true`, `gpt-5.4-nano`).
+Paddle OCR is disabled in production (local Python dependency not available in the Docker image).
+
+Deployment notes and obstacles encountered during the initial Render setup are in `.oh/2026-03-27-morning-sprint.md` under "Render Deployment (Issue #35)".
+
 ## Observability
 
 - API and worker emit structured JSON logs with scope metadata.
