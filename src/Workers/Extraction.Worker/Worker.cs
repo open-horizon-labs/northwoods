@@ -196,8 +196,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 tx);
 
             var fieldSchemaJson = await conn.QueryFirstOrDefaultAsync<string>(
-                "SELECT field_schema FROM templates WHERE id = @Id",
-                new { Id = templateId },
+                "SELECT field_schema FROM templates WHERE id = @Id AND tenant_id = @TenantId",
+                new { Id = templateId, TenantId = tenantId },
                 tx);
 
             var fieldKeys = ExtractTemplateKeys(fieldSchemaJson).ToList();
