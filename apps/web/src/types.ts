@@ -118,3 +118,31 @@ export const roleLabel = (role: UserRole) => {
       return String(role)
   }
 }
+
+
+export type SearchResultItem = {
+  intakeId: string
+  templateId: string
+  applicantName: string
+  status: string
+  confidence: number
+  snippet: string
+}
+
+export type SearchResponse = {
+  query: string
+  results: SearchResultItem[]
+}
+
+export type CaseDocumentItem = {
+  intakeId: string
+  templateId: string
+  status: string
+  createdAt: string
+  fields: ConfidenceField[]
+}
+
+export type CaseAggregateResponse = {
+  personKey: string
+  documents: CaseDocumentItem[]
+}

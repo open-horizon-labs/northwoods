@@ -2,6 +2,8 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react
 
 import { api } from './api'
 import type {
+  CaseAggregateResponse,
+  CaseDocumentItem,
   ConfidenceField,
   FinalizeReviewRequest,
   IntakeStatusResponse,
@@ -9,6 +11,7 @@ import type {
   LoginResponse,
   ReviewDetailResponse,
   ReviewQueueItem,
+  SearchResultItem,
   SimilarCase,
   TemplateDescriptor,
   UserRole,
@@ -186,6 +189,16 @@ export default function App() {
   const [reviewLoading, setReviewLoading] = useState(false)
   const [reviewLoadError, setReviewLoadError] = useState<string | null>(null)
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
+  const [searchBusy, setSearchBusy] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchPerformed, setSearchPerformed] = useState(false)
+
+  const [caseView, setCaseView] = useState<CaseAggregateResponse | null>(null)
+  const [caseBusy, setCaseBusy] = useState(false)
+  const [caseError, setCaseError] = useState<string | null>(null)
+
   const canReview = useMemo(() => auth?.role === 1 || auth?.role === 'Reviewer', [auth])
 
   const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
@@ -255,6 +268,12 @@ export default function App() {
     setEditableFields([])
     setReviewerNote('')
     setReviewQueueSearch('')
+    setSearchQuery('')
+    setSearchResults([])
+    setSearchError(null)
+    setSearchPerformed(false)
+    setCaseView(null)
+    setCaseError(null)
   }
 
   const refreshQueue = useCallback(async (accessToken: string) => {
@@ -448,6 +467,42 @@ export default function App() {
     }
   }
 
+  const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!auth || !searchQuery.trim()) return
+
+    setSearchBusy(true)
+    setSearchError(null)
+    setSearchPerformed(true)
+
+    try {
+      const response = await api.search(auth.accessToken, searchQuery.trim())
+      setSearchResults(response.results)
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : 'Search failed.')
+      setSearchResults([])
+    } finally {
+      setSearchBusy(false)
+    }
+  }
+
+  const openCaseView = async (personKey: string) => {
+    if (!auth) return
+
+    setCaseBusy(true)
+    setCaseError(null)
+
+    try {
+      const response = await api.getCaseAggregate(auth.accessToken, personKey)
+      setCaseView(response)
+    } catch (error) {
+      setCaseError(error instanceof Error ? error.message : 'Failed to load case.')
+      setCaseView(null)
+    } finally {
+      setCaseBusy(false)
+    }
+  }
+
   return (
     <>
       <a
@@ -483,6 +538,12 @@ export default function App() {
                 </a>
                 <a href="#section-review" className={`${navLinkClass} ${FOCUS_RING}`}>
                   4. Review detail
+                </a>
+                <a href="#section-search" className={`${navLinkClass} ${FOCUS_RING}`}>
+                  5. Search
+                </a>
+                <a href="#section-case" className={`${navLinkClass} ${FOCUS_RING}`}>
+                  6. Case view
                 </a>
               </nav>
             </div>
@@ -1023,6 +1084,181 @@ export default function App() {
                 )}
               </section>
             </div>
+          </section>
+
+          <section id="section-search" className={sectionClass} aria-labelledby="section-search-title">
+            <SectionTitle
+              titleId="section-search-title"
+              eyebrow="5 · Search"
+              title="Search processed intakes"
+              description="Full-text and fuzzy search across all extracted fields within your tenant."
+            />
+
+            <form className="mt-5 flex gap-3" onSubmit={handleSearch} noValidate>
+              <label htmlFor="search-query" className="sr-only">Search query</label>
+              <input
+                id="search-query"
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search by name, address, or any extracted field"
+                className={`${inputInteractive} flex-1`}
+                required
+                aria-required="true"
+              />
+              <button
+                type="submit"
+                disabled={!auth || searchBusy || !searchQuery.trim()}
+                className={focusablePrimary}
+              >
+                {searchBusy ? 'Searching\u2026' : 'Search'}
+              </button>
+            </form>
+
+            {searchError ? (
+              <p role="alert" aria-live="assertive" className="mt-4 text-sm text-rose-700">
+                {searchError}
+              </p>
+            ) : null}
+
+            {searchBusy ? (
+              <p className="mt-4 text-sm text-slate-600" role="status" aria-live="polite">
+                Searching\u2026
+              </p>
+            ) : searchResults.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs text-slate-600" role="status" aria-live="polite">
+                  {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+                </p>
+                <ul className="space-y-3" role="list">
+                  {searchResults.map((item) => {
+                    const confidence = confidenceTone(item.confidence)
+                    return (
+                      <li key={item.intakeId}>
+                        <button
+                          type="button"
+                          onClick={() => void openCaseView(item.applicantName)}
+                          className={`${focusableSecondary} w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-left`}
+                          aria-label={`View case for ${item.applicantName}`}
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-slate-900">{item.applicantName}</p>
+                              <p className="text-xs text-slate-600">
+                                Template {item.templateId} · Status {item.status}
+                              </p>
+                              {item.snippet ? (
+                                <p className="mt-1 text-xs leading-relaxed text-slate-700"
+                                  dangerouslySetInnerHTML={{
+                                    __html: item.snippet
+                                      .replace(/\*\*/g, '<mark class="bg-amber-100 px-0.5 rounded">')
+                                      .replace(/<mark[^>]*>[^<]*$/g, (m) => m + '</mark>')
+                                  }}
+                                />
+                              ) : null}
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${confidence.className}`}
+                            >
+                              {confidencePercent(item.confidence)}
+                            </span>
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ) : searchPerformed ? (
+              <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+                No results found for your search query. Try different keywords or check spelling.
+              </div>
+            ) : null}
+          </section>
+
+          <section id="section-case" className={sectionClass} aria-labelledby="section-case-title">
+            <SectionTitle
+              titleId="section-case-title"
+              eyebrow="6 · Case view"
+              title="Aggregated case documents"
+              description="All documents for a person across templates and statuses. Click a search result to view their case."
+            />
+
+            {caseError ? (
+              <p role="alert" aria-live="assertive" className="mt-4 text-sm text-rose-700">
+                {caseError}
+              </p>
+            ) : null}
+
+            {caseBusy ? (
+              <p className="mt-4 text-sm text-slate-600" role="status" aria-live="polite">
+                Loading case\u2026
+              </p>
+            ) : caseView ? (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-base font-semibold text-slate-900">{caseView.personKey}</p>
+                  <p className="text-xs text-slate-600">{caseView.documents.length} document{caseView.documents.length === 1 ? '' : 's'}</p>
+                </div>
+
+                {caseView.documents.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+                    No documents found for this person in your tenant.
+                  </div>
+                ) : (
+                  <ul className="space-y-4" role="list">
+                    {caseView.documents.map((doc: CaseDocumentItem) => (
+                      <li key={doc.intakeId} className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">
+                              Template {doc.templateId}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              Created {new Date(doc.createdAt).toLocaleDateString()} · Status {doc.status}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReviewId(doc.intakeId)}
+                            className={focusableSecondary}
+                          >
+                            Open review
+                          </button>
+                        </div>
+
+                        {doc.fields.length > 0 ? (
+                          <ul className="space-y-1">
+                            {doc.fields.map((field) => {
+                              const confidence = confidenceTone(field.confidence)
+                              return (
+                                <li
+                                  key={field.fieldKey}
+                                  className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-1.5 text-sm"
+                                >
+                                  <span className="text-slate-700">{field.fieldKey}: <span className="font-medium text-slate-900">{field.value}</span></span>
+                                  <span
+                                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidence.className}`}
+                                  >
+                                    {confidence.label}
+                                  </span>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-slate-600">No extracted fields.</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-600">
+                Search for an applicant above and click a result to view their aggregated case documents.
+              </div>
+            )}
           </section>
         </div>
       </main>
