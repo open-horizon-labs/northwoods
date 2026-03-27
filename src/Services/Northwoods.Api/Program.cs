@@ -146,6 +146,18 @@ app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFac
 // --- Auth ---
 app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFactory) =>
 {
+    var errors = new List<string>();
+    if (string.IsNullOrWhiteSpace(request.Email)) errors.Add("Email is required.");
+    if (string.IsNullOrWhiteSpace(request.Password)) errors.Add("Password is required.");
+    if (string.IsNullOrWhiteSpace(request.TenantId)) errors.Add("TenantId is required.");
+
+    static bool ContainsNullByte(string? value) => value is not null && value.Contains('\0');
+    if (ContainsNullByte(request.Email) || ContainsNullByte(request.Password) || ContainsNullByte(request.TenantId))
+        errors.Add("Fields must not contain null bytes.");
+
+    if (errors.Count > 0)
+        return Results.BadRequest(new { errors });
+
     await using var session = await dbFactory.OpenSessionAsync(request.TenantId);
     var user = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string role, string password_hash)>(
         "SELECT id, role, password_hash FROM users WHERE email = @Email AND tenant_id = @TenantId",
