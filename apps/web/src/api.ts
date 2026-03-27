@@ -1,6 +1,7 @@
 import type {
   CaseAggregateResponse,
   CreateIntakeResponse,
+  CreateTemplateRequest,
   FinalizeReviewRequest,
   FinalizeReviewResponse,
   IntakeStatusResponse,
@@ -10,6 +11,7 @@ import type {
   ReviewQueueItem,
   SearchResponse,
   TemplateDescriptor,
+  UpdateTemplateRequest,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -120,5 +122,52 @@ export const api = {
       headers: authHeader(accessToken),
     })
     return handleResponse<CaseAggregateResponse>(response)
+  },
+
+  createTemplate: async (accessToken: string, payload: CreateTemplateRequest) => {
+    const response = await fetch(`${API_BASE}/templates`, {
+      method: 'POST',
+      headers: jsonHeaders(accessToken),
+      body: JSON.stringify(payload),
+    })
+    return handleResponse<TemplateDescriptor>(response)
+  },
+
+  updateTemplate: async (accessToken: string, templateId: string, payload: UpdateTemplateRequest) => {
+    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}`, {
+      method: 'PUT',
+      headers: jsonHeaders(accessToken),
+      body: JSON.stringify(payload),
+    })
+    return handleResponse<TemplateDescriptor>(response)
+  },
+
+  archiveTemplate: async (accessToken: string, templateId: string) => {
+    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}`, {
+      method: 'DELETE',
+      headers: authHeader(accessToken),
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(text || `${response.status} ${response.statusText}`)
+    }
+  },
+
+  uploadTemplateBlankPdf: async (accessToken: string, templateId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}/blank-pdf`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+      body: form,
+    })
+    return handleResponse<{ templateId: string; blankPdfKey: string }>(response)
+  },
+
+  getTemplatesIncludingArchived: async (accessToken: string) => {
+    const response = await fetch(`${API_BASE}/templates?includeArchived`, {
+      headers: authHeader(accessToken),
+    })
+    return handleResponse<TemplateDescriptor[]>(response)
   },
 }

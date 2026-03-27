@@ -1,4 +1,4 @@
-export type UserRole = 0 | 1 | 'IntakeWorker' | 'Reviewer'
+export type UserRole = 0 | 1 | 2 | 'IntakeWorker' | 'Reviewer' | 'Admin'
 export type ProcessingStatus = 0 | 1 | 2 | 3 | 4 | 5 | 'Uploaded' | 'Extracting' | 'ReviewReady' | 'Completed' | 'Finalized' | 'Failed'
 
 export type LoginRequest = {
@@ -82,6 +82,8 @@ export type TemplateDescriptor = {
   id: string
   name: string
   fields: TemplateField[]
+  isArchived?: boolean
+  blankPdfKey?: string | null
 }
 
 export const statusLabel = (status: ProcessingStatus) => {
@@ -109,7 +111,7 @@ export const statusLabel = (status: ProcessingStatus) => {
   }
 }
 
-export const roleLabel = (role: UserRole) => {
+export const roleLabel = (role: UserRole): string => {
   switch (role) {
     case 0:
     case 'IntakeWorker':
@@ -117,6 +119,9 @@ export const roleLabel = (role: UserRole) => {
     case 1:
     case 'Reviewer':
       return 'Reviewer'
+    case 2:
+    case 'Admin':
+      return 'Admin'
     default:
       return String(role)
   }
@@ -148,4 +153,15 @@ export type CaseDocumentItem = {
 export type CaseAggregateResponse = {
   personKey: string
   documents: CaseDocumentItem[]
+}
+
+export type CreateTemplateRequest = {
+  id: string
+  name: string
+  fields: TemplateField[]
+}
+
+export type UpdateTemplateRequest = {
+  name?: string
+  fields?: TemplateField[]
 }

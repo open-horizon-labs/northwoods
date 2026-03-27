@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     email TEXT NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('IntakeWorker', 'Reviewer')),
+    role TEXT NOT NULL CHECK (role IN ('IntakeWorker', 'Reviewer', 'Admin')),
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE(tenant_id, email)
 );
@@ -35,7 +35,10 @@ CREATE TABLE IF NOT EXISTS templates (
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     field_schema JSONB NOT NULL,
+    is_archived BOOLEAN NOT NULL DEFAULT false,
+    blank_pdf_key TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
     PRIMARY KEY (id, tenant_id)
 );
 
@@ -121,7 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_extraction_attempts_tenant_id ON extraction_attem
 
 CREATE TABLE IF NOT EXISTS audit_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     event_type TEXT NOT NULL,
     details JSONB,
@@ -261,7 +264,8 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
     ('tenant-a', 'worker@sunrise.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'IntakeWorker'),
-    ('tenant-a', 'reviewer@sunrise.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Reviewer')
+    ('tenant-a', 'reviewer@sunrise.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Reviewer'),
+    ('tenant-a', 'admin@sunrise.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Admin')
 ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- ============================================================================
@@ -270,7 +274,8 @@ ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_h
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
     ('tenant-b', 'worker@lakewood.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'IntakeWorker'),
-    ('tenant-b', 'reviewer@lakewood.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Reviewer')
+    ('tenant-b', 'reviewer@lakewood.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Reviewer'),
+    ('tenant-b', 'admin@lakewood.example', '$2a$12$Ges77tyXLxDZgpTjeFZ0gOA8iZHj.l02hAE6kEuIke9iAwTeudQfa', 'Admin')
 ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- ============================================================================

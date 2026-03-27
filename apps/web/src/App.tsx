@@ -7,6 +7,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'))
 const WorkerDashboard = lazy(() => import('./pages/WorkerDashboard'))
 const ReviewerDashboard = lazy(() => import('./pages/ReviewerDashboard'))
 const DevPage = lazy(() => import('./pages/DevPage'))
+const AdminTemplates = lazy(() => import('./pages/AdminTemplates'))
 
 /** Hash-based routing: #dev opens the developer scaffold. */
 function useIsDevRoute(): boolean {
@@ -60,6 +61,14 @@ export default function App() {
   }
 
   const role = auth.role
+  if (role === 2 || role === 'Admin') {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <AdminTemplates auth={auth} onLogout={handleLogout} />
+      </Suspense>
+    )
+  }
+
   if (role === 0 || role === 'IntakeWorker') {
     return (
       <Suspense fallback={<Spinner />}>

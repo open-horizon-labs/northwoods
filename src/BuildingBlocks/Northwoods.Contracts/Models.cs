@@ -3,7 +3,8 @@ namespace Northwoods.Contracts;
 public enum UserRole
 {
     IntakeWorker,
-    Reviewer
+    Reviewer,
+    Admin
 }
 
 public enum ProcessingStatus
@@ -62,7 +63,18 @@ public sealed record TemplateField(string Key, string Type, bool Required = fals
 public sealed record TemplateDescriptor(
     string Id,
     string Name,
+    IReadOnlyList<TemplateField> Fields,
+    bool IsArchived = false,
+    string? BlankPdfKey = null);
+
+public sealed record CreateTemplateRequest(
+    string Id,
+    string Name,
     IReadOnlyList<TemplateField> Fields);
+
+public sealed record UpdateTemplateRequest(
+    string? Name,
+    IReadOnlyList<TemplateField>? Fields);
 
 public sealed record SearchResultItem(
     Guid IntakeId,
