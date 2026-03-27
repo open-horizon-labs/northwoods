@@ -176,3 +176,30 @@ PR: #30 | Branch: `26-login-input-validation` | Merged: `52de18c`
 **Tests:** 11 integration tests added (`LoginValidationTests.cs`), all passing.
 **CodeRabbit review:** Review incomplete (PR merged during processing). No findings posted.
 **Post-merge audit:** Clean -- 0 unaddressed comments.
+
+---
+
+### Issue #25 — Replace plaintext passwords with bcrypt hashing
+
+PR: [#31](https://github.com/open-horizon-labs/northwoods/pull/31) | Branch: `25-hash-passwords` | Merged: `e40dfc6`
+
+**Fix:** Replaced plaintext `'dev'` password storage with bcrypt hashing (cost factor 12).
+
+**Changes:**
+- `infra/postgres/init.sql`: Removed `DEFAULT 'dev'` from `password_hash` column; replaced plaintext in seed INSERTs with bcrypt hash
+- `Northwoods.Api.csproj`: Added `BCrypt.Net-Next` 4.1.0
+- `Program.cs`: Replaced `VerifyPassword` (UTF-8 byte comparison via `CryptographicOperations.FixedTimeEquals`) with `BCrypt.Net.BCrypt.Verify()`
+
+**Finding addressed:** F-05 (passwords stored as plaintext)
+
+**Smoke test results:**
+| User | Tenant | Status |
+|------|--------|--------|
+| worker@sunrise.example | tenant-a | 200 |
+| reviewer@sunrise.example | tenant-a | 200 |
+| worker@lakewood.example | tenant-b | 200 |
+| reviewer@lakewood.example | tenant-b | 200 |
+| wrong password | tenant-a | 401 |
+
+**CodeRabbit review:** Review incomplete (PR merged during processing). No findings posted.
+**Post-merge audit:** Clean -- 0 unaddressed comments.
