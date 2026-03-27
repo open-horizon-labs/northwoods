@@ -190,13 +190,16 @@ def main():
     total = 0
 
     for person in PEOPLE:
+        random.seed(f"{TEMPLATE_ID}:{person['id']}:dates")
         n_forms = BEHAVIORAL_PEOPLE.get(person["id"], 0)
         if n_forms == 0:
             continue
+
         dates = visit_dates(person["visits"])
         form_dates = dates[:n_forms]
 
         for visit_num, vdate in enumerate(form_dates, 1):
+            random.seed(f"{TEMPLATE_ID}:{person['id']}:{visit_num}:form")
             fname = f"{person['id']}_{visit_num:02d}_{TEMPLATE_ID}.pdf"
             out_path = os.path.join(STAGING, fname)
             font_name, _ = font_for_person(person["id"])
@@ -208,7 +211,6 @@ def main():
                 total += 1
             except Exception as e:
                 errors.append(f"{fname}: {e}")
-
     print(f"\n=== Behavioral Health Intake ===")
     print(f"PDFs generated: {total}")
     print(f"Font distribution: {font_counts}")

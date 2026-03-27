@@ -68,24 +68,25 @@ PEOPLE = [
 ]
 
 TENANT_IDS = {
-    "sunrise": "550e8400-e29b-41d4-a716-446655440001",
-    "lakewood": "550e8400-e29b-41d4-a716-446655440002",
+    "sunrise": "tenant-a",
+    "lakewood": "tenant-b",
 }
 
-FONTS = {
-    "verdana":      "/System/Library/Fonts/Supplemental/Verdana.ttf",
-    "arial":        "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "trebuchet":    "/System/Library/Fonts/Supplemental/Trebuchet MS.ttf",
-    "comic_sans":   "/System/Library/Fonts/Supplemental/Comic Sans MS.ttf",
-    "bradley_hand": "/System/Library/Fonts/Supplemental/Bradley Hand Bold.ttf",
-    "marker_felt":  "/System/Library/Fonts/MarkerFelt.ttc",
-    "noteworthy":   "/System/Library/Fonts/Noteworthy.ttc",
-    "chalkboard":   "/System/Library/Fonts/Supplemental/ChalkboardSE.ttc",
-}
+FONT_NAMES = [
+    "verdana",
+    "arial",
+    "trebuchet",
+    "comic_sans",
+    "bradley_hand",
+    "marker_felt",
+    "noteworthy",
+    "chalkboard",
+]
 
 # Assign fill fonts per person: spread across all styles
 import hashlib
+
+
 def font_for_person(person_id):
-    font_names = list(FONTS.keys())
-    idx = int(hashlib.md5(person_id.encode()).hexdigest(), 16) % len(font_names)
-    return font_names[idx], FONTS[font_names[idx]]
+    idx = int(hashlib.md5(person_id.encode()).hexdigest(), 16) % len(FONT_NAMES)
+    return FONT_NAMES[idx], FONT_NAMES[idx]

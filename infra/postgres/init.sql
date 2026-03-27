@@ -369,6 +369,11 @@ INSERT INTO templates (id, tenant_id, name, field_schema) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
+-- Seed synthetic corpus
+-- ============================================================================
+\i /docker-entrypoint-initdb.d/seed/seed_corpus.sql
+
+-- ============================================================================
 -- Seed synthetic historical documents for similar-case retrieval
 -- ============================================================================
 
