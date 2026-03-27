@@ -32,6 +32,13 @@ This project was developed with an AI-assisted workflow. The goal was not to out
   - `dev-pipeline` runs the full issue lifecycle: problem-statement, solution-space, execute, ship.
   - `dev-pipeline-oversight` wraps dev-pipeline with a post-merge comment audit that verifies all external review findings (CodeRabbit, human, review skill) were addressed.
   - Ensures no PR merges with unresolved Critical or Major findings.
+
+- **Impeccable design skills (`.claude/skills/`)**
+  - A suite of design-focused skills for systematic UI quality: `audit`, `normalize`, `polish`, `harden`, `critique`, `adapt`, `simplify`, `clarify`, `optimize`, `onboard`, `colorize`, `bolder`, `quieter`, `delight`, `animate`, `extract`, and `frontend-design`.
+  - `teach-impeccable` gathers project design context and persists it in AGENTS.md so all future sessions follow the same aesthetic direction.
+  - `audit` runs comprehensive diagnostics across accessibility, theming, responsive design, performance, and anti-patterns.
+  - `frontend-design` provides the creative direction framework and AI slop detection criteria.
+  - These skills are used in sequence: audit to find issues, then targeted skills (normalize, harden, polish) to fix them.
 - **Oh My Pi fork (`.oh-omp/`)**
   - Local fork used as the coding harness.
   - Handles context assembly so the model can work with repository state, skill guidance, artifacts, and tool outputs in a more grounded way.
