@@ -335,6 +335,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
                   required
                   aria-required="true"
                   aria-describedby="file-help"
+                  aria-labelledby="file-label"
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedFile(e.target.files?.[0] ?? null)}
                   disabled={uploadBusy}
                   className={`${inputInteractive} border-dashed py-2 file:mr-3 file:rounded file:border-0 file:bg-sky-700 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-sky-800`}
