@@ -104,10 +104,34 @@ export default function App() {
   )
   const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
 
-  const templateFormUrl = useCallback((templateId: string, download: boolean) => {
-    const mode = download ? '?download=true' : ''
-    return `/api/templates/${encodeURIComponent(templateId)}/blank${mode}`
-  }, [])
+  const openTemplateBlank = useCallback(async (templateId: string, download: boolean) => {
+    if (!auth) {
+      setTemplatesError('Log in before viewing or downloading templates.')
+      return
+    }
+
+    setTemplatesError(null)
+
+    try {
+      const blob = await api.getTemplateBlank(auth.accessToken, templateId, download)
+      const objectUrl = URL.createObjectURL(blob)
+
+      if (download) {
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = `${templateId}-template.html`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        window.open(objectUrl, '_blank', 'noopener,noreferrer')
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
+    } catch (error) {
+      setTemplatesError(error instanceof Error ? error.message : 'Failed to load blank template.')
+    }
+  }, [auth])
 
   const setPreset = (key: keyof typeof loginPresets) => {
     const preset = loginPresets[key]
@@ -422,20 +446,20 @@ export default function App() {
                               >
                                 {isSelected ? 'Selected' : 'Select'}
                               </button>
-                              <a
-                                href={templateFormUrl(template.id, false)}
-                                target="_blank"
-                                rel="noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => void openTemplateBlank(template.id, false)}
                                 className="rounded-full border border-white/10 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-sky-400/40 hover:text-white"
                               >
                                 View blank
-                              </a>
-                              <a
-                                href={templateFormUrl(template.id, true)}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void openTemplateBlank(template.id, true)}
                                 className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-100 transition hover:border-emerald-300 hover:text-emerald-50"
                               >
                                 Download blank
-                              </a>
+                              </button>
                             </div>
                           </div>
                         </div>

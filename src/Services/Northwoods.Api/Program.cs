@@ -130,7 +130,7 @@ app.MapGet("/templates", async (HttpContext httpContext, DbConnectionFactory dbF
 app.MapGet("/templates/{templateId}/blank", async (
     HttpContext httpContext,
     string templateId,
-    bool download,
+    bool? download,
     DbConnectionFactory dbFactory) =>
 {
     var authContext = GetAuthContext(httpContext.User);
@@ -151,7 +151,7 @@ app.MapGet("/templates/{templateId}/blank", async (
     var html = BuildBlankTemplateHtml(template.name, fields);
     var filename = $"{template.id}-template.html";
 
-    if (download)
+    if (download is true)
         return Results.File(Encoding.UTF8.GetBytes(html), "text/html", filename);
 
     return Results.Text(html, "text/html");
@@ -177,12 +177,6 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
     if (file is null || string.IsNullOrWhiteSpace(templateId))
         return Results.BadRequest(new { error = "file and templateId are required." });
 
-    // Upload to MinIO
-    var docId = Guid.NewGuid();
-    var fileKey = $"{authContext.TenantId}/{docId}/{file.FileName}";
-    await using var stream = file.OpenReadStream();
-    await objectStore.UploadAsync(fileKey, stream, file.ContentType ?? "application/octet-stream");
-
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var templateExists = await session.Connection.QueryFirstOrDefaultAsync<int?>(
@@ -193,6 +187,12 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
     {
         return Results.BadRequest(new { error = "Unknown templateId." });
     }
+
+    // Upload to MinIO
+    var docId = Guid.NewGuid();
+    var fileKey = $"{authContext.TenantId}/{docId}/{file.FileName}";
+    await using var stream = file.OpenReadStream();
+    await objectStore.UploadAsync(fileKey, stream, file.ContentType ?? "application/octet-stream");
 
     await session.Connection.ExecuteAsync(
         """
@@ -522,7 +522,8 @@ static string ReadTemplateFieldString(JsonElement field, string propertyName, st
 
 static bool ReadTemplateFieldBool(JsonElement field, string propertyName)
 {
-    if (!field.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.True && property.ValueKind != JsonValueKind.False)
+    if (!field.TryGetProperty(propertyName, out var property) ||
+        (property.ValueKind != JsonValueKind.True && property.ValueKind != JsonValueKind.False))
         return false;
 
     return property.GetBoolean();

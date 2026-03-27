@@ -1,9 +1,11 @@
 # Dev Pipeline -- Add four distinct intake form templates with view/download
+
 **Issue:** #3
-**PR:** pending
+**PR:** #14 (`https://github.com/open-horizon-labs/northwoods/pull/14`)
 **Started:** 2026-03-27T03:29:38Z
 
 ## Phase 1: Problem Statement
+
 Issue #3 already provided a clear outcome and acceptance criteria:
 - Seed four tenant-scoped templates with distinct schemas.
 - Expose tenant templates via GET `/templates`.
@@ -13,6 +15,7 @@ Issue #3 already provided a clear outcome and acceptance criteria:
 No issue body reframing required.
 
 ## Phase 2: Solution Space
+
 Options considered:
 1. Seed-only data expansion with no API/UI changes (insufficient; fails acceptance).
 2. Add API contract + endpoints and minimal frontend template browser (selected).
@@ -27,6 +30,7 @@ Selected approach:
 - Update frontend to load templates post-login, browse/select templates, and upload against chosen template.
 
 ## Phase 3: Execute
+
 Implemented changes across DB seed, contracts, API, and web app.
 Validation run:
 - `dotnet build src/Northwoods.slnx`
@@ -35,9 +39,11 @@ Validation run:
 Both commands succeeded.
 
 ## Phase 4: Ship
-Pending PR creation, review, and merge.
+
+In progress: addressing CodeRabbit findings and pending merge.
 
 ## RNA Tool Friction Log
+
 | Phase | Tool | What happened | Workaround | Severity |
 |-------|------|---------------|------------|----------|
 | Phase 3 | RNA search/repo_map | Execution was already in progress before formal session file setup; code navigation used Read/Grep directly | Continued with direct navigation, documented friction for traceability | skipped |
