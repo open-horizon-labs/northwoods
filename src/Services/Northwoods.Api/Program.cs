@@ -1,7 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Net;
 using System.Text;
+using System.Text.Json;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -60,6 +62,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
+});
 
 var app = builder.Build();
 
@@ -101,6 +108,63 @@ app.MapPost("/auth/login", async (LoginRequest request, DbConnectionFactory dbFa
     .WithName("Login").WithTags("Auth")
     .WithSummary("Authenticates a user and returns a signed JWT access token.");
 
+// --- Templates ---
+app.MapGet("/templates", async (HttpContext httpContext, DbConnectionFactory dbFactory) =>
+{
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+        return Results.Unauthorized();
+
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+    var rows = await session.Connection.QueryAsync<(string id, string name, string field_schema)>(
+        "SELECT id, name, field_schema FROM templates WHERE tenant_id = @TenantId ORDER BY name",
+        new { TenantId = authContext.TenantId },
+        session.Transaction);
+
+    var templates = rows
+        .Select(row => new TemplateDescriptor(row.id, row.name, ParseTemplateFields(row.field_schema)))
+        .ToList();
+
+    return Results.Ok(templates);
+})
+    .WithName("GetTemplates").WithTags("Templates")
+    .WithSummary("Returns tenant-scoped intake templates and their field schemas.")
+    .RequireAuthorization();
+
+app.MapGet("/templates/{templateId}/blank", async (
+    HttpContext httpContext,
+    string templateId,
+    bool? download,
+    DbConnectionFactory dbFactory) =>
+{
+    var authContext = GetAuthContext(httpContext.User);
+    if (authContext is null)
+        return Results.Unauthorized();
+
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+    var template = await session.Connection.QueryFirstOrDefaultAsync<(string id, string name, string field_schema)>(
+        "SELECT id, name, field_schema FROM templates WHERE tenant_id = @TenantId AND id = @TemplateId LIMIT 1",
+        new { TenantId = authContext.TenantId, TemplateId = templateId },
+        session.Transaction);
+
+    if (template == default)
+        return Results.NotFound();
+
+    var fields = ParseTemplateFields(template.field_schema);
+    var html = BuildBlankTemplateHtml(template.name, fields);
+    var filename = $"{template.id}-template.html";
+
+    if (download is true)
+        return Results.File(Encoding.UTF8.GetBytes(html), "text/html", filename);
+
+    return Results.Text(html, "text/html");
+})
+    .WithName("GetTemplateBlankForm").WithTags("Templates")
+    .WithSummary("Generates a printable blank template form for preview/download.")
+    .RequireAuthorization();
+
 // --- Intakes ---
 app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
 {
@@ -118,13 +182,22 @@ app.MapPost("/intakes", async (HttpContext httpContext, DbConnectionFactory dbFa
     if (file is null || string.IsNullOrWhiteSpace(templateId))
         return Results.BadRequest(new { error = "file and templateId are required." });
 
+    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+    var templateExists = await session.Connection.QueryFirstOrDefaultAsync<int?>(
+        "SELECT 1 FROM templates WHERE tenant_id = @TenantId AND id = @TemplateId LIMIT 1",
+        new { TenantId = authContext.TenantId, TemplateId = templateId },
+        session.Transaction);
+    if (templateExists != 1)
+    {
+        return Results.BadRequest(new { error = "Unknown templateId." });
+    }
+
     // Upload to MinIO
     var docId = Guid.NewGuid();
     var fileKey = $"{authContext.TenantId}/{docId}/{file.FileName}";
     await using var stream = file.OpenReadStream();
     await objectStore.UploadAsync(fileKey, stream, file.ContentType ?? "application/octet-stream");
-
-    await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     await session.Connection.ExecuteAsync(
         """
@@ -405,6 +478,156 @@ static ProcessingStatus ParseStatus(string dbStatus) => dbStatus switch
     "failed" => ProcessingStatus.Failed,
     _ => throw new ArgumentException($"Unknown status: {dbStatus}")
 };
+
+static IReadOnlyList<TemplateField> ParseTemplateFields(string schemaJson)
+{
+    if (string.IsNullOrWhiteSpace(schemaJson))
+        return [];
+
+    try
+    {
+        using var document = JsonDocument.Parse(schemaJson);
+        if (!document.RootElement.TryGetProperty("fields", out var fieldsElement) ||
+            fieldsElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var fields = new List<TemplateField>();
+        foreach (var field in fieldsElement.EnumerateArray())
+        {
+            if (field.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var key = ReadTemplateFieldString(field, "key");
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            fields.Add(new TemplateField(
+                key,
+                ReadTemplateFieldString(field, "type", "string"),
+                ReadTemplateFieldBool(field, "required")));
+        }
+
+        return fields;
+    }
+    catch (JsonException)
+    {
+        return [];
+    }
+}
+
+static string ReadTemplateFieldString(JsonElement field, string propertyName, string defaultValue = "")
+{
+    if (!field.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+        return defaultValue;
+
+    return property.GetString() ?? defaultValue;
+}
+
+static bool ReadTemplateFieldBool(JsonElement field, string propertyName)
+{
+    if (!field.TryGetProperty(propertyName, out var property) ||
+        (property.ValueKind != JsonValueKind.True && property.ValueKind != JsonValueKind.False))
+        return false;
+
+    return property.GetBoolean();
+}
+
+static string BuildTemplateInputName(string key)
+{
+    if (string.IsNullOrWhiteSpace(key))
+        return "field";
+
+    var builder = new StringBuilder();
+    var wroteSeparator = false;
+
+    foreach (var ch in key.Trim())
+    {
+        if (char.IsLetterOrDigit(ch))
+        {
+            builder.Append(char.ToLowerInvariant(ch));
+            wroteSeparator = false;
+        }
+        else if (!wroteSeparator && builder.Length > 0)
+        {
+            builder.Append('-');
+            wroteSeparator = true;
+        }
+    }
+
+    var normalized = builder.ToString().Trim('-');
+    return string.IsNullOrWhiteSpace(normalized) ? "field" : normalized;
+}
+
+static string BuildBlankTemplateHtml(string templateName, IReadOnlyList<TemplateField> fields)
+{
+    var displayName = WebUtility.HtmlEncode(templateName);
+    var fieldRows = new StringBuilder();
+
+    if (fields.Count == 0)
+    {
+        fieldRows.AppendLine("<p style=\"margin:0;color:#555;\">No fields are defined for this template.</p>");
+    }
+    else
+    {
+        for (var index = 0; index < fields.Count; index++)
+        {
+            var field = fields[index];
+            var label = WebUtility.HtmlEncode(field.Key);
+            var type = WebUtility.HtmlEncode(field.Type);
+            var requiredText = field.Required ? " *" : string.Empty;
+            var requiredAttribute = field.Required ? " required" : string.Empty;
+            var inputType = field.Type switch
+            {
+                "date" => "date",
+                "integer" => "number",
+                "decimal" => "number",
+                _ => "text"
+            };
+
+            var fieldId = WebUtility.HtmlEncode($"{BuildTemplateInputName(field.Key)}-{index + 1}");
+            var inputHint = field.Type.Equals("array", StringComparison.OrdinalIgnoreCase)
+                ? "Separate multiple values with commas"
+                : string.Empty;
+
+            fieldRows.AppendLine($"    <div style=\"margin-bottom: 14px;\">\n" +
+                             $"      <label for=\"{fieldId}\" style=\"font-size:12px;display:block;color:#444;letter-spacing:.02em;margin-bottom:4px;text-transform:uppercase;\">{label}{requiredText} <span style=\"color:#666;font-style:italic;\">({type})</span></label>\n" +
+                             $"      <input type=\"{inputType}\" id=\"{fieldId}\" name=\"{fieldId}\"{requiredAttribute} style=\"width:100%;height:36px;border:1px solid #bdbdbd;border-radius:6px;padding:6px 10px;box-sizing:border-box;font-size:14px;\" />\n" +
+                             (string.IsNullOrWhiteSpace(inputHint)
+                                 ? ""
+                                 : $"      <small style=\"color:#666;\">{inputHint}</small>\n") +
+                             "    </div>");
+        }
+    }
+
+    return $$"""
+<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>{{displayName}}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background: #f7f7f7; }
+      .page { width: min(760px, calc(100vw - 24px)); margin: 24px auto; background: #fff; border: 1px solid #ccc; padding: 24px; }
+      h1 { margin: 0 0 8px; }
+      .field-note { color: #555; font-size: 12px; margin-bottom: 20px; }
+      @media print { .print-note { display: none; } }
+    </style>
+  </head>
+  <body>
+    <div class=\"page\">
+      <h1>{{displayName}}</h1>
+      <p class=\"field-note\">Use this blank intake template when collecting values for this form. All fields can be printed as a paper form.</p>
+      <form autocomplete=\"off\"> 
+{{fieldRows}}\n      </form>
+      <p class=\"print-note\" style=\"margin-top:18px;font-size:11px;color:#666;\">Generated for demo usage only.</p>
+    </div>
+  </body>
+</html>
+""";
+}
 
 static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
     NpgsqlConnection connection,

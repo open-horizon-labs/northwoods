@@ -72,6 +72,18 @@ export type FinalizeReviewResponse = {
   status: ProcessingStatus
 }
 
+export type TemplateField = {
+  key: string
+  type: string
+  required: boolean
+}
+
+export type TemplateDescriptor = {
+  id: string
+  name: string
+  fields: TemplateField[]
+}
+
 export const statusLabel = (status: ProcessingStatus) => {
   switch (status) {
     case 0:

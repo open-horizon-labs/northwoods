@@ -7,6 +7,7 @@ import type {
   LoginResponse,
   ReviewDetailResponse,
   ReviewQueueItem,
+  TemplateDescriptor,
 } from './types'
 
 const API_BASE = '/api'
@@ -36,6 +37,30 @@ export const api = {
       body: JSON.stringify(payload),
     })
     return handleResponse<LoginResponse>(response)
+  },
+
+  getTemplates: async (accessToken: string) => {
+    const response = await fetch(`${API_BASE}/templates`, {
+      headers: authHeader(accessToken),
+    })
+    return handleResponse<TemplateDescriptor[]>(response)
+  },
+
+  getTemplateBlank: async (accessToken: string, templateId: string, download: boolean) => {
+    const mode = download ? '?download=true' : '?download=false'
+    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}/blank${mode}`, {
+      headers: {
+        ...(authHeader(accessToken) ?? {}),
+        Accept: 'text/html',
+      },
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(text || `${response.status} ${response.statusText}`)
+    }
+
+    return response.blob()
   },
 
   createIntake: async (accessToken: string, templateId: string, file: File) => {
