@@ -246,3 +246,30 @@ PR: [#32](https://github.com/open-horizon-labs/northwoods/pull/32) | Branch: `27
 **Tests:** 15 passing (8 new dual-provider tests + 7 existing updated).
 **CodeRabbit review:** Review incomplete (PR merged during processing). No findings posted.
 **Post-merge audit:** Clean -- 0 unaddressed comments.
+
+---
+
+### Issue #9 complete: Rubric-driven quality pass -- 2026-03-27
+
+PR: [#33](https://github.com/open-horizon-labs/northwoods/pull/33) | Branch: `issue-9-rubric-quality-pass` | Merged: `acabc87`
+
+**Rubric scores (all 6 areas):**
+
+| Area | Score | Evidence |
+|------|-------|----------|
+| Intake digitization | 3 (Strong) | Template-guided upload, dual OCR, confidence tiers, append-only attempts, status polling |
+| Human review | 2->3 | Fixed: fields sorted confidence-ascending; source doc embedded in iframe alongside fields |
+| Similar-case assistance | 3 (Strong) | Hybrid 5-mode retrieval embedded in review; 3 matches found for test intake |
+| Case visibility | 3 (Strong) | Full-text + fuzzy search; case aggregate by person; navigation chain working |
+| Tenant safety | 3 (Strong) | RLS + explicit filters; fixed: worker UPDATEs and API field query add tenant_id |
+| Architecture judgment | 3 (Strong) | ADRs 001-005, architecture doc, self-assessment, AI tooling documented |
+
+**Changes:**
+- `apps/web/src/App.tsx`: Sort review fields by confidence ascending (uncertain first); embed source document in sandboxed iframe
+- `src/Workers/Extraction.Worker/Worker.cs`: Add `AND tenant_id = @TenantId` to 3 UPDATE queries
+- `src/Services/Northwoods.Api/Program.cs`: Add `AND tenant_id = @TenantId` to extracted_fields query in FindSimilarCasesAsync
+- `docs/rubric-review-round-1.md`: Full scoring log with evidence
+- `.github/workflows/ci.yml`: Fixed pre-existing pnpm version conflict + .NET 10.x SDK
+
+**CodeRabbit review:** 1 trivial finding (iframe sandbox attribute) -- fixed before merge.
+**Post-merge audit:** Clean -- 0 unaddressed comments.
