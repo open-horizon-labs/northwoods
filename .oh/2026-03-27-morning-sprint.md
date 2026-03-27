@@ -38,3 +38,21 @@ Report: [Browser Fuzz Report — Northwoods Web App](../docs/fuzz-report-browser
 **Blocked tests:** Review interaction abuse and upload flow could not be exercised — blocked by B-03 (F-01 cascade). Deferred until auth is fixed.
 
 **No XSS execution observed** in any field — React escaping works correctly throughout.
+
+
+### Task 2 complete: Markdown wiki-link conversion — 2026-03-27
+
+Converted all bare file path references in `.md` files to proper markdown hyperlinks.
+
+**Files modified:**
+- `README.md`: linked ADR 005, `docs/ai-tooling.md`, `.oh/ocr-confidence-tiering.md`
+- `docs/ADRs/004-shared-postgres-tenancy-with-rls-backstop.md`: linked ADR 001–003 cross-references
+- `docs/architecture.md`: linked all 5 ADRs, `reviewer-rubric.md`, `ai-tooling.md`
+- `docs/self-assessment.md`: linked `architecture.md`, `ai-tooling.md`, `reviewer-rubric.md`
+- `.oh/ocr-confidence-tiering.md`: linked ADR 005
+- `.oh/2026-03-27-morning-sprint.md`: linked fuzz report files
+- `.oh/2026-03-26-overnight-session.md`: linked session files and docs refs
+
+**Skipped:** `.oh/sessions/5-dev.md` and `.oh/sessions/7-dev.md` — target files do not exist; linking would introduce broken links.
+
+**Commit:** `e48dd58` (`docs: convert bare file path references to markdown links across all docs`)
