@@ -17,9 +17,9 @@ namespace Extraction.Worker;
 
 public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config) : BackgroundService
 {
-    private const decimal HighConfidenceThreshold = 0.90m;
-    private const decimal ReviewRequiredThreshold = 0.75m;
-    private const decimal EscalateThreshold = 0.82m;
+    internal const decimal HighConfidenceThreshold = 0.90m;
+    internal const decimal ReviewRequiredThreshold = 0.75m;
+    internal const decimal EscalateThreshold = 0.82m;
     private const int CaseEmbeddingDimensions = 16;
     private const int DefaultMaxRetryAttempts = 3;
     private const int DefaultRetryDelayMilliseconds = 1_000;
@@ -737,7 +737,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         }
     }
 
-    private readonly record struct ExtractionContext(
+    internal readonly record struct ExtractionContext(
         Guid DocumentId,
         string TenantId,
         string TemplateId,
@@ -745,7 +745,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         string LocalFilePath,
         int ByteLength);
 
-    private sealed record ExtractionCandidate(
+    internal sealed record ExtractionCandidate(
         string FieldKey,
         string Value,
         decimal Confidence,
@@ -753,7 +753,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         string Provider,
         Dictionary<string, string>? Metadata = null);
 
-    private sealed record FieldExtractionResult(
+    internal sealed record FieldExtractionResult(
         string FieldKey,
         string FinalValue,
         decimal SystemConfidence,
@@ -761,7 +761,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         IReadOnlyList<ExtractionCandidate> AllAttempts,
         IReadOnlyList<string> ProviderSequence);
 
-    private interface IExtractionProvider
+    internal interface IExtractionProvider
     {
         string Name { get; }
         string Stage { get; }
