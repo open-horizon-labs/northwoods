@@ -40,8 +40,17 @@ Both commands succeeded.
 
 ## Phase 4: Ship
 
-In progress: addressing CodeRabbit findings and pending merge.
+- Implementation PR merged: #14 (`https://github.com/open-horizon-labs/northwoods/pull/14`)
+- Merge commit: `24a04b6d6e5630a8dc8fa6b192c6eb14c508f6c3`
+- CodeRabbit findings addressed with two follow-up commits before merge (auth blank-template fetch, template empty-state/accessibility, explicit JSON camelCase policy).
 
+## Phase 5: Oversight (post-merge comment audit)
+
+- Audited all PR #14 comments (`pulls/14/comments`, `issues/14/comments`, reviews).
+- Found late CodeRabbit `COMMENTED` review with two **Major** findings in audit-event JSON interpolation that landed before final approval but were not in #14 code.
+- Opened follow-up PR #15 (`https://github.com/open-horizon-labs/northwoods/pull/15`) titled `fix: address review findings from #14`.
+- Follow-up fix merged with commit `7a541d7de5cdc19e2bc8d88cad2c71c849a1c7ad` after CodeRabbit approved with no actionable comments.
+- Delivery smoke attempted and blocked by environment: `curl http://localhost:5100/healthz` timed out and `docker compose up -d postgres minio api worker` timed out.
 ## RNA Tool Friction Log
 
 | Phase | Tool | What happened | Workaround | Severity |
