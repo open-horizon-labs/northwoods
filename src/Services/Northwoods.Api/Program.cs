@@ -122,11 +122,12 @@ app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFac
 
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
-    var extractionCounts = await session.Connection.QueryFirstOrDefaultAsync<ExtractionCounts>(
+    var counts = await session.Connection.QueryFirstOrDefaultAsync<(long ExtractionSuccessCount, long ExtractionFailureCount, long ReviewFinalizationCount)>(
         """
         SELECT
             COUNT(*) FILTER (WHERE status IN ('review_ready', 'finalized'))::bigint AS ExtractionSuccessCount,
-            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS ExtractionFailureCount
+            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS ExtractionFailureCount,
+            COUNT(*) FILTER (WHERE status = 'finalized')::bigint AS ReviewFinalizationCount
         FROM documents
         WHERE tenant_id = @TenantId
         """,
@@ -135,9 +136,9 @@ app.MapGet("/metrics", async (HttpContext httpContext, DbConnectionFactory dbFac
 
     return Results.Ok(new ApiMetricsResponse(
         observability.RequestCount,
-        observability.ReviewFinalizationCount,
-        extractionCounts?.ExtractionSuccessCount ?? 0,
-        extractionCounts?.ExtractionFailureCount ?? 0));
+        counts.ReviewFinalizationCount,
+        counts.ExtractionSuccessCount,
+        counts.ExtractionFailureCount));
 })
     .WithName("GetMetrics")
     .WithSummary("Returns basic service metrics for tenant-scoped requests.")
@@ -961,9 +962,9 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
                field_key AS FieldKey,
                COALESCE(corrected_value, extracted_value) AS Value
         FROM extracted_fields
-        WHERE document_id = ANY(@CandidateIds)
+        WHERE document_id = ANY(@CandidateIds) AND tenant_id = @TenantId
         ",
-        new { CandidateIds = candidateIds },
+        new { CandidateIds = candidateIds, TenantId = tenantId },
         transaction))
         .ToLookup(r => r.IntakeId, r => r)
         .ToDictionary(g => g.Key, g => g.ToDictionary(f => f.FieldKey, f => f.Value, StringComparer.OrdinalIgnoreCase));
@@ -1065,7 +1066,6 @@ file sealed record ApiMetricsResponse(
     long ExtractionSuccessCount,
     long ExtractionFailureCount);
 
-file sealed record ExtractionCounts(long ExtractionSuccessCount, long ExtractionFailureCount);
 
 file sealed record AuthContext(Guid UserId, string TenantId, UserRole Role);
 file sealed record SimilarCaseCandidate(

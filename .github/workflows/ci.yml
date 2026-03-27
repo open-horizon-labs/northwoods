@@ -20,7 +20,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "9.x"
+          dotnet-version: "10.x"
 
       - name: Restore .NET dependencies
         run: dotnet restore src/Northwoods.slnx
@@ -35,10 +35,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
       - name: Install web dependencies
         run: pnpm --dir apps/web install --frozen-lockfile
 
@@ -59,7 +55,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "9.x"
+          dotnet-version: "10.x"
 
       - name: Restore .NET dependencies (includes test projects)
         run: |
