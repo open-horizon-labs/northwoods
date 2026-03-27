@@ -1,5 +1,5 @@
 export type UserRole = 0 | 1 | 'IntakeWorker' | 'Reviewer'
-export type ProcessingStatus = 0 | 1 | 2 | 3 | 4 | 'Uploaded' | 'Extracting' | 'ReviewReady' | 'Finalized' | 'Failed'
+export type ProcessingStatus = 0 | 1 | 2 | 3 | 4 | 5 | 'Uploaded' | 'Extracting' | 'ReviewReady' | 'Completed' | 'Finalized' | 'Failed'
 
 export type LoginRequest = {
   email: string
@@ -96,9 +96,12 @@ export const statusLabel = (status: ProcessingStatus) => {
     case 'ReviewReady':
       return 'Review Ready'
     case 3:
+    case 'Completed':
+      return 'Completed'
+    case 4:
     case 'Finalized':
       return 'Finalized'
-    case 4:
+    case 5:
     case 'Failed':
       return 'Failed'
     default:

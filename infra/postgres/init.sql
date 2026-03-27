@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS documents (
     uploaded_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     original_file_key TEXT NOT NULL,
     original_file_name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'extracting', 'review_ready', 'finalized', 'failed')),
+    status TEXT NOT NULL DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'extracting', 'review_ready', 'completed', 'finalized', 'failed')),
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

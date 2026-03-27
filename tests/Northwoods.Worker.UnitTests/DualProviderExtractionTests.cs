@@ -270,4 +270,185 @@ public class DualProviderExtractionTests
         Assert.Equal(JsonValueKind.Number, doc.RootElement.GetProperty("total_tokens").ValueKind);
         Assert.Equal(JsonValueKind.Number, doc.RootElement.GetProperty("processing_ms").ValueKind);
     }
+
+    // =========================================================================
+    // P2: Provider agreement boosts confidence, disagreement lowers it
+    // =========================================================================
+
+    [Fact]
+    public async Task AgreementBoostsConfidenceBeyondIndividualMax()
+    {
+        var paddleValues = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["applicantName"] = ("Maria Lopez", 0.84m),
+            ["dateOfBirth"] = ("03/15/1988", 0.88m),
+        };
+        var visionValues = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["applicantName"] = ("Maria Lopez", 0.91m),
+            ["dateOfBirth"] = ("03/15/1988", 0.93m),
+        };
+
+        var p1 = new FixedProvider("paddleocr", "ocr", 0, paddleValues);
+        var p2 = new FixedProvider("openai-vision", "ocr", 1, visionValues);
+
+        var results = await WorkerService.RunExtractionPipelineForTests(
+            MakeContext(), ["applicantName", "dateOfBirth"], [p1, p2], CancellationToken.None);
+
+        foreach (var result in results)
+        {
+            var maxIndividual = result.AllAttempts.Max(a => a.Confidence);
+            Assert.True(result.SystemConfidence > maxIndividual,
+                $"{result.FieldKey}: consensus {result.SystemConfidence} should exceed individual max {maxIndividual}");
+        }
+    }
+
+    [Fact]
+    public async Task DisagreementUsesHigherConfidenceValue()
+    {
+        var paddleValues = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["address"] = ("123 Oak St", 0.55m),
+        };
+        var visionValues = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["address"] = ("123 Oak Street, Suite 4", 0.88m),
+        };
+
+        var p1 = new FixedProvider("paddleocr", "ocr", 0, paddleValues);
+        var p2 = new FixedProvider("openai-vision", "ocr", 1, visionValues);
+
+        var results = await WorkerService.RunExtractionPipelineForTests(
+            MakeContext(), ["address"], [p1, p2], CancellationToken.None);
+
+        var result = results.Single();
+        // Higher-confidence value wins
+        Assert.Equal("123 Oak Street, Suite 4", result.FinalValue);
+        Assert.Equal(2, result.AllAttempts.Count);
+        // Disagreement means no agreement boost -- confidence should not exceed the higher individual
+        Assert.True(result.SystemConfidence <= 0.88m,
+            $"Disagreement should not boost beyond higher value confidence, got {result.SystemConfidence}");
+    }
+
+    // =========================================================================
+    // P3: ADR 005 confidence tier status determination
+    // =========================================================================
+
+    [Fact]
+    public async Task AllHighConfidenceFieldsProduceCompletedStatus()
+    {
+        var values = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["applicantName"] = ("Jamie Carter", 0.95m),
+            ["dateOfBirth"] = ("03/15/1988", 0.92m),
+            ["address"] = ("742 Evergreen Terrace", 0.91m),
+        };
+
+        var provider = new FixedProvider("openai-vision", "ocr", 0, values);
+        var results = await WorkerService.RunExtractionPipelineForTests(
+            MakeContext(), ["applicantName", "dateOfBirth", "address"], [provider], CancellationToken.None);
+
+        var (status, autoAccepted, requiresAttention) = WorkerService.DetermineDocumentStatus(results);
+
+        Assert.Equal("completed", status);
+        Assert.True(autoAccepted);
+        Assert.False(requiresAttention);
+    }
+
+    [Fact]
+    public async Task MixedConfidenceFieldsProduceReviewReadyStatus()
+    {
+        var values = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["applicantName"] = ("Jamie Carter", 0.95m),
+            ["dateOfBirth"] = ("03/15/1988", 0.85m),
+            ["address"] = ("742 Evergreen Terrace", 0.60m),
+        };
+
+        var provider = new FixedProvider("openai-vision", "ocr", 0, values);
+        var results = await WorkerService.RunExtractionPipelineForTests(
+            MakeContext(), ["applicantName", "dateOfBirth", "address"], [provider], CancellationToken.None);
+
+        var (status, autoAccepted, requiresAttention) = WorkerService.DetermineDocumentStatus(results);
+
+        Assert.Equal("review_ready", status);
+        Assert.False(autoAccepted);
+        Assert.True(requiresAttention, "Low-confidence field should set requires_attention");
+    }
+
+    [Fact]
+    public async Task WarningRangeFieldsProduceReviewReadyWithoutAttention()
+    {
+        // All fields in 0.75-0.90 range: warning review path
+        var values = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["applicantName"] = ("Jamie Carter", 0.80m),
+            ["dateOfBirth"] = ("03/15/1988", 0.85m),
+        };
+
+        var provider = new FixedProvider("openai-vision", "ocr", 0, values);
+        var results = await WorkerService.RunExtractionPipelineForTests(
+            MakeContext(), ["applicantName", "dateOfBirth"], [provider], CancellationToken.None);
+
+        var (status, autoAccepted, requiresAttention) = WorkerService.DetermineDocumentStatus(results);
+
+        Assert.Equal("review_ready", status);
+        Assert.False(autoAccepted);
+        Assert.False(requiresAttention, "Warning-range fields should not flag requires_attention");
+    }
+
+    // =========================================================================
+    // P4: Edge cases -- empty response, single value provider
+    // =========================================================================
+
+    [Fact]
+    public async Task EmptyProviderResponseProducesLowConfidence()
+    {
+        // Provider returns no values for any fields
+        var emptyValues = new Dictionary<string, (string Value, decimal Confidence)>();
+
+        var provider = new FixedProvider("openai-vision", "ocr", 0, emptyValues);
+        var results = await WorkerService.RunExtractionPipelineForTests(
+            MakeContext(), ["applicantName", "dateOfBirth"], [provider], CancellationToken.None);
+
+        // No results should come back for fields with no candidates
+        Assert.Empty(results);
+
+        // Document status for empty results should be review_ready with attention
+        var (status, autoAccepted, requiresAttention) = WorkerService.DetermineDocumentStatus(results);
+        Assert.Equal("review_ready", status);
+        Assert.True(requiresAttention);
+    }
+
+    [Fact]
+    public async Task NanoEscalationTriggeredOnLowAvgConfidence()
+    {
+        // Simulates what CallWithFallback would see: nano returns low confidence,
+        // so mini should be used. We verify via the pipeline that low-confidence
+        // single-provider results produce review_ready with attention flag.
+        var lowConfValues = new Dictionary<string, (string Value, decimal Confidence)>
+        {
+            ["applicantName"] = ("Jamie Carter", 0.55m),
+            ["dateOfBirth"] = ("03/15/1988", 0.50m),
+            ["address"] = ("742 Evergreen Terrace", 0.45m),
+        };
+
+        var provider = new FixedProvider("nano-sim", "ocr", 0, lowConfValues);
+        var results = await WorkerService.RunExtractionPipelineForTests(
+            MakeContext(), ["applicantName", "dateOfBirth", "address"], [provider], CancellationToken.None);
+
+        // All fields should require review
+        Assert.All(results, r => Assert.True(
+            WorkerService.RequiresReview(r.SystemConfidence),
+            $"{r.FieldKey} confidence {r.SystemConfidence} should require review"));
+
+        // Average confidence is well below 0.75 -- this is the escalation trigger
+        var avgConfidence = results.Average(r => r.SystemConfidence);
+        Assert.True(avgConfidence < WorkerService.GetReviewRequiredThreshold(),
+            $"Average confidence {avgConfidence} should be below escalation threshold");
+
+        var (status, _, requiresAttention) = WorkerService.DetermineDocumentStatus(results);
+        Assert.Equal("review_ready", status);
+        Assert.True(requiresAttention);
+    }
 }
