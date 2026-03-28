@@ -63,12 +63,14 @@ check "Homepage returns 200" homepage_check
 # 2. Worker login succeeds and returns a JWT
 # ---------------------------------------------------------------------------
 
+is_jwt() { [[ "$1" =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]]; }
+
 WORKER_TOKEN=""
 worker_login() {
   local body
   body=$(login "$WORKER_EMAIL" "$WORKER_PASSWORD")
   WORKER_TOKEN=$(echo "$body" | jq -r '.accessToken // empty')
-  [ -n "$WORKER_TOKEN" ]
+  [ -n "$WORKER_TOKEN" ] && is_jwt "$WORKER_TOKEN"
 }
 check "Worker login returns accessToken" worker_login
 
@@ -81,7 +83,7 @@ reviewer_login() {
   local body
   body=$(login "$REVIEWER_EMAIL" "$REVIEWER_PASSWORD")
   REVIEWER_TOKEN=$(echo "$body" | jq -r '.accessToken // empty')
-  [ -n "$REVIEWER_TOKEN" ]
+  [ -n "$REVIEWER_TOKEN" ] && is_jwt "$REVIEWER_TOKEN"
 }
 check "Reviewer login returns accessToken" reviewer_login
 
