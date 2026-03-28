@@ -88,14 +88,15 @@ const formatAuditEvent = (name: string) =>
 type Props = {
   auth: LoginResponse
   onLogout: () => void
+  initialDocumentId?: string
 }
 
-export default function ReviewerDashboard({ auth, onLogout }: Props) {
+export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }: Props) {
   const [queue, setQueue] = useState<ReviewQueueItem[]>([])
   const [queueSearch, setQueueSearch] = useState('')
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
-  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null)
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(initialDocumentId ?? null)
 
   const [reviewDetail, setReviewDetail] = useState<ReviewDetailResponse | null>(null)
   const [editableFields, setEditableFields] = useState<ConfidenceField[]>([])
@@ -137,10 +138,11 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
     try {
       const items = await api.getReviewQueue(auth.accessToken)
       setQueue(items)
-      // Auto-select first item if current selection was removed
+      // Auto-select first item if current selection was removed, but preserve deep-linked docs
       setSelectedReviewId((current) => {
-        if (!current) return items[0]?.reviewId ?? null
-        return items.some((i) => i.reviewId === current) ? current : (items[0]?.reviewId ?? null)
+        if (!current) return initialDocumentId ? null : (items[0]?.reviewId ?? null)
+        if (items.some((i) => i.reviewId === current)) return current
+        return current === initialDocumentId ? current : (items[0]?.reviewId ?? null)
       })
     } catch (err) {
       setQueueError(userMessage(err, 'Unable to load review queue. Please try again.'))
@@ -148,7 +150,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
     } finally {
       setQueueBusy(false)
     }
-  }, [auth.accessToken])
+  }, [auth.accessToken, initialDocumentId])
 
   // request seq prevents stale async responses from a previous review overwriting a newer one
   const reviewReqSeq = useRef(0)

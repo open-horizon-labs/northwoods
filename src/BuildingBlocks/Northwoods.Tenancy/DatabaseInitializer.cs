@@ -332,11 +332,13 @@ public static class DatabaseInitializer
 
     // Delete fabricated mock data left by earlier MockTesseractProvider seeds.
     // These rows have hardcoded UUIDs and technique='tesseract-mock' that no longer exist in the codebase.
+    // Also removes documents uploaded by integration test fixture files (chatgpt-sample-*.pdf)
+    // which run against the live stack and leave real-UUID rows in prod.
     private const string CleanupMockDataSql = """
         -- Remove extraction attempts from mock provider
         DELETE FROM extraction_attempts WHERE provider = 'tesseract-mock';
         DELETE FROM extraction_attempts WHERE provider = 'mock-template-values';
-        
+
         -- Remove documents with known mock UUIDs (Jamie Carter, Luis Romero, Morgan Lee, etc.)
         DELETE FROM audit_events WHERE document_id IN (
             '11111111-1111-1111-1111-111111111111',
@@ -361,6 +363,52 @@ public static class DatabaseInitializer
             '22222222-2222-2222-2222-222222222222',
             '33333333-3333-3333-3333-333333333333',
             '44444444-4444-4444-4444-444444444444'
+        );
+
+        -- Remove documents uploaded by integration test fixture files.
+        -- These are real-UUID rows created when integration/smoke tests run against the live stack.
+        DELETE FROM audit_events WHERE document_id IN (
+            SELECT id FROM documents WHERE original_file_name IN (
+                'chatgpt-sample-general-intake.pdf',
+                'chatgpt-sample-financial-assistance-intake.pdf',
+                'chatgpt-sample-case-worker-notes.pdf',
+                'chatgpt-sample-housing-stability-intake.pdf',
+                'chatgpt-sample-soap-note.pdf'
+            )
+        );
+        DELETE FROM extraction_attempts WHERE document_id IN (
+            SELECT id FROM documents WHERE original_file_name IN (
+                'chatgpt-sample-general-intake.pdf',
+                'chatgpt-sample-financial-assistance-intake.pdf',
+                'chatgpt-sample-case-worker-notes.pdf',
+                'chatgpt-sample-housing-stability-intake.pdf',
+                'chatgpt-sample-soap-note.pdf'
+            )
+        );
+        DELETE FROM extracted_fields WHERE document_id IN (
+            SELECT id FROM documents WHERE original_file_name IN (
+                'chatgpt-sample-general-intake.pdf',
+                'chatgpt-sample-financial-assistance-intake.pdf',
+                'chatgpt-sample-case-worker-notes.pdf',
+                'chatgpt-sample-housing-stability-intake.pdf',
+                'chatgpt-sample-soap-note.pdf'
+            )
+        );
+        DELETE FROM case_profiles WHERE document_id IN (
+            SELECT id FROM documents WHERE original_file_name IN (
+                'chatgpt-sample-general-intake.pdf',
+                'chatgpt-sample-financial-assistance-intake.pdf',
+                'chatgpt-sample-case-worker-notes.pdf',
+                'chatgpt-sample-housing-stability-intake.pdf',
+                'chatgpt-sample-soap-note.pdf'
+            )
+        );
+        DELETE FROM documents WHERE original_file_name IN (
+            'chatgpt-sample-general-intake.pdf',
+            'chatgpt-sample-financial-assistance-intake.pdf',
+            'chatgpt-sample-case-worker-notes.pdf',
+            'chatgpt-sample-housing-stability-intake.pdf',
+            'chatgpt-sample-soap-note.pdf'
         );
         """;
 

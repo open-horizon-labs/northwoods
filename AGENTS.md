@@ -110,3 +110,17 @@ The system handles sensitive personal information about vulnerable populations. 
 4. **Institutional trust over visual novelty.** The system is used in settings where trust is earned through predictability and clarity. Avoid surprising layouts, animated transitions, or unconventional interaction patterns. Boring is good.
 
 5. **Accessible by default.** WCAG AA minimum. Sufficient color contrast on light backgrounds. No reliance on color alone for meaning (pair with icons or text). Support keyboard navigation. Respect reduced-motion preferences.
+
+<!-- RNA MCP tool guidance -->
+## Code Exploration (use RNA MCP tools, not grep/Read)
+
+| Instead of... | Use this MCP tool |
+|---|---|
+| `Grep` for symbol names | `search_symbols(query, kind, language, file)` |
+| `Read` to trace function calls | `graph_query(node_id, mode: "neighbors")` |
+| `Grep` for "who calls X" | `graph_query(node_id, mode: "impact")` |
+| `Read` to find .oh/ artifacts | `oh_search_context(query)` |
+| `Bash` with `grep -rn` | `search_symbols` or `oh_search_context` |
+| Recording learnings/signals | Write to `.oh/metis/`, `.oh/signals/`, `.oh/guardrails/` (YAML frontmatter + markdown) |
+| Searching git history | `oh_search_context(query)` — returns hash; use `git show <hash>` via Bash for diffs |
+<!-- end RNA MCP tool guidance -->

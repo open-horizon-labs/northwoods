@@ -79,6 +79,16 @@ export default function App() {
     )
   }
 
+  // Deep link to a specific document — reviewer only
+  const docHashMatch = hash.match(/^#doc\/([0-9a-f-]{36})$/i)
+  if (docHashMatch && (role === 1 || role === 'Reviewer')) {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <ReviewerDashboard auth={auth} onLogout={handleLogout} initialDocumentId={docHashMatch[1]} />
+      </Suspense>
+    )
+  }
+
   // Submissions view — accessible to any authenticated user
   if (hash === '#submissions') {
     return (

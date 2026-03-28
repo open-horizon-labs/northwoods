@@ -70,6 +70,19 @@ public sealed class ObjectStore
         return await _s3Client.GetObjectAsync(_bucketName, key);
     }
 
+    public async Task<bool> ExistsAsync(string key)
+    {
+        try
+        {
+            await _s3Client.GetObjectMetadataAsync(_bucketName, key);
+            return true;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
     public async Task EnsureBucketAsync()
     {
         try

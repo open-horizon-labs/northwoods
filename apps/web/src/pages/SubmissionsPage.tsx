@@ -166,7 +166,11 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
                       const date = new Date(doc.createdAt)
                       const dateStr = date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
                       return (
-                        <tr key={doc.documentId} className="hover:bg-slate-50">
+                        <tr
+                          key={doc.documentId}
+                          className="cursor-pointer hover:bg-slate-50"
+                          onClick={() => { window.location.hash = `#doc/${doc.documentId}` }}
+                        >
                           <td className="px-4 py-3 font-medium text-slate-900">{doc.applicantName}</td>
                           <td className="px-4 py-3 text-slate-600">{doc.templateId}</td>
                           <td className="px-4 py-3">
