@@ -12,6 +12,7 @@
     "test:unit": "dotnet test tests/Northwoods.Worker.UnitTests/Northwoods.Worker.UnitTests.csproj && dotnet test tests/Northwoods.Tenancy.UnitTests/Northwoods.Tenancy.UnitTests.csproj && dotnet test tests/Northwoods.Api.IntegrationTests/Northwoods.Api.IntegrationTests.csproj --filter \"Category!=runtime\"",
     "test:runtime": "dotnet test tests/Northwoods.Api.IntegrationTests/Northwoods.Api.IntegrationTests.csproj --filter \"Category=runtime\"",
     "test": "pnpm test:unit && pnpm test:runtime",
-    "test:web-smoke": "echo \"UI smoke tests deferred; enable runtime stack and Playwright harness when available.\""
+    "test:web-smoke": "pnpm --dir apps/web test:web-smoke",
+    "test:e2e": "pnpm --dir apps/web test:e2e"
   }
 }
