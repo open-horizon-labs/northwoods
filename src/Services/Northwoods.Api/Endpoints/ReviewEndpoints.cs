@@ -148,10 +148,6 @@ internal static class ReviewEndpoints
                 }
             }
 
-            var similarCases = await FindSimilarCasesAsync(
-                session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5,
-                embeddingHttpClient, openAiApiKey, useAiSummaries, app.Logger, httpContext.RequestAborted);
-
             var reviewFields = fields.Select(f =>
             {
                 var attempts = attemptsByField.TryGetValue(f.FieldKey, out var rows)
@@ -172,10 +168,50 @@ internal static class ReviewEndpoints
             var sourceUrl = $"/documents/{doc.id}/source";
             var status = ApiHelpers.ParseStatus(doc.status);
 
-            return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, reviewFields, similarCases, auditEvents, failureReason));
+            return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, reviewFields, [], auditEvents, failureReason));
         })
             .WithName("GetReview").WithTags("Reviews")
             .WithSummary("Returns the document, extracted fields, and audit trail for a review task.")
+            .RequireAuthorization();
+
+        app.MapGet("/reviews/{id:guid}/similar-cases", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory) =>
+        {
+            var authContext = ApiHelpers.GetAuthContext(httpContext.User);
+            if (authContext is null)
+                return Results.Unauthorized();
+
+            if (authContext.Role != UserRole.Reviewer)
+                return Results.Forbid();
+
+            await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+            var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string tenant_id, string template_id, string status, string original_file_key)>(
+                "SELECT id, tenant_id, template_id, status, original_file_key FROM documents WHERE id = @Id AND tenant_id = @TenantId",
+                new { Id = id, TenantId = authContext.TenantId },
+                session.Transaction);
+
+            if (doc == default) return Results.NotFound();
+
+            var fields = (await session.Connection.QueryAsync<ConfidenceField>(
+                """
+                SELECT field_key AS FieldKey,
+                       COALESCE(corrected_value, extracted_value) AS Value,
+                       confidence AS Confidence,
+                       requires_review AS RequiresReview
+                FROM extracted_fields
+                WHERE document_id = @Id AND tenant_id = @TenantId
+                """,
+                new { Id = id, TenantId = authContext.TenantId },
+                session.Transaction)).ToList();
+
+            var similarCases = await FindSimilarCasesAsync(
+                session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5,
+                embeddingHttpClient, openAiApiKey, useAiSummaries, app.Logger, httpContext.RequestAborted);
+
+            return Results.Ok(similarCases);
+        })
+            .WithName("GetSimilarCases").WithTags("Reviews")
+            .WithSummary("Returns similar historical cases for a review task. May invoke OpenAI; call after the review detail has loaded.")
             .RequireAuthorization();
 
         app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest request, HttpContext httpContext, DbConnectionFactory dbFactory) =>
