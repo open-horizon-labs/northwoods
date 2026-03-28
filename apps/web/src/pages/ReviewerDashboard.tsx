@@ -146,7 +146,12 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
         if (seq !== reviewReqSeq.current) return
         setReviewDetail(detail)
         setEditableFields(
-          detail.fields.map((f) => ({ ...f })).sort((a, b) => a.confidence - b.confidence),
+          detail.fields.map((f): ConfidenceField => ({
+            fieldKey: f.fieldKey,
+            value: f.value,
+            confidence: f.confidence,
+            requiresReview: f.requiresReview,
+          })).sort((a, b) => a.confidence - b.confidence),
         )
         setReviewerNote('')
       } catch (err) {

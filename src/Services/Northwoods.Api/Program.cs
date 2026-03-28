@@ -1071,6 +1071,8 @@ static ProcessingStatus ParseStatus(string dbStatus) => dbStatus switch
     _ => throw new ArgumentException($"Unknown status: {dbStatus}")
 };
 
+// Intentionally uses simpler normalization (trim + upper) than the worker's FieldConsensus.Normalize.
+// This is for display-only consensus labels, not extraction decisions.
 static bool AllProvidersAgree(IReadOnlyList<FieldAttempt> attempts)
 {
     if (attempts.Count <= 1) return true;
