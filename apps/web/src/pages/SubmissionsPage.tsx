@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { api, userMessage } from '../api'
 import type { DocumentListItem, LoginResponse } from '../types'
@@ -18,6 +18,13 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [filterText, setFilterText] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current !== null) clearTimeout(copyResetTimerRef.current)
+    }
+  }, [])
 
   const loadDocuments = useCallback(async () => {
     setBusy(true)
@@ -184,7 +191,8 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
                                 e.stopPropagation()
                                 navigator.clipboard.writeText(doc.documentId).then(() => {
                                   setCopiedId(doc.documentId)
-                                  setTimeout(() => setCopiedId(null), 1500)
+                                  if (copyResetTimerRef.current !== null) clearTimeout(copyResetTimerRef.current)
+                                  copyResetTimerRef.current = setTimeout(() => setCopiedId(null), 1500)
                                 }).catch(() => undefined)
                               }}
                               className="font-mono text-xs text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-700 rounded"
