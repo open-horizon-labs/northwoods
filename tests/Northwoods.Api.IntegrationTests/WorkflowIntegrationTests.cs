@@ -136,6 +136,74 @@ public sealed class WorkflowIntegrationTests
 
     [Trait("Category", "runtime")]
     [Fact]
+    public async Task Finalize_WithFieldCorrections_WritesFieldCorrectedAuditEvents()
+    {
+        using var baselineClient = CreateClient();
+
+        if (!await IsRuntimeAvailableAsync(baselineClient))
+        {
+            _output.WriteLine("API runtime is not available at test time; skipping field_corrected audit test.");
+            return;
+        }
+
+        var workerToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
+        var reviewerToken = await LoginAsync(baselineClient, "tenant-a", "reviewer@sunrise.example", "dev");
+
+        using var workerClient = CreateClient(workerToken);
+        using var reviewerClient = CreateClient(reviewerToken);
+
+        var sampleFile = ResolveSampleFile();
+        if (!File.Exists(sampleFile))
+        {
+            _output.WriteLine($"Sample file not found: {sampleFile}; skipping field_corrected audit test.");
+            return;
+        }
+
+        var intake = await CreateIntakeAsync(workerClient, sampleFile);
+        var intakeId = intake.IntakeId;
+
+        var status = await WaitForStatusAsync(workerClient, intakeId);
+        if (status != ProcessingStatus.ReviewReady)
+        {
+            _output.WriteLine($"Runtime stopped early with status '{status}'; skipping field_corrected audit assertions.");
+            return;
+        }
+
+        var review = await reviewerClient.GetFromJsonAsync<ReviewDetailResponse>($"/reviews/{intakeId}");
+        Assert.NotNull(review);
+        Assert.True(review.Fields.Count > 0, "Expected at least one extracted field to test correction.");
+
+        // Modify the first field to trigger a field_corrected audit event
+        var fieldsForFinalize = review.Fields.Select(f => new ConfidenceField(
+            f.FieldKey, f.Value, f.Confidence, f.RequiresReview)).ToList();
+        var originalValue = fieldsForFinalize[0].Value;
+        var correctedValue = originalValue + " (corrected)";
+        fieldsForFinalize[0] = new ConfidenceField(
+            fieldsForFinalize[0].FieldKey, correctedValue,
+            fieldsForFinalize[0].Confidence, fieldsForFinalize[0].RequiresReview);
+
+        var finalizePayload = new FinalizeReviewRequest(fieldsForFinalize, "Integration test correction");
+        using var finalizeResponse = await reviewerClient.PostAsJsonAsync($"/reviews/{intakeId}/finalize", finalizePayload);
+        Assert.Equal(HttpStatusCode.OK, finalizeResponse.StatusCode);
+
+        // Reload review to get updated audit trail
+        var finalized = await reviewerClient.GetFromJsonAsync<ReviewDetailResponse>($"/reviews/{intakeId}");
+        Assert.NotNull(finalized);
+
+        // Verify audit trail contains field_corrected between extraction events and finalized
+        Assert.Contains("field_corrected", finalized.AuditEvents);
+        Assert.Contains("finalized", finalized.AuditEvents);
+
+        // field_corrected must appear before finalized in the audit trail
+        var auditList = finalized.AuditEvents.ToList();
+        var correctedIndex = auditList.IndexOf("field_corrected");
+        var finalizedIndex = auditList.IndexOf("finalized");
+        Assert.True(correctedIndex < finalizedIndex,
+            $"field_corrected (at {correctedIndex}) should appear before finalized (at {finalizedIndex}) in audit trail.");
+    }
+
+    [Trait("Category", "runtime")]
+    [Fact]
     public async Task Search_ReturnsTenantScopedResults()
     {
         using var baselineClient = CreateClient();
