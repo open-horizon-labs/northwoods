@@ -50,7 +50,7 @@ internal static class ReviewEndpoints
             .WithSummary("Returns documents awaiting review for the active tenant.")
             .RequireAuthorization();
 
-        app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
+        app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory) =>
         {
             var authContext = ApiHelpers.GetAuthContext(httpContext.User);
             if (authContext is null)
@@ -120,7 +120,7 @@ internal static class ReviewEndpoints
                 return new ReviewField(f.FieldKey, f.Value, f.Confidence, f.RequiresReview, attempts, consensusNote);
             }).ToList();
 
-            var sourceUrl = objectStore.GetPresignedUrl(doc.original_file_key, TimeSpan.FromMinutes(15));
+            var sourceUrl = $"/documents/{doc.id}/source";
             var status = ApiHelpers.ParseStatus(doc.status);
 
             return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, reviewFields, similarCases, auditEvents));

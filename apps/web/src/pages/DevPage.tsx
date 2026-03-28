@@ -1,6 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { api, ApiError, userMessage } from '../api'
+import { api, ApiError, documentSourceUrl, userMessage } from '../api'
 import { clearStoredAuth, readStoredAuth, storeAuth } from '../lib/auth'
 import type {
   CaseAggregateResponse,
@@ -987,7 +987,7 @@ export default function DevPage() {
                         </p>
                       </div>
                       <a
-                        href={reviewDetail.sourceDocumentUrl}
+                        href={auth ? documentSourceUrl(auth.accessToken, reviewDetail.reviewId) : '#'}
                         target="_blank"
                         rel="noreferrer"
                         className={focusableSecondary}
@@ -999,7 +999,7 @@ export default function DevPage() {
                     <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
                       <p className="bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700">Source document</p>
                       <iframe
-                        src={reviewDetail.sourceDocumentUrl}
+                        src={auth ? documentSourceUrl(auth.accessToken, reviewDetail.reviewId) : ''}
                         title="Source intake document"
                         className="h-[480px] w-full border-0"
                         sandbox="allow-same-origin"
