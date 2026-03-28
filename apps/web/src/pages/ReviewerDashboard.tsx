@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { api } from '../api'
+import { api, userMessage } from '../api'
 import type {
   CaseAggregateResponse,
   CaseDocumentItem,
@@ -143,7 +143,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
         return items.some((i) => i.reviewId === current) ? current : (items[0]?.reviewId ?? null)
       })
     } catch (err) {
-      setQueueError(err instanceof Error ? err.message : 'Failed to load review queue.')
+      setQueueError(userMessage(err, 'Unable to load review queue. The service may be temporarily unavailable.'))
       setQueue([])
     } finally {
       setQueueBusy(false)
@@ -176,7 +176,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
         if (seq !== reviewReqSeq.current) return
         setReviewDetail(null)
         setEditableFields([])
-        setReviewLoadError(err instanceof Error ? err.message : 'Unable to load review details.')
+        setReviewLoadError(userMessage(err, 'Unable to load review details. Please try again.'))
       } finally {
         if (seq === reviewReqSeq.current) setReviewLoading(false)
       }
@@ -231,7 +231,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
       // Reload review to show updated status
       await loadReview(selectedReviewId)
     } catch (err) {
-      setFinalizeError(err instanceof Error ? err.message : 'Failed to finalize review.')
+      setFinalizeError(userMessage(err, 'Unable to finalize review. Please try again.'))
     } finally {
       setFinalizeBusy(false)
     }
@@ -248,7 +248,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
       const response = await api.search(auth.accessToken, q)
       setSearchResults(response.results)
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Search failed.')
+      setSearchError(userMessage(err, 'Search failed. Please try again.'))
       setSearchResults([])
     } finally {
       setSearchBusy(false)
@@ -265,7 +265,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
       const response = await api.getCaseAggregate(auth.accessToken, personKey)
       setCaseView(response)
     } catch (err) {
-      setCaseError(err instanceof Error ? err.message : 'Failed to load case.')
+      setCaseError(userMessage(err, 'Unable to load case details. Please try again.'))
       setCaseView(null)
     } finally {
       setCaseBusy(false)

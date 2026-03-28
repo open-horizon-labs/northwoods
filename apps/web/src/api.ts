@@ -24,10 +24,49 @@ const jsonHeaders = (accessToken?: string) => ({
 const authHeader = (accessToken?: string) =>
   accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined
 
+export class ApiError extends Error {
+  readonly status: number
+  readonly statusText: string
+  readonly body: string
+
+  constructor(status: number, statusText: string, body: string) {
+    super(`${status} ${statusText}`)
+    this.name = 'ApiError'
+    this.status = status
+    this.statusText = statusText
+    this.body = body
+  }
+}
+
+function isNetworkError(err: unknown): boolean {
+  return err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('network') || err.message === 'Failed to fetch')
+}
+
+/**
+ * Translate an API or network error into a human-readable message.
+ *
+ * @param err  - The caught error (ApiError, TypeError from fetch, or unknown)
+ * @param fallback - Context-specific fallback shown when we can't be more specific
+ */
+export function userMessage(err: unknown, fallback: string): string {
+  if (isNetworkError(err)) {
+    return 'Unable to reach the server. Please check your connection and try again.'
+  }
+
+  if (err instanceof ApiError) {
+    if (err.status === 401) return 'Your session has expired. Please sign in again.'
+    if (err.status === 403) return 'You do not have permission to perform this action.'
+    if (err.status === 404) return 'The requested resource was not found.'
+    if (err.status >= 500) return `${fallback} The service may be temporarily unavailable.`
+  }
+
+  return fallback
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `${response.status} ${response.statusText}`)
+    const body = await response.text()
+    throw new ApiError(response.status, response.statusText, body)
   }
 
   return (await response.json()) as T
@@ -60,8 +99,8 @@ export const api = {
     })
 
     if (!response.ok) {
-      const text = await response.text()
-      throw new Error(text || `${response.status} ${response.statusText}`)
+      const body = await response.text()
+      throw new ApiError(response.status, response.statusText, body)
     }
 
     return response.blob()
@@ -148,8 +187,8 @@ export const api = {
       headers: authHeader(accessToken),
     })
     if (!response.ok) {
-      const text = await response.text()
-      throw new Error(text || `${response.status} ${response.statusText}`)
+      const body = await response.text()
+      throw new ApiError(response.status, response.statusText, body)
     }
   },
 

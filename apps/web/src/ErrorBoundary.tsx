@@ -17,7 +17,9 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return {
       hasError: true,
-      message: error.message || 'Unexpected application error',
+      message: (error.message && !error.message.includes('<') && error.message.length < 200)
+        ? error.message
+        : 'An unexpected error occurred.',
     }
   }
 

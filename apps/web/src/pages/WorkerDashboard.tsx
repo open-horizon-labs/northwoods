@@ -1,6 +1,6 @@
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 
-import { api } from '../api'
+import { api, userMessage } from '../api'
 import type {
   IntakeStatusResponse,
   LoginResponse,
@@ -107,7 +107,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
         setSelectedTemplateId('')
       }
     } catch (err) {
-      setTemplatesError(err instanceof Error ? err.message : 'Failed to load templates.')
+      setTemplatesError(userMessage(err, 'Unable to load form types. Please try again or contact support.'))
       setSelectedTemplateId('')
     } finally {
       setIsLoadingTemplates(false)
@@ -185,7 +185,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
       if (fileInputRef.current) fileInputRef.current.value = ''
       if (cameraInputRef.current) cameraInputRef.current.value = ''
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.')
+      setUploadError(userMessage(err, 'Upload failed. Please try again.'))
     } finally {
       setUploadBusy(false)
     }
@@ -212,7 +212,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
 
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
     } catch (err) {
-      setBlankError(err instanceof Error ? err.message : 'Failed to load blank form.')
+      setBlankError(userMessage(err, 'Unable to load blank form. Please try again.'))
     }
   }, [auth.accessToken])
 

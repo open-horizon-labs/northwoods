@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { api } from '../api'
+import { api, userMessage } from '../api'
 import type {
   CreateTemplateRequest,
   LoginResponse,
@@ -155,7 +155,7 @@ function TemplateEditor({
       }
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed.')
+      setError(userMessage(err, 'Unable to save template. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -265,7 +265,7 @@ function BlankPdfUploader({
       await api.uploadTemplateBlankPdf(accessToken, template.id, file)
       onUploaded()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed.')
+      setError(userMessage(err, 'Upload failed. Please try again.'))
     } finally {
       setUploading(false)
     }
@@ -312,7 +312,7 @@ export default function AdminTemplates({ auth, onLogout }: Props) {
       const data = await api.getTemplatesIncludingArchived(auth.accessToken)
       setTemplates(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load templates.')
+      setError(userMessage(err, 'Unable to load templates. Please try again or contact support.'))
     } finally {
       setLoading(false)
     }
@@ -328,7 +328,7 @@ export default function AdminTemplates({ auth, onLogout }: Props) {
       await api.archiveTemplate(auth.accessToken, templateId)
       await loadTemplates()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Archive failed.')
+      setError(userMessage(err, 'Unable to archive template. Please try again.'))
     } finally {
       setArchiving(null)
     }
