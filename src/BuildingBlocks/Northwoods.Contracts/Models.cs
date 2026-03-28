@@ -44,7 +44,7 @@ public sealed record IntakeStatusResponse(
     ProcessingStatus Status,
     IReadOnlyList<ConfidenceField> Fields);
 
-public sealed record ReviewQueueItem(Guid ReviewId, Guid IntakeId, string ApplicantName, string TemplateId, int UncertainFieldCount, DateTimeOffset UploadDate);
+public sealed record ReviewQueueItem(Guid ReviewId, Guid IntakeId, string ApplicantName, string TemplateId, int UncertainFieldCount, DateTime UploadDate);
 
 public sealed record SimilarCaseItem(
     Guid ReviewId,

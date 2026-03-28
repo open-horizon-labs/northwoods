@@ -116,6 +116,9 @@ app.Use(async (httpContext, next) =>
     }
 });
 
+// Ensure database schema and seed data exist on startup
+await DatabaseInitializer.InitializeAsync(connectionString, useAppUserRole, app.Logger);
+
 // Ensure the MinIO bucket exists on startup
 await store.EnsureBucketAsync();
 
