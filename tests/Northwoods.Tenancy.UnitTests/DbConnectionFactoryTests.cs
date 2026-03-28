@@ -8,8 +8,8 @@ namespace Northwoods.Tenancy.UnitTests;
 
 public sealed class DbConnectionFactoryTests
 {
-    private const string SeedTenantADoc = "11111111-1111-1111-1111-111111111111";
-    private const string SeedTenantBDoc = "44444444-4444-4444-4444-444444444444";
+    private const string SeedTenantADoc = "71d7e23e-fed1-587f-9731-59b307809019";
+    private const string SeedTenantBDoc = "7536223b-b6d2-5323-9095-ef175b427065";
 
     private readonly ITestOutputHelper _output;
 
