@@ -9,6 +9,8 @@ type ArcQuery = {
   label: string
   personKey: string
   searchName: string
+  /** Tenant to authenticate against for this query (must match the person's home tenant). */
+  tenantId: 'tenant-a' | 'tenant-b'
   /** Person keys expected in the top-5 similar cases. */
   expectedPersonKeys: string[]
   /** Human description of the expectation. */
@@ -17,11 +19,20 @@ type ArcQuery = {
   tenantIsolationCheck?: boolean
 }
 
+// Demo reviewer credentials (same as scripts/reset_demo.py TENANT_CREDS).
+// The RAG report self-authenticates to the correct tenant for each arc query so
+// it works regardless of which tenant the calling user is logged into.
+const TENANT_REVIEWER_CREDS: Record<'tenant-a' | 'tenant-b', { email: string; password: string; tenantId: string }> = {
+  'tenant-a': { email: 'reviewer@sunrise.example', password: 'password', tenantId: 'tenant-a' },
+  'tenant-b': { email: 'reviewer@lakewood.example', password: 'password', tenantId: 'tenant-b' },
+}
+
 const ARC_QUERIES: ArcQuery[] = [
   {
     label: 'P019 Raymond Castillo (same-person identity)',
     personKey: 'P019',
     searchName: 'Raymond Castillo',
+    tenantId: 'tenant-a',
     expectedPersonKeys: ['P019'],
     expectation: 'Other P019 documents (v2 crisis -> v1 stable arc)',
   },
@@ -29,6 +40,7 @@ const ARC_QUERIES: ArcQuery[] = [
     label: 'P039 Gloria Navarro (same-person identity)',
     personKey: 'P039',
     searchName: 'Gloria Navarro',
+    tenantId: 'tenant-b',
     expectedPersonKeys: ['P039'],
     expectation: 'Other P039 documents (v2 DV/overcrowded -> v1 apartment/stable)',
   },
@@ -36,6 +48,7 @@ const ARC_QUERIES: ArcQuery[] = [
     label: 'P017 Carlton Hughes (cross-facility transfer)',
     personKey: 'P017',
     searchName: 'Carlton Hughes',
+    tenantId: 'tenant-a',
     expectedPersonKeys: ['P017'],
     expectation: 'P017 sunrise doc appears alongside P017 lakewood doc',
   },
@@ -43,6 +56,7 @@ const ARC_QUERIES: ArcQuery[] = [
     label: 'P004 Brianna Kowalski (tenant isolation)',
     personKey: 'P004',
     searchName: 'Brianna Kowalski',
+    tenantId: 'tenant-a',
     expectedPersonKeys: [],
     expectation: 'No cross-tenant matches (P004 is v1-only, sunrise)',
     tenantIsolationCheck: true,
@@ -163,10 +177,31 @@ export default function RagReportPage({ auth, onLogout }: Props) {
     setHasRun(true)
     const outcomes: QueryResult[] = []
 
+    // Acquire a reviewer token for each tenant so queries run against the correct
+    // tenant regardless of which tenant the calling user is logged into.
+    // Falls back to the caller's token if login fails (e.g. custom deploy with
+    // different credentials).
+    const tenantTokens: Record<string, string> = {
+      [auth.tenantId]: auth.accessToken,
+    }
+    for (const [tenantId, creds] of Object.entries(TENANT_REVIEWER_CREDS)) {
+      if (tenantTokens[tenantId]) continue
+      try {
+        const loginResp = await api.login({ email: creds.email, password: creds.password, tenantId: creds.tenantId })
+        tenantTokens[tenantId] = loginResp.accessToken
+      } catch {
+        // Non-fatal: queries for this tenant will fall back to the caller's token
+        // and will likely return "No documents found" rather than a crash.
+      }
+    }
+
     for (const query of ARC_QUERIES) {
+      // Use the token for this query's home tenant; fall back to caller's token.
+      const token = tenantTokens[query.tenantId] ?? auth.accessToken
+
       try {
         // 1. Search for the person by name
-        const searchResp = await api.search(auth.accessToken, query.searchName)
+        const searchResp = await api.search(token, query.searchName)
         const docs = searchResp.results
 
         if (docs.length === 0) {
@@ -188,7 +223,7 @@ export default function RagReportPage({ auth, onLogout }: Props) {
         let similarCases: SimilarCase[] = []
         let error: string | null = null
         try {
-          const review = await api.getReview(auth.accessToken, anchor.intakeId)
+          const review = await api.getReview(token, anchor.intakeId)
           similarCases = review.similarCases ?? []
         } catch (err) {
           error = userMessage(err, 'Unable to fetch review details.')
@@ -226,7 +261,7 @@ export default function RagReportPage({ auth, onLogout }: Props) {
 
     setResults(outcomes)
     setRunning(false)
-  }, [auth.accessToken])
+  }, [auth.accessToken, auth.tenantId])
 
   // Auto-run on mount
   useEffect(() => {

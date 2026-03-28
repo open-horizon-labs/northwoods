@@ -44,14 +44,14 @@ public sealed class RagPipelineSmokeTests
         ("P019", "tenant-a", "sunrise", "sunrise/P019_01_general-assistance.pdf", "general-assistance"),
         ("P019", "tenant-a", "sunrise", "sunrise/P019_02_general-assistance.pdf", "general-assistance"),
         ("P019", "tenant-a", "sunrise", "sunrise/P019_01_housing-stability.pdf", "housing-stability"),
-        ("P019", "tenant-a", "sunrise", "P019_01_clinical-soap-note.pdf", "clinical-soap-note"),
-        ("P019", "tenant-a", "sunrise", "P019_02_clinical-soap-note.pdf", "clinical-soap-note"),
+        ("P019", "tenant-a", "sunrise", "P019_01_clinical-soap-note.pdf", "soap-note"),
+        ("P019", "tenant-a", "sunrise", "P019_02_clinical-soap-note.pdf", "soap-note"),
 
         // P039 — Gloria Navarro, lakewood frequent flyer (tenant-b)
         ("P039", "tenant-b", "lakewood", "lakewood/P039_01_general-assistance.pdf", "general-assistance"),
         ("P039", "tenant-b", "lakewood", "lakewood/P039_02_general-assistance.pdf", "general-assistance"),
         ("P039", "tenant-b", "lakewood", "lakewood/P039_01_housing-stability.pdf", "housing-stability"),
-        ("P039", "tenant-b", "lakewood", "P039_01_clinical-soap-note.pdf", "clinical-soap-note"),
+        ("P039", "tenant-b", "lakewood", "P039_01_clinical-soap-note.pdf", "soap-note"),
 
         // P017 — Carlton Hughes, sunrise->lakewood transfer (upload v2 era at sunrise/tenant-a)
         ("P017", "tenant-a", "sunrise", "sunrise/P017_01_general-assistance.pdf", "general-assistance"),
