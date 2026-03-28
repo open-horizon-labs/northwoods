@@ -701,8 +701,42 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
     if (doc.status != "review_ready" && doc.status != "completed")
         return Results.BadRequest(new { error = $"Document is in '{doc.status}' state, not review_ready or completed." });
 
+    // Read current field values to detect corrections
+    var currentFields = (await session.Connection.QueryAsync<(string field_key, string extracted_value, string? corrected_value)>(
+        "SELECT field_key, extracted_value, corrected_value FROM extracted_fields WHERE document_id = @DocId AND tenant_id = @TenantId",
+        new { DocId = id, TenantId = authContext.TenantId },
+        session.Transaction)).ToDictionary(f => f.field_key);
+
     foreach (var field in request.Fields)
     {
+        // Log field_corrected audit event when the value actually changed
+        if (currentFields.TryGetValue(field.FieldKey, out var current))
+        {
+            var oldValue = current.corrected_value ?? current.extracted_value;
+            if (!string.Equals(oldValue, field.Value, StringComparison.Ordinal))
+            {
+                await session.Connection.ExecuteAsync(
+                    """
+                    INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
+                    VALUES (@DocId, @TenantId, 'field_corrected', @ActorId, @Details::jsonb)
+                    """,
+                    new
+                    {
+                        DocId = id,
+                        TenantId = authContext.TenantId,
+                        ActorId = authContext.UserId,
+                        Details = JsonSerializer.Serialize(new
+                        {
+                            field_key = field.FieldKey,
+                            old_value = oldValue,
+                            new_value = field.Value,
+                            correlation_id = correlationId
+                        })
+                    },
+                    session.Transaction);
+            }
+        }
+
         await session.Connection.ExecuteAsync(
             """
             UPDATE extracted_fields
