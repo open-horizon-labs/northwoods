@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api } from '../api'
 import type {
+  CaseAggregateResponse,
+  CaseDocumentItem,
   ConfidenceField,
   FinalizeReviewRequest,
   LoginResponse,
   ReviewDetailResponse,
   ReviewField,
   ReviewQueueItem,
+  SearchResultItem,
   SimilarCase,
 } from '../types'
-import { statusLabel } from '../types'
+import { statusBadge, statusLabel } from '../types'
 
 const FOCUS_RING =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white'
@@ -102,6 +105,21 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
   const [finalizeBusy, setFinalizeBusy] = useState(false)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
   const [finalizeSuccess, setFinalizeSuccess] = useState(false)
+
+  // Sidebar mode: queue vs search
+  const [sidebarMode, setSidebarMode] = useState<'queue' | 'search'>('queue')
+
+  // Global search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
+  const [searchBusy, setSearchBusy] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchPerformed, setSearchPerformed] = useState(false)
+
+  // Case aggregate state
+  const [caseView, setCaseView] = useState<CaseAggregateResponse | null>(null)
+  const [caseBusy, setCaseBusy] = useState(false)
+  const [caseError, setCaseError] = useState<string | null>(null)
 
   const detailPaneRef = useRef<HTMLDivElement>(null)
 
@@ -219,6 +237,46 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
     }
   }
 
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = searchQuery.trim()
+    if (!q) return
+    setSearchBusy(true)
+    setSearchError(null)
+    setSearchPerformed(true)
+    try {
+      const response = await api.search(auth.accessToken, q)
+      setSearchResults(response.results)
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Search failed.')
+      setSearchResults([])
+    } finally {
+      setSearchBusy(false)
+    }
+  }
+
+  const openCaseView = async (personKey: string) => {
+    setCaseBusy(true)
+    setCaseError(null)
+    // Switch detail pane to case timeline
+    setSelectedReviewId(null)
+    setReviewDetail(null)
+    try {
+      const response = await api.getCaseAggregate(auth.accessToken, personKey)
+      setCaseView(response)
+    } catch (err) {
+      setCaseError(err instanceof Error ? err.message : 'Failed to load case.')
+      setCaseView(null)
+    } finally {
+      setCaseBusy(false)
+    }
+  }
+
+  const closeCaseView = () => {
+    setCaseView(null)
+    setCaseError(null)
+  }
+
   const uncertainCount = editableFields.filter((f) => f.requiresReview).length
 
   return (
@@ -262,101 +320,226 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
           className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white xl:w-80"
           aria-label="Review queue"
         >
-          <div className="shrink-0 border-b border-slate-200 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h1 className="text-sm font-semibold text-slate-900">Review queue</h1>
+          {/* Tab bar */}
+          <div className="shrink-0 border-b border-slate-200">
+            <nav className="flex" aria-label="Sidebar sections">
               <button
                 type="button"
-                onClick={() => void refreshQueue()}
-                disabled={queueBusy}
-                className={`${btnSecondary} px-2.5 py-1.5 text-xs`}
-                aria-label="Refresh queue"
+                onClick={() => setSidebarMode('queue')}
+                className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
+                  sidebarMode === 'queue'
+                    ? 'border-b-2 border-sky-700 text-sky-900'
+                    : 'text-slate-500 hover:text-slate-700'
+                } ${FOCUS_RING}`}
+                aria-current={sidebarMode === 'queue' ? 'page' : undefined}
               >
-                {queueBusy ? 'Refreshing\u2026' : 'Refresh'}
+                Queue{queue.length > 0 ? ` (${queue.length})` : ''}
               </button>
-            </div>
-
-            <label htmlFor="queue-search" className="mt-3 block">
-              <span className="sr-only">Search queue</span>
-              <input
-                id="queue-search"
-                type="search"
-                value={queueSearch}
-                onChange={(e) => setQueueSearch(e.target.value)}
-                placeholder="Search applicant or template\u2026"
-                className={`${inputInteractive} text-xs`}
-              />
-            </label>
-
-            {filteredQueue.length > 0 ? (
-              <p className="mt-1.5 text-xs text-slate-500" role="status" aria-live="polite">
-                {filteredQueue.length} document{filteredQueue.length === 1 ? '' : 's'}
-              </p>
-            ) : null}
+              <button
+                type="button"
+                onClick={() => setSidebarMode('search')}
+                className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
+                  sidebarMode === 'search'
+                    ? 'border-b-2 border-sky-700 text-sky-900'
+                    : 'text-slate-500 hover:text-slate-700'
+                } ${FOCUS_RING}`}
+                aria-current={sidebarMode === 'search' ? 'page' : undefined}
+              >
+                Search
+              </button>
+            </nav>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
-            {queueError ? (
-              <p role="alert" className="px-4 py-3 text-xs text-rose-700">
-                {queueError}
-              </p>
-            ) : queueBusy && queue.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-slate-500" role="status">
-                Loading queue\u2026
-              </p>
-            ) : filteredQueue.length === 0 ? (
-              <div className="p-4 text-center">
-                <p className="text-xs text-slate-500">
-                  {queueSearch ? 'No matches for your search.' : 'No documents pending review.'}
-                </p>
+          {sidebarMode === 'queue' ? (
+            <>
+              {/* Queue controls */}
+              <div className="shrink-0 border-b border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h1 className="text-sm font-semibold text-slate-900">Review queue</h1>
+                  <button
+                    type="button"
+                    onClick={() => void refreshQueue()}
+                    disabled={queueBusy}
+                    className={`${btnSecondary} px-2.5 py-1.5 text-xs`}
+                    aria-label="Refresh queue"
+                  >
+                    {queueBusy ? 'Refreshing\u2026' : 'Refresh'}
+                  </button>
+                </div>
+
+                <label htmlFor="queue-search" className="mt-3 block">
+                  <span className="sr-only">Filter queue</span>
+                  <input
+                    id="queue-search"
+                    type="search"
+                    value={queueSearch}
+                    onChange={(e) => setQueueSearch(e.target.value)}
+                    placeholder="Filter applicant or template\u2026"
+                    className={`${inputInteractive} text-xs`}
+                  />
+                </label>
+
+                {filteredQueue.length > 0 ? (
+                  <p className="mt-1.5 text-xs text-slate-500" role="status" aria-live="polite">
+                    {filteredQueue.length} document{filteredQueue.length === 1 ? '' : 's'}
+                  </p>
+                ) : null}
               </div>
-            ) : (
-              <ul role="list" aria-live="polite" aria-busy={queueBusy} className="divide-y divide-slate-100">
-                {filteredQueue.map((item) => {
-                  const isSelected = selectedReviewId === item.reviewId
-                  return (
-                    <li key={item.reviewId}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedReviewId(item.reviewId)}
-                        aria-pressed={isSelected}
-                        aria-current={isSelected ? 'true' : undefined}
-                        aria-label={`Review ${item.applicantName}, ${item.uncertainFieldCount} uncertain field${item.uncertainFieldCount === 1 ? '' : 's'}`}
-                        className={`w-full px-4 py-3 text-left transition ${
-                          isSelected ? 'bg-sky-50' : 'hover:bg-slate-50'
-                        } ${FOCUS_RING}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className={`truncate text-sm font-medium ${isSelected ? 'text-sky-900' : 'text-slate-900'}`}>
-                              {item.applicantName}
-                            </p>
-                            <p className="mt-0.5 truncate text-xs text-slate-500">
-                              {item.templateId}
-                              {item.uploadDate ? (
-                                <>
-                                  {' · '}
-                                  {new Date(item.uploadDate).toLocaleDateString([], {
-                                    month: 'short',
-                                    day: 'numeric',
-                                  })}
-                                </>
+
+              {/* Queue list */}
+              <div className="flex-1 overflow-y-auto">
+                {queueError ? (
+                  <p role="alert" className="px-4 py-3 text-xs text-rose-700">
+                    {queueError}
+                  </p>
+                ) : queueBusy && queue.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-slate-500" role="status">
+                    Loading queue\u2026
+                  </p>
+                ) : filteredQueue.length === 0 ? (
+                  <div className="p-4 text-center">
+                    <p className="text-xs text-slate-500">
+                      {queueSearch ? 'No matches for your filter.' : 'No documents pending review.'}
+                    </p>
+                  </div>
+                ) : (
+                  <ul role="list" aria-live="polite" aria-busy={queueBusy} className="divide-y divide-slate-100">
+                    {filteredQueue.map((item) => {
+                      const isSelected = selectedReviewId === item.reviewId && !caseView
+                      return (
+                        <li key={item.reviewId}>
+                          <button
+                            type="button"
+                            onClick={() => { closeCaseView(); setSelectedReviewId(item.reviewId) }}
+                            aria-pressed={isSelected}
+                            aria-current={isSelected ? 'true' : undefined}
+                            aria-label={`Review ${item.applicantName}, ${item.uncertainFieldCount} uncertain field${item.uncertainFieldCount === 1 ? '' : 's'}`}
+                            className={`w-full px-4 py-3 text-left transition ${
+                              isSelected ? 'bg-sky-50' : 'hover:bg-slate-50'
+                            } ${FOCUS_RING}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className={`truncate text-sm font-medium ${isSelected ? 'text-sky-900' : 'text-slate-900'}`}>
+                                  {item.applicantName}
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-slate-500">
+                                  {item.templateId}
+                                  {item.uploadDate ? (
+                                    <>
+                                      {' \u00b7 '}
+                                      {new Date(item.uploadDate).toLocaleDateString([], {
+                                        month: 'short',
+                                        day: 'numeric',
+                                      })}
+                                    </>
+                                  ) : null}
+                                </p>
+                              </div>
+                              {item.uncertainFieldCount > 0 ? (
+                                <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                  {item.uncertainFieldCount}
+                                </span>
                               ) : null}
-                            </p>
-                          </div>
-                          {item.uncertainFieldCount > 0 ? (
-                            <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                              {item.uncertainFieldCount}
-                            </span>
-                          ) : null}
-                        </div>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
+                            </div>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Search controls */}
+              <div className="shrink-0 border-b border-slate-200 p-4">
+                <form onSubmit={handleSearch} noValidate>
+                  <label htmlFor="global-search" className="sr-only">Search intakes</label>
+                  <div className="flex gap-2">
+                    <input
+                      id="global-search"
+                      type="search"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by name, address, field\u2026"
+                      className={`${inputInteractive} flex-1 text-xs`}
+                      required
+                      aria-required="true"
+                    />
+                    <button
+                      type="submit"
+                      disabled={searchBusy || !searchQuery.trim()}
+                      className={`${btnSecondary} shrink-0 px-3 py-1.5 text-xs`}
+                    >
+                      {searchBusy ? 'Searching\u2026' : 'Search'}
+                    </button>
+                  </div>
+                </form>
+                {searchPerformed && !searchBusy && searchResults.length > 0 ? (
+                  <p className="mt-1.5 text-xs text-slate-500" role="status" aria-live="polite">
+                    {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Search results */}
+              <div className="flex-1 overflow-y-auto">
+                {searchError ? (
+                  <p role="alert" className="px-4 py-3 text-xs text-rose-700">
+                    {searchError}
+                  </p>
+                ) : searchBusy ? (
+                  <p className="px-4 py-3 text-xs text-slate-500" role="status" aria-live="polite">
+                    Searching\u2026
+                  </p>
+                ) : searchResults.length > 0 ? (
+                  <ul role="list" className="divide-y divide-slate-100">
+                    {searchResults.map((item) => {
+                      const badge = statusBadge(item.status)
+                      return (
+                        <li key={item.intakeId}>
+                          <button
+                            type="button"
+                            onClick={() => void openCaseView(item.applicantName)}
+                            className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${FOCUS_RING}`}
+                            aria-label={`View case for ${item.applicantName}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-slate-900">
+                                  {item.applicantName}
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-slate-500">
+                                  {item.templateId}
+                                </p>
+                              </div>
+                              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${badge.badgeClass}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                            {item.snippet ? (
+                              <p className="mt-1 text-xs leading-relaxed text-slate-600 line-clamp-2">
+                                {item.snippet.replace(/\*\*/g, '')}
+                              </p>
+                            ) : null}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : searchPerformed ? (
+                  <div className="p-4 text-center">
+                    <p className="text-xs text-slate-500">No results found. Try different keywords.</p>
+                  </div>
+                ) : (
+                  <div className="p-4 text-center">
+                    <p className="text-xs text-slate-500">Search across all processed intakes within your tenant.</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </aside>
 
         {/* Detail pane */}
@@ -365,12 +548,20 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
           className="flex flex-1 flex-col overflow-y-auto"
           aria-label="Review detail"
         >
-          {!selectedReviewId ? (
+          {caseView ? (
+            <CaseTimeline
+              caseData={caseView}
+              caseBusy={caseBusy}
+              caseError={caseError}
+              onClose={closeCaseView}
+              onOpenReview={(intakeId) => { closeCaseView(); setSelectedReviewId(intakeId) }}
+            />
+          ) : !selectedReviewId ? (
             <div className="flex flex-1 items-center justify-center p-8 text-center">
               <div>
                 <p className="text-sm font-medium text-slate-700">Select a document to review</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Choose from the queue on the left to open the review detail.
+                  Choose from the queue or search for an applicant.
                 </p>
               </div>
             </div>
@@ -681,6 +872,126 @@ function ReviewDetail({
           )}
         </div>
       </section>
+    </div>
+  )
+}
+
+
+// --- Case Timeline Sub-component ---
+
+type CaseTimelineProps = {
+  caseData: CaseAggregateResponse
+  caseBusy: boolean
+  caseError: string | null
+  onClose: () => void
+  onOpenReview: (intakeId: string) => void
+}
+
+function CaseTimeline({ caseData, caseBusy, caseError, onClose, onOpenReview }: CaseTimelineProps) {
+  if (caseBusy) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <p className="text-sm text-slate-500" role="status" aria-live="polite">Loading case\u2026</p>
+      </div>
+    )
+  }
+
+  if (caseError) {
+    return (
+      <div className="p-6">
+        <p role="alert" className="rounded border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {caseError}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 flex-col overflow-y-auto">
+      {/* Header */}
+      <div className="shrink-0 border-b border-slate-200 bg-white px-6 py-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">{caseData.personKey}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {caseData.documents.length} document{caseData.documents.length === 1 ? '' : 's'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`${btnSecondary} px-3 py-1.5 text-xs`}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        {caseData.documents.length === 0 ? (
+          <p className="text-sm text-slate-500">No documents found for this person.</p>
+        ) : (
+          <ol className="relative border-l-2 border-slate-200 ml-2" aria-label="Document timeline">
+            {caseData.documents.map((doc: CaseDocumentItem) => {
+              const badge = statusBadge(doc.status)
+              const date = new Date(doc.createdAt)
+              const dateLabel = date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+              const timeLabel = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              const keyFields = doc.fields.slice(0, 3)
+              return (
+                <li key={doc.intakeId} className="relative mb-6 last:mb-0 pl-8">
+                  {/* Timeline dot */}
+                  <span
+                    className={`absolute -left-[7px] top-1.5 h-3 w-3 rounded-full border-2 border-white ${
+                      badge.badgeClass.includes('emerald') ? 'bg-emerald-500'
+                        : badge.badgeClass.includes('amber') ? 'bg-amber-500'
+                        : badge.badgeClass.includes('rose') ? 'bg-rose-500'
+                        : 'bg-slate-400'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  {/* Date label */}
+                  <p className="text-xs font-medium text-slate-500">{dateLabel} &middot; {timeLabel}</p>
+                  {/* Card */}
+                  <div className="mt-1.5 rounded border border-slate-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900">{doc.templateId}</p>
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${badge.badgeClass}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    {/* Key fields preview */}
+                    {keyFields.length > 0 ? (
+                      <dl className="mt-2 space-y-1">
+                        {keyFields.map((f) => (
+                          <div key={f.fieldKey} className="flex items-baseline gap-2 text-xs">
+                            <dt className="shrink-0 text-slate-500">{f.fieldKey}:</dt>
+                            <dd className="truncate font-medium text-slate-700">{f.value || '\u2014'}</dd>
+                          </div>
+                        ))}
+                        {doc.fields.length > 3 ? (
+                          <p className="text-xs text-slate-400">+{doc.fields.length - 3} more field{doc.fields.length - 3 === 1 ? '' : 's'}</p>
+                        ) : null}
+                      </dl>
+                    ) : null}
+                    {/* Open review button */}
+                    <button
+                      type="button"
+                      onClick={() => onOpenReview(doc.intakeId)}
+                      className={`mt-2 text-xs font-medium text-sky-700 underline underline-offset-2 hover:text-sky-900 ${FOCUS_RING} rounded px-1 py-0.5 -ml-1`}
+                    >
+                      Open review
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        )}
+      </div>
     </div>
   )
 }
