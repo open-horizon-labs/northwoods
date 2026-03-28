@@ -120,6 +120,21 @@ public static class DatabaseInitializer
         ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS normalized_confidence DECIMAL(5, 4) NOT NULL DEFAULT 0;
         ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS requires_review BOOLEAN NOT NULL DEFAULT false;
         ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS details JSONB;
+
+        -- M004: Fix case_profiles.embedding dimension (early schema used vector(16), must be 1536 for text-embedding-3-small)
+        DO $$ BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'case_profiles' AND column_name = 'embedding'
+                  AND udt_name = 'vector'
+            ) THEN
+                -- Only alter if the current dimension is wrong; truncate data to avoid cast errors
+                DELETE FROM case_profiles WHERE embedding IS NOT NULL
+                    AND vector_dims(embedding) <> 1536;
+                ALTER TABLE case_profiles ALTER COLUMN embedding TYPE VECTOR(1536)
+                    USING embedding::text::vector(1536);
+            END IF;
+        END $$;
         """;
 
     private const string ExtensionsSql = """

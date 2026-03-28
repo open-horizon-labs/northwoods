@@ -10,7 +10,7 @@ internal static class DocumentEndpoints
 {
     public static WebApplication MapDocumentEndpoints(this WebApplication app)
     {
-        app.MapGet("/documents/{id:guid}/source", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
+        app.MapMethods("/documents/{id:guid}/source", ["GET", "HEAD"], async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory, ObjectStore objectStore) =>
         {
             var authContext = ApiHelpers.GetAuthContext(httpContext.User);
             if (authContext is null)
