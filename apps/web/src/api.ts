@@ -15,6 +15,11 @@ import type {
   UpdateTemplateRequest,
 } from './types'
 
+type RetryIntakeResponse = {
+  intakeId: string
+  status: string
+}
+
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 const jsonHeaders = (accessToken?: string) => ({
@@ -216,6 +221,14 @@ export const api = {
       headers: authHeader(accessToken),
     })
     return handleResponse<DocumentListItem[]>(response)
+  },
+
+  retryIntake: async (accessToken: string, intakeId: string) => {
+    const response = await fetch(`${API_BASE}/intakes/${intakeId}/retry`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+    })
+    return handleResponse<RetryIntakeResponse>(response)
   },
 }
 

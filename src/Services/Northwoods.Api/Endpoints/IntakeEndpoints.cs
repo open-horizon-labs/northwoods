@@ -86,6 +86,55 @@ internal static class IntakeEndpoints
             .WithSummary("Uploads a document and creates an intake record.")
             .RequireAuthorization();
 
+        app.MapPost("/intakes/{id:guid}/retry", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory) =>
+        {
+            var authContext = ApiHelpers.GetAuthContext(httpContext.User);
+            if (authContext is null)
+                return Results.Unauthorized();
+
+            if (authContext.Role != UserRole.Reviewer)
+                return Results.Forbid();
+
+            var correlationId = ApiHelpers.GetCorrelationId(httpContext);
+
+            await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+            var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string status)>(
+                "SELECT id, status FROM documents WHERE id = @Id AND tenant_id = @TenantId",
+                new { Id = id, TenantId = authContext.TenantId },
+                session.Transaction);
+
+            if (doc == default) return Results.NotFound();
+            if (doc.status != "failed")
+                return Results.BadRequest(new { error = $"Document is in '{doc.status}' state. Only failed documents can be retried." });
+
+            await session.Connection.ExecuteAsync(
+                "UPDATE documents SET status = 'uploaded', updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
+                new { Id = id, TenantId = authContext.TenantId },
+                session.Transaction);
+
+            await session.Connection.ExecuteAsync(
+                """
+                INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
+                VALUES (@DocId, @TenantId, 'retry_requested', @ActorId, @Details::jsonb)
+                """,
+                new
+                {
+                    DocId = id,
+                    TenantId = authContext.TenantId,
+                    ActorId = authContext.UserId,
+                    Details = JsonSerializer.Serialize(new { correlation_id = correlationId })
+                },
+                session.Transaction);
+
+            await session.CommitAsync();
+
+            return Results.Ok(new { intakeId = id, status = ProcessingStatus.Uploaded });
+        })
+            .WithName("RetryIntake").WithTags("Intakes")
+            .WithSummary("Resets a failed document back to uploaded status so the worker picks it up again.")
+            .RequireAuthorization();
+
         app.MapGet("/intakes/{id:guid}", async (Guid id, HttpContext httpContext, DbConnectionFactory dbFactory) =>
         {
             var authContext = ApiHelpers.GetAuthContext(httpContext.User);

@@ -94,10 +94,59 @@ internal static class ReviewEndpoints
                 .GroupBy(a => a.field_key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
-            var auditEvents = (await session.Connection.QueryAsync<string>(
-                "SELECT event_type FROM audit_events WHERE document_id = @Id AND tenant_id = @TenantId ORDER BY created_at",
+            var auditRows = (await session.Connection.QueryAsync<(string event_type, DateTimeOffset created_at, Guid? actor_id)>(
+                "SELECT event_type, created_at, actor_id FROM audit_events WHERE document_id = @Id AND tenant_id = @TenantId ORDER BY created_at",
                 new { Id = id, TenantId = authContext.TenantId },
                 session.Transaction)).ToList();
+
+            // Resolve distinct actor IDs to emails
+            var actorIds = auditRows
+                .Where(r => r.actor_id.HasValue)
+                .Select(r => r.actor_id!.Value)
+                .Distinct()
+                .ToArray();
+
+            var actorEmails = new Dictionary<Guid, string>();
+            if (actorIds.Length > 0)
+            {
+                var emailRows = await session.Connection.QueryAsync<(Guid id, string email)>(
+                    "SELECT id, email FROM users WHERE id = ANY(@Ids)",
+                    new { Ids = actorIds },
+                    session.Transaction);
+                foreach (var (uid, email) in emailRows)
+                    actorEmails[uid] = email;
+            }
+
+            var auditEvents = auditRows
+                .Select(r => new AuditEventItem(
+                    r.event_type,
+                    r.created_at,
+                    r.actor_id.HasValue && actorEmails.TryGetValue(r.actor_id.Value, out var email) ? email : null))
+                .ToList();
+
+            // Extract failure reason from the most recent extraction_failed audit event
+            string? failureReason = null;
+            if (doc.status == "failed")
+            {
+                var failedDetailsJson = await session.Connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT details::text FROM audit_events WHERE document_id = @Id AND tenant_id = @TenantId AND event_type = 'extraction_failed' ORDER BY created_at DESC LIMIT 1",
+                    new { Id = id, TenantId = authContext.TenantId },
+                    session.Transaction);
+
+                if (!string.IsNullOrEmpty(failedDetailsJson))
+                {
+                    try
+                    {
+                        using var detailsDoc = JsonDocument.Parse(failedDetailsJson);
+                        if (detailsDoc.RootElement.TryGetProperty("error", out var errEl))
+                            failureReason = errEl.GetString();
+                    }
+                    catch (JsonException)
+                    {
+                        // ignore malformed details
+                    }
+                }
+            }
 
             var similarCases = await FindSimilarCasesAsync(
                 session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5,
@@ -123,7 +172,7 @@ internal static class ReviewEndpoints
             var sourceUrl = $"/documents/{doc.id}/source";
             var status = ApiHelpers.ParseStatus(doc.status);
 
-            return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, reviewFields, similarCases, auditEvents));
+            return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, reviewFields, similarCases, auditEvents, failureReason));
         })
             .WithName("GetReview").WithTags("Reviews")
             .WithSummary("Returns the document, extracted fields, and audit trail for a review task.")

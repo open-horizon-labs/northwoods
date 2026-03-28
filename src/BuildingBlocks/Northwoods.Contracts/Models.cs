@@ -54,6 +54,11 @@ public sealed record SimilarCaseItem(
     decimal MatchScore,
     string Summary);
 
+public sealed record AuditEventItem(
+    string EventType,
+    DateTimeOffset CreatedAt,
+    string? ActorEmail);
+
 public sealed record ReviewDetailResponse(
     Guid ReviewId,
     Guid IntakeId,
@@ -63,7 +68,8 @@ public sealed record ReviewDetailResponse(
     ProcessingStatus Status,
     IReadOnlyList<ReviewField> Fields,
     IReadOnlyList<SimilarCaseItem> SimilarCases,
-    IReadOnlyList<string> AuditEvents);
+    IReadOnlyList<AuditEventItem> AuditEvents,
+    string? FailureReason = null);
 public sealed record FinalizeReviewRequest(IReadOnlyList<ConfidenceField> Fields, string ReviewerNote);
 
 public sealed record FinalizeReviewResponse(Guid ReviewId, ProcessingStatus Status);

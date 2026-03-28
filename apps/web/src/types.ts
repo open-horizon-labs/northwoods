@@ -65,6 +65,12 @@ export type SimilarCase = {
   summary: string
 }
 
+export type AuditEventItem = {
+  eventType: string
+  createdAt: string
+  actorEmail: string | null
+}
+
 export type ReviewDetailResponse = {
   reviewId: string
   intakeId: string
@@ -74,7 +80,8 @@ export type ReviewDetailResponse = {
   status: ProcessingStatus
   fields: ReviewField[]
   similarCases: SimilarCase[]
-  auditEvents: string[]
+  auditEvents: AuditEventItem[]
+  failureReason?: string | null
 }
 
 export type FinalizeReviewRequest = {

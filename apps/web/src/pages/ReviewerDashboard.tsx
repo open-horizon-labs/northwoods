@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, documentSourceUrl, userMessage } from '../api'
 import type {
+  AuditEventItem,
   CaseAggregateResponse,
   CaseDocumentItem,
   ConfidenceField,
@@ -75,7 +76,7 @@ const attemptConfidenceColor = (confidence: number): string => {
   return 'text-rose-700'
 }
 
-const formatAuditEvent = (name: string) =>
+const formatAuditEventType = (name: string) =>
   name
     .split(/[_-]/)
     .filter(Boolean)
@@ -84,6 +85,21 @@ const formatAuditEvent = (name: string) =>
       return lower === 'id' ? 'ID' : lower.charAt(0).toUpperCase() + lower.slice(1)
     })
     .join(' ')
+
+const formatAuditTimestamp = (iso: string): string => {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
 
 type Props = {
   auth: LoginResponse
@@ -106,6 +122,8 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
   const [finalizeBusy, setFinalizeBusy] = useState(false)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
   const [finalizeSuccess, setFinalizeSuccess] = useState(false)
+  const [retryBusy, setRetryBusy] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
 
   // Sidebar mode: queue vs search
   const [sidebarMode, setSidebarMode] = useState<'queue' | 'search'>('queue')
@@ -236,6 +254,21 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
       setFinalizeError(userMessage(err, 'Unable to finalize review. Please try again.'))
     } finally {
       setFinalizeBusy(false)
+    }
+  }
+
+  const handleRetry = async () => {
+    if (!selectedReviewId) return
+    setRetryBusy(true)
+    setRetryError(null)
+    try {
+      await api.retryIntake(auth.accessToken, selectedReviewId)
+      await refreshQueue()
+      await loadReview(selectedReviewId)
+    } catch (err) {
+      setRetryError(userMessage(err, 'Unable to retry intake. Please try again.'))
+    } finally {
+      setRetryBusy(false)
     }
   }
 
@@ -619,9 +652,12 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
               finalizeError={finalizeError}
               finalizeSuccess={finalizeSuccess}
               uncertainCount={uncertainCount}
+              retryBusy={retryBusy}
+              retryError={retryError}
               onFieldChange={handleFieldChange}
               onNoteChange={setReviewerNote}
               onFinalize={handleFinalize}
+              onRetry={handleRetry}
               onSelectReview={setSelectedReviewId}
             />
           ) : null}
