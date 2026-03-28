@@ -136,7 +136,7 @@ export type StatusBadgeConfig = {
  * Colors follow AGENTS.md palette: amber=review, green=finalized, red=failed, gray=processing/queued.
  */
 export const statusBadge = (status: string): StatusBadgeConfig => {
-  const s = status.toLowerCase()
+  const s = status.toLowerCase().replace(/_/g, '')
   if (s === 'reviewready' || s === '2')
     return { label: 'Ready for Review', badgeClass: 'border-amber-200 bg-amber-50 text-amber-700' }
   if (s === 'completed' || s === 'finalized' || s === '3' || s === '4')
