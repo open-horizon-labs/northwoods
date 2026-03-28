@@ -200,7 +200,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
       const objectUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = objectUrl
-      link.download = `${templateId}-blank.pdf`
+      link.download = `${templateId}-template.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)

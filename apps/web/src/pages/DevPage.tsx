@@ -731,15 +731,19 @@ export default function DevPage() {
                                 >
                                   {isSelected ? 'Selected' : 'Select'}
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void downloadTemplateBlank(template.id)}
-                                  className={focusableSecondary}
-                                  disabled={!template.blankPdfKey}
-                                  title={template.blankPdfKey ? undefined : 'No PDF uploaded for this template'}
-                                >
-                                  Download blank
-                                </button>
+                                {template.blankPdfKey ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void downloadTemplateBlank(template.id)}
+                                    className={focusableSecondary}
+                                  >
+                                    Download blank
+                                  </button>
+                                ) : (
+                                  <p className="text-xs text-slate-600">
+                                    No printable form available -- contact your administrator.
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </li>

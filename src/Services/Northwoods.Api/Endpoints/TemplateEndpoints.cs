@@ -1,3 +1,4 @@
+using Amazon.S3;
 using System.Text.Json;
 using Dapper;
 using Northwoods.Contracts;
@@ -58,7 +59,16 @@ internal static class TemplateEndpoints
             if (string.IsNullOrWhiteSpace(template.blank_pdf_key))
                 return Results.NotFound(new { error = "No printable PDF is available for this template. Contact your administrator to upload one." });
 
-            var pdfBytes = await objectStore.DownloadAsync(template.blank_pdf_key);
+            byte[] pdfBytes;
+            try
+            {
+                pdfBytes = await objectStore.DownloadAsync(template.blank_pdf_key);
+            }
+            catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchKey")
+            {
+                return Results.NotFound(new { error = "No printable PDF is available for this template. Contact your administrator to upload one." });
+            }
+
             var pdfFilename = $"{template.id}-template.pdf";
             return Results.File(pdfBytes, "application/pdf", pdfFilename);
         })
