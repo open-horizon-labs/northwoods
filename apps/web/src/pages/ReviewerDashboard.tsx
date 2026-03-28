@@ -633,7 +633,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
               caseBusy={caseBusy}
               caseError={caseError}
               onClose={closeCaseView}
-              onOpenReview={(intakeId) => { closeCaseView(); setSelectedReviewId(intakeId) }}
+              onOpenReview={(intakeId) => { closeCaseView(); setSelectedReviewId(intakeId); setSelectedApplicantName(undefined) }}
             />
           ) : !selectedReviewId ? (
             <div className="flex flex-1 items-center justify-center p-8 text-center">
@@ -710,7 +710,10 @@ type ReviewDetailProps = {
   onFinalize: () => void
   onRetry: () => void
   onSelectReview: (id: string) => void
-  onOpenCaseView: (personKey: string) => void
+  /** Called with the applicant's display name to open the case aggregate view.
+   *  The /cases/{personKey} endpoint uses fuzzy name matching, so this IS an
+   *  applicant name string -- there is no stable UUID-based case identifier. */
+  onOpenCaseView: (applicantName: string) => void
 }
 
 function ReviewDetail({
