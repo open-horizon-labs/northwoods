@@ -93,8 +93,28 @@ jobs:
       - name: Verify deploys triggered
         run: echo "Deploys triggered. Render free tier may take 5-10 minutes. Check https://dashboard.render.com"
 
-  release:
+  smoke-test:
     needs: deploy
+    runs-on: ubuntu-latest
+    # Give Render free-tier services time to spin up after deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for services to start
+        run: sleep 120
+
+      - name: Run production smoke test
+        env:
+          SMOKE_BASE_URL: https://northwoods.muness.com
+          SMOKE_WORKER_EMAIL: ${{ secrets.SMOKE_WORKER_EMAIL }}
+          SMOKE_WORKER_PASSWORD: ${{ secrets.SMOKE_WORKER_PASSWORD }}
+          SMOKE_REVIEWER_EMAIL: ${{ secrets.SMOKE_REVIEWER_EMAIL }}
+          SMOKE_REVIEWER_PASSWORD: ${{ secrets.SMOKE_REVIEWER_PASSWORD }}
+        run: bash scripts/production-smoke.sh
+
+
+  release:
+    needs: smoke-test
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
