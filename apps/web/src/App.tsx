@@ -8,16 +8,17 @@ const WorkerDashboard = lazy(() => import('./pages/WorkerDashboard'))
 const ReviewerDashboard = lazy(() => import('./pages/ReviewerDashboard'))
 const DevPage = lazy(() => import('./pages/DevPage'))
 const AdminTemplates = lazy(() => import('./pages/AdminTemplates'))
+const RagReportPage = lazy(() => import('./pages/RagReportPage'))
 
-/** Hash-based routing: #dev opens the developer scaffold. */
-function useIsDevRoute(): boolean {
-  const [isDev, setIsDev] = useState(() => window.location.hash === '#dev')
+/** Hash-based routing: #dev opens the developer scaffold, #rag-report opens RAG report. */
+function useHashRoute(): string {
+  const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => {
-    const handler = () => setIsDev(window.location.hash === '#dev')
+    const handler = () => setHash(window.location.hash)
     window.addEventListener('hashchange', handler)
     return () => window.removeEventListener('hashchange', handler)
   }, [])
-  return isDev
+  return hash
 }
 
 function Spinner() {
@@ -31,7 +32,7 @@ function Spinner() {
 }
 
 export default function App() {
-  const isDevRoute = useIsDevRoute()
+  const hash = useHashRoute()
   const [auth, setAuth] = useState<LoginResponse | null>(readStoredAuth)
 
   const handleLogin = (nextAuth: LoginResponse) => {
@@ -44,7 +45,7 @@ export default function App() {
     setAuth(null)
   }
 
-  if (isDevRoute) {
+  if (hash === '#dev') {
     return (
       <Suspense fallback={<Spinner />}>
         <DevPage />
@@ -73,6 +74,14 @@ export default function App() {
     return (
       <Suspense fallback={<Spinner />}>
         <WorkerDashboard auth={auth} onLogout={handleLogout} />
+      </Suspense>
+    )
+  }
+
+  if (hash === '#rag-report') {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <RagReportPage auth={auth} onLogout={handleLogout} />
       </Suspense>
     )
   }
