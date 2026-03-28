@@ -246,6 +246,9 @@ export async function fetchDocumentPdfBuffer(accessToken: string, documentId: st
   const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(documentId)}/source`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text()
+    throw new ApiError(res.status, res.statusText, body)
+  }
   return res.arrayBuffer()
 }

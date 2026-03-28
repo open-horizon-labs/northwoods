@@ -30,6 +30,10 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
   const [scale, setScale] = useState(1.0)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
+  // Store callback in a ref so the fetch effect doesn't re-run when the caller
+  // re-renders with a new function reference (callers must still memoize via useCallback).
+  const onAvailabilityChangeRef = useRef(onAvailabilityChange)
+  useEffect(() => { onAvailabilityChangeRef.current = onAvailabilityChange }, [onAvailabilityChange])
 
   // Measure container width for responsive page rendering
   useEffect(() => {
@@ -43,7 +47,8 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
     return () => obs.disconnect()
   }, [])
 
-  // Fetch PDF buffer when documentId/accessToken changes
+  // Fetch PDF buffer when documentId/accessToken changes.
+  // Uses a ref for onAvailabilityChange so this effect doesn't re-run on every render.
   useEffect(() => {
     let cancelled = false
     setPdfData(null)
@@ -54,20 +59,20 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
       .then((buf) => {
         if (!cancelled) {
           setPdfData({ data: buf })
-          onAvailabilityChange?.(true)
+          // availability is signalled true only once react-pdf parses successfully (onLoadSuccess)
         }
       })
       .catch(() => {
         if (!cancelled) {
           setLoadError(true)
-          onAvailabilityChange?.(false)
+          onAvailabilityChangeRef.current?.(false)
         }
       })
 
     return () => {
       cancelled = true
     }
-  }, [accessToken, documentId, onAvailabilityChange])
+  }, [accessToken, documentId])
 
   if (loadError) {
     return null
@@ -145,10 +150,11 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
           onLoadSuccess={({ numPages: n }) => {
             setNumPages(n)
             setPageNum(1)
+            onAvailabilityChangeRef.current?.(true)
           }}
           onLoadError={() => {
             setLoadError(true)
-            onAvailabilityChange?.(false)
+            onAvailabilityChangeRef.current?.(false)
           }}
           loading={
             <div className="flex items-center justify-center py-8">
