@@ -8,13 +8,18 @@ Usage:
       --access-key KEY --secret-key SECRET
 
 Skips files already present in MinIO (idempotent).
+
+Note: uses presigned POST (multipart) instead of direct PUT to work through
+Cloudflare/CDN proxies that block S3 PUT requests.
 """
 from __future__ import annotations
 import argparse, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "corpus"))
 
 import boto3
+import requests
 from botocore.exceptions import ClientError
+from botocore.config import Config
 from generate_seed_sql import v2_forms, v1_forms
 from people import PEOPLE
 
@@ -40,12 +45,14 @@ def build_manifest() -> list[tuple[str, str]]:
 
 
 def seed(endpoint: str, bucket: str, access_key: str, secret_key: str, dry_run: bool = False):
+    endpoint_url = f"http://{endpoint}" if "://" not in endpoint else endpoint
     s3 = boto3.client(
         "s3",
-        endpoint_url=f"http://{endpoint}" if "://" not in endpoint else endpoint,
+        endpoint_url=endpoint_url,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         region_name="us-east-1",
+        config=Config(s3={"addressing_style": "path"}),
     )
 
     # Ensure bucket exists
@@ -77,8 +84,26 @@ def seed(endpoint: str, bucket: str, access_key: str, secret_key: str, dry_run: 
             uploaded += 1
             continue
 
+        # Use presigned POST (multipart) instead of direct PUT to work through
+        # CDN/proxy layers (e.g. Cloudflare) that block S3 PUT requests.
+        presigned = s3.generate_presigned_post(
+            Bucket=bucket,
+            Key=key,
+            Fields={"Content-Type": "application/pdf"},
+            Conditions=[{"Content-Type": "application/pdf"}],
+            ExpiresIn=3600,
+        )
         with open(path, "rb") as f:
-            s3.put_object(Bucket=bucket, Key=key, Body=f, ContentType="application/pdf")
+            resp = requests.post(
+                presigned["url"],
+                data=presigned["fields"],
+                files={"file": (os.path.basename(path), f, "application/pdf")},
+                timeout=60,
+            )
+        if resp.status_code not in (200, 204):
+            print(f"  FAILED ({resp.status_code}): {key}")
+            print(f"    {resp.text[:200]}")
+            continue
         print(f"  uploaded: {key}")
         uploaded += 1
 
