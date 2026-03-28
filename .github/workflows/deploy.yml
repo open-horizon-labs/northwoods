@@ -1,0 +1,94 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/northwoods
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: api
+            dockerfile: src/Services/Northwoods.Api/Dockerfile
+            context: src/
+          - name: worker
+            dockerfile: src/Workers/Extraction.Worker/Dockerfile
+            context: src/
+          - name: web
+            dockerfile: apps/web/Dockerfile
+            context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:latest,${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploys
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          for SVC in srv-d73ber19fqoc73ci2l60 srv-d73bervkijhs73dee48g srv-d73bhic2kvos738c3t6g; do
+            echo "Deploying $SVC..."
+            curl -sf -X POST "https://api.render.com/v1/services/$SVC/deploys" \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d '{"clearCache":"do_not_clear"}' \
+              | jq -r '.id // "triggered"'
+          done
+
+      - name: Wait for deploys
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          echo "Waiting for services to go live..."
+          for attempt in $(seq 1 30); do
+            sleep 15
+            ALL_LIVE=true
+            for SVC in srv-d73ber19fqoc73ci2l60 srv-d73bervkijhs73dee48g srv-d73bhic2kvos738c3t6g; do
+              STATUS=$(curl -sf -H "Authorization: Bearer $RENDER_API_KEY" \
+                "https://api.render.com/v1/services/$SVC/deploys?limit=1" \
+                | jq -r '.[0].deploy.status')
+              if [ "$STATUS" != "live" ]; then
+                ALL_LIVE=false
+              fi
+            done
+            if [ "$ALL_LIVE" = "true" ]; then
+              echo "All services live!"
+              exit 0
+            fi
+            echo "Attempt $attempt: not all live yet..."
+          done
+          echo "Timeout waiting for deploys" && exit 1

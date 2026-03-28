@@ -1,9 +1,9 @@
 # Render Blueprint for Northwoods deployment
 # See: https://render.com/docs/blueprint-spec
 #
-# Note: This blueprint documents the service topology. Services were created
-# via the Render API and deploy from Docker Hub images (muness/northwoods-*).
-# To use this blueprint directly, connect the GitHub repo to Render first.
+# Images built by GitHub Actions (.github/workflows/deploy.yml) and pushed
+# to GitHub Container Registry (ghcr.io). Render pulls on deploy hook trigger.
+# No public Docker Hub images.
 
 databases:
   - name: northwoods-db
@@ -20,7 +20,7 @@ services:
     region: oregon
     runtime: image
     image:
-      url: docker.io/muness/northwoods-api:latest
+      url: ghcr.io/open-horizon-labs/northwoods-api:latest
     healthCheckPath: /healthz
     envVars:
       - key: ASPNETCORE_URLS
@@ -67,7 +67,7 @@ services:
     region: oregon
     runtime: image
     image:
-      url: docker.io/muness/northwoods-worker:latest
+      url: ghcr.io/open-horizon-labs/northwoods-worker:latest
     envVars:
       - key: ConnectionStrings__Default
         fromDatabase:
@@ -113,5 +113,5 @@ services:
     region: oregon
     runtime: image
     image:
-      url: docker.io/muness/northwoods-web:latest
+      url: ghcr.io/open-horizon-labs/northwoods-web:latest
     # Custom domain: northwoods.muness.com (CNAME via Cloudflare)
