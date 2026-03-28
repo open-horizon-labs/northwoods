@@ -52,7 +52,8 @@ public sealed record SimilarCaseItem(
     string ApplicantName,
     string TemplateId,
     decimal MatchScore,
-    string Summary);
+    string Summary,
+    IReadOnlyList<string> Signals);
 
 public sealed record AuditEventItem(
     string EventType,

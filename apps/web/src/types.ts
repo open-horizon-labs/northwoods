@@ -63,6 +63,7 @@ export type SimilarCase = {
   templateId: string
   matchScore: number
   summary: string
+  signals: string[]
 }
 
 export type AuditEventItem = {

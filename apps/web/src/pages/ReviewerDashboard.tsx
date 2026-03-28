@@ -898,8 +898,17 @@ function ReviewDetail({
                           {(sc.matchScore * 100).toFixed(0)}% match
                         </span>
                       </div>
+                      {sc.signals?.length > 0 ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {sc.signals.map((sig) => (
+                            <span key={sig} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
+                              {sig}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       {sc.summary ? (
-                        <p className="mt-1 text-xs text-slate-600 line-clamp-2">{sc.summary}</p>
+                        <p className="mt-1 text-xs text-slate-500 line-clamp-2">{sc.summary}</p>
                       ) : null}
                     </button>
                   </li>
