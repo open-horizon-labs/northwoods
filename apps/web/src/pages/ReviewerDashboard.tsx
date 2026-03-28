@@ -180,7 +180,8 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
       setQueue(items)
       // Auto-select first item if current selection was removed, but preserve deep-linked docs
       setSelectedReviewId((current) => {
-        if (!current) return initialDocumentId ? null : (items[0]?.reviewId ?? null)
+        // Don't auto-select a queue item when starting in documents mode
+        if (!current) return (initialDocumentId ?? (initialMode === 'documents' ? null : (items[0]?.reviewId ?? null)))
         if (items.some((i) => i.reviewId === current)) return current
         return current === initialDocumentId ? current : (items[0]?.reviewId ?? null)
       })
@@ -777,7 +778,10 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
             <ReviewDetail
               accessToken={auth.accessToken}
               review={reviewDetail}
-              applicantName={queue.find((i) => i.reviewId === selectedReviewId)?.applicantName}
+              applicantName={
+                queue.find((i) => i.reviewId === selectedReviewId)?.applicantName ??
+                documents.find((d) => d.documentId === selectedReviewId)?.applicantName
+              }
               editableFields={editableFields}
               reviewerNote={reviewerNote}
               finalizeBusy={finalizeBusy}
