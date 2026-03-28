@@ -27,6 +27,16 @@ public sealed record CreateIntakeResponse(Guid IntakeId, ProcessingStatus Status
 
 public sealed record ConfidenceField(string FieldKey, string Value, decimal Confidence, bool RequiresReview);
 
+public sealed record FieldAttempt(string Provider, string Value, decimal Confidence);
+
+public sealed record ReviewField(
+    string FieldKey,
+    string Value,
+    decimal Confidence,
+    bool RequiresReview,
+    IReadOnlyList<FieldAttempt> Attempts,
+    string ConsensusNote);
+
 public sealed record IntakeStatusResponse(
     Guid IntakeId,
     string TenantId,
@@ -51,7 +61,7 @@ public sealed record ReviewDetailResponse(
     string TemplateId,
     string SourceDocumentUrl,
     ProcessingStatus Status,
-    IReadOnlyList<ConfidenceField> Fields,
+    IReadOnlyList<ReviewField> Fields,
     IReadOnlyList<SimilarCaseItem> SimilarCases,
     IReadOnlyList<string> AuditEvents);
 public sealed record FinalizeReviewRequest(IReadOnlyList<ConfidenceField> Fields, string ReviewerNote);

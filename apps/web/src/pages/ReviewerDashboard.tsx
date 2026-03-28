@@ -6,6 +6,7 @@ import type {
   FinalizeReviewRequest,
   LoginResponse,
   ReviewDetailResponse,
+  ReviewField,
   ReviewQueueItem,
   SimilarCase,
 } from '../types'
@@ -57,6 +58,19 @@ const confidenceTone = (confidence: number): ConfidenceTier => {
 }
 
 const confidencePercent = (c: number) => `${Math.round(c * 100)}%`
+
+const consensusNoteColor = (note: string): string => {
+  if (note.includes('agree')) return 'text-emerald-700'
+  if (note.includes('Single')) return 'text-amber-700'
+  if (note.includes('disagree')) return 'text-rose-700'
+  return 'text-slate-600'
+}
+
+const attemptConfidenceColor = (confidence: number): string => {
+  if (confidence >= 0.8) return 'text-emerald-700'
+  if (confidence >= 0.65) return 'text-amber-700'
+  return 'text-rose-700'
+}
 
 const formatAuditEvent = (name: string) =>
   name
@@ -132,7 +146,12 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
         if (seq !== reviewReqSeq.current) return
         setReviewDetail(detail)
         setEditableFields(
-          detail.fields.map((f) => ({ ...f })).sort((a, b) => a.confidence - b.confidence),
+          detail.fields.map((f): ConfidenceField => ({
+            fieldKey: f.fieldKey,
+            value: f.value,
+            confidence: f.confidence,
+            requiresReview: f.requiresReview,
+          })).sort((a, b) => a.confidence - b.confidence),
         )
         setReviewerNote('')
       } catch (err) {
@@ -426,6 +445,21 @@ function ReviewDetail({
 }: ReviewDetailProps) {
   const isFinalized = statusLabel(review.status) === 'Finalized'
 
+  const reviewFieldMap = useMemo(() => {
+    const map = new Map<string, ReviewField>()
+    for (const f of review.fields) map.set(f.fieldKey, f)
+    return map
+  }, [review.fields])
+
+  const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
+  const toggleReason = (fieldKey: string) =>
+    setOpenReasons((prev) => {
+      const next = new Set(prev)
+      if (next.has(fieldKey)) next.delete(fieldKey)
+      else next.add(fieldKey)
+      return next
+    })
+
   return (
     <div className="grid h-full grid-cols-1 xl:grid-cols-[1fr_420px]">
       {/* Document viewer */}
@@ -478,6 +512,9 @@ function ReviewDetail({
               const tier = confidenceTone(field.confidence)
               const fieldId = `field-${index}`
               const hintId = `${fieldId}-hint`
+              const rf = reviewFieldMap.get(field.fieldKey)
+              const hasAttempts = rf && rf.attempts.length > 0
+              const isOpen = openReasons.has(field.fieldKey)
               return (
                 <div
                   key={field.fieldKey}
@@ -497,6 +534,49 @@ function ReviewDetail({
                   <p id={hintId} className="mt-0.5 text-xs text-slate-500">
                     {confidencePercent(field.confidence)} confidence
                   </p>
+                  {hasAttempts ? (
+                    <div className="mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleReason(field.fieldKey)}
+                        aria-expanded={isOpen}
+                        className={`inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 ${FOCUS_RING} rounded px-1 py-0.5 -ml-1`}
+                      >
+                        <svg
+                          className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          aria-hidden="true"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                        Why this confidence?
+                      </button>
+                      {isOpen ? (
+                        <div className="mt-1.5 space-y-1 rounded border border-slate-200 bg-slate-50 p-2">
+                          <p className={`text-xs font-medium ${consensusNoteColor(rf.consensusNote)}`}>
+                            {rf.consensusNote}
+                          </p>
+                          {rf.attempts.map((attempt, ai) => (
+                            <div
+                              key={`${attempt.provider}-${ai}`}
+                              className="flex items-baseline justify-between gap-2 text-xs"
+                            >
+                              <span className="font-medium text-slate-700">{attempt.provider}:</span>
+                              <span className="flex-1 truncate text-slate-600" title={attempt.value}>
+                                {attempt.value || '\u2014'}
+                              </span>
+                              <span className={`shrink-0 tabular-nums ${attemptConfidenceColor(attempt.confidence)}`}>
+                                {confidencePercent(attempt.confidence)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <textarea
                     id={fieldId}
                     value={field.value}
