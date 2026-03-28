@@ -321,12 +321,14 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
             </span>
             <a
               href="#submissions"
+              onClick={(e) => { e.preventDefault(); window.location.hash = '#submissions'; }}
               className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
             >
               All Documents
             </a>
             <a
               href="#rag-report"
+              onClick={(e) => { e.preventDefault(); window.location.hash = '#rag-report'; }}
               className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
             >
               RAG Report
@@ -397,7 +399,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
                     type="search"
                     value={queueSearch}
                     onChange={(e) => setQueueSearch(e.target.value)}
-                    placeholder="Filter applicant or template\u2026"
+                    placeholder="Filter applicant or template…"
                     className={`${inputInteractive} text-xs`}
                   />
                 </label>
@@ -485,7 +487,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
                       type="search"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name, address, field\u2026"
+                      placeholder="Search by name, address, field…"
                       className={`${inputInteractive} flex-1 text-xs`}
                       required
                       aria-required="true"

@@ -69,6 +69,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
             <div className="flex gap-1">
               <a
                 href="#"
+                onClick={(e) => { e.preventDefault(); window.location.hash = ''; }}
                 className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
               >
                 Queue
@@ -81,6 +82,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
               </span>
               <a
                 href="#rag-report"
+                onClick={(e) => { e.preventDefault(); window.location.hash = '#rag-report'; }}
                 className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
               >
                 RAG Report
@@ -118,7 +120,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
               type="search"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              placeholder="Filter by name, template, or status\u2026"
+              placeholder="Filter by name, template, or status…"
               className={`w-full max-w-sm rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 transition focus:border-sky-600 ${FOCUS_RING}`}
             />
           </div>

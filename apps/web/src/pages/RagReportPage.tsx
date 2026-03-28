@@ -260,12 +260,14 @@ export default function RagReportPage({ auth, onLogout }: Props) {
           <div className="flex gap-1">
             <a
               href="#"
+              onClick={(e) => { e.preventDefault(); window.location.hash = ''; }}
               className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
             >
               Queue
             </a>
             <a
               href="#submissions"
+              onClick={(e) => { e.preventDefault(); window.location.hash = '#submissions'; }}
               className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
             >
               All Documents
