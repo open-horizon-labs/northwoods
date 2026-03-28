@@ -1,6 +1,7 @@
 # Evening Sprint — 2026-03-27
 
 ## Open issues (priority order)
+
 1. #52 — Audit log missing field_corrected events (API + frontend)
 2. #53 — Generate embeddings for reviewer notes (worker)
 3. #43 — Surface provider disagreement in review UI (API + frontend)
