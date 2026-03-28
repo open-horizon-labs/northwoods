@@ -111,7 +111,8 @@ def seed(api: str):
                     timeout=30,
                 )
             if resp.status_code == 202:
-                doc_id = resp.json().get("docId", "?")
+                data = resp.json()
+                doc_id = data.get("docId") or data.get("id") or "?"
                 print(f"  [{i}/{len(manifest)}] queued {filename} → {doc_id}")
                 uploaded += 1
             else:
