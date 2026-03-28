@@ -20,7 +20,7 @@ import boto3
 import requests
 from botocore.exceptions import ClientError
 from botocore.config import Config
-from generate_seed_sql import v2_forms, v1_forms
+from generate_seed_sql import v2_forms, v1_forms, TENANT_IDS
 from people import PEOPLE
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -28,18 +28,24 @@ CORPUS_DIR = os.path.join(REPO_ROOT, "samples", "corpus")
 
 
 def build_manifest() -> list[tuple[str, str]]:
-    """Returns [(minio_key, local_corpus_path), ...] for all seed documents."""
+    """Returns [(minio_key, local_corpus_path), ...] for all seed documents.
+
+    MinIO keys use normalized tenant IDs (tenant-a/tenant-b) matching the DB.
+    Local corpus paths use friendly names (sunrise/lakewood) matching the filesystem.
+    """
     entries = []
     for person in PEOPLE:
-        for era, visit_num, template_id, _date, tenant in v2_forms(person):
-            key = f"{tenant}/seed/{person['id']}_{visit_num:02d}_{era}_{template_id}.pdf"
-            path = os.path.join(CORPUS_DIR, tenant, f"{person['id']}_{visit_num:02d}_{template_id}.pdf")
+        for era, visit_num, template_id, _date, friendly_tenant in v2_forms(person):
+            tenant_id = TENANT_IDS.get(friendly_tenant, friendly_tenant)
+            key = f"{tenant_id}/seed/{person['id']}_{visit_num:02d}_{era}_{template_id}.pdf"
+            path = os.path.join(CORPUS_DIR, friendly_tenant, f"{person['id']}_{visit_num:02d}_{template_id}.pdf")
             entries.append((key, path))
         v1_idx: dict[str, int] = {}
-        for era, visit_num, template_id, _date, tenant in v1_forms(person):
+        for era, visit_num, template_id, _date, friendly_tenant in v1_forms(person):
             v1_idx[template_id] = v1_idx.get(template_id, 0) + 1
-            key = f"{tenant}/seed/{person['id']}_{visit_num:02d}_{era}_{template_id}.pdf"
-            path = os.path.join(CORPUS_DIR, tenant, f"{person['id']}_{visit_num:02d}_{template_id}.pdf")
+            tenant_id = TENANT_IDS.get(friendly_tenant, friendly_tenant)
+            key = f"{tenant_id}/seed/{person['id']}_{visit_num:02d}_{era}_{template_id}.pdf"
+            path = os.path.join(CORPUS_DIR, friendly_tenant, f"{person['id']}_{visit_num:02d}_{template_id}.pdf")
             entries.append((key, path))
     return entries
 
