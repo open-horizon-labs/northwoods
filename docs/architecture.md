@@ -69,9 +69,8 @@ This split keeps trust boundaries clear: API owns request/identity boundaries, w
 ### Extraction model
 
 - Extraction runs in the worker, not in request/response paths.
-- Worker runs ALL registered providers on ALL fields (dual-provider by default):
-  - **Mock OCR provider** -- deterministic extraction for demo reliability.
-  - **OpenAI Vision provider** (optional, requires `OPENAI_API_KEY`) -- sends document image to gpt-5.4-nano via Responses API for structured field extraction with per-field confidence.
+- Worker runs ALL registered providers on ALL fields:
+  - **OpenAI Vision provider** (required for extraction; requires `OPENAI_API_KEY`) -- sends document images to gpt-5.4-nano via the Responses API for structured field extraction with per-field confidence.
 - Each provider's results are stored as separate extraction attempts with run-level metadata; attempts are append-only.
 - The pipeline selects the best candidate per field based on confidence score.
 - Confidence is explicit and centralized into operational tiers (`High`, `ReviewRequired`, `Escalate`).

@@ -4,14 +4,14 @@ Date: 2026-03-27
 
 ## Executive summary
 
-Northwoods delivers a complete intake-processing platform with a coherent vertical slice: template-guided upload, dual-provider extraction with confidence scoring, human-in-the-loop review with similar-case assistance, search, case aggregate view, and tenant-isolated multi-tenancy enforced via RLS. The system is documented, tested, and runnable from a fresh clone via `docker compose up -d`.
+Northwoods delivers a complete intake-processing platform with a coherent vertical slice: template-guided upload, staged multi-provider extraction with confidence scoring, human-in-the-loop review with similar-case assistance, search, case aggregate view, and tenant-isolated multi-tenancy enforced via RLS. The system is documented, tested, and runnable from a fresh clone via `docker compose up -d`.
 
 ## What is complete and functioning
 
 ### Core workflow (upload, extract, review, finalize)
 
 - **Template-guided upload**: 4 intake templates per tenant (General Assistance, Housing Stability, Financial Assistance, Clinical SOAP Note). Intake workers upload scanned PDFs associated with a template.
-- **Background extraction**: Worker polls for queued documents and runs a dual-provider extraction pipeline (mock OCR + optional OpenAI Vision). Each provider produces per-field extraction attempts with confidence scores. Attempts are append-only.
+- **Background extraction**: Worker polls for queued documents and runs the configured extraction providers (OpenAI Vision plus optional stages). Each provider produces per-field extraction attempts with confidence scores. Attempts are append-only.
 - **Confidence-tiered review**: Extracted fields are routed to review when confidence falls below threshold. Reviewers see fields, confidence indicators, the source document, and similar historical cases.
 - **Finalize with corrections**: Reviewers correct low-confidence fields and finalize with an audit trail. Corrections are stored alongside original extraction.
 - **Audit events**: `intake_uploaded`, `extraction_started`, `extraction_completed`, `extraction_failed`, `finalized` -- all tenant-scoped with correlation IDs.
@@ -48,7 +48,7 @@ Northwoods delivers a complete intake-processing platform with a coherent vertic
 
 ### Tests
 
-- **Unit tests**: Tenancy (2 tests), Worker extraction pipeline (15 tests including dual-provider).
+- **Unit tests**: Tenancy (2 tests), Worker extraction pipeline (15 tests including staged multi-provider coverage).
 - **Integration tests**: Login validation (11 tests), workflow E2E with tenant isolation, search tenant scoping.
 - **CI checks**: RLS compliance, append-only extraction_attempts, secret scanning.
 
@@ -78,12 +78,12 @@ Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1-4):
 
 | Area | Score | Evidence |
 |------|------:|----------|
-| Intake digitization | 3 (Strong) | Template-guided upload, dual-provider background extraction, status tracking, confidence scoring, append-only attempt history. Verified end-to-end via smoke test and integration tests. |
+| Intake digitization | 3 (Strong) | Template-guided upload, staged multi-provider background extraction, status tracking, confidence scoring, append-only attempt history. Verified end-to-end via smoke test and integration tests. |
 | Human review | 3 (Strong) | Reviewer sees extracted fields with confidence beside source document. Low-confidence fields flagged for review. Finalize persists corrections with audit trail. Similar cases embedded in review payload. |
 | Similar-case assistance | 3 (Strong) | Hybrid retrieval (FTS + vector + trigram + structured boosts) produces relevant matches with explanatory summaries. Embedded in review workflow, not standalone. Tenant-isolated. |
 | Case visibility | 3 (Strong) | Full-text search with highlighting. Case aggregate view groups documents by person. Both tenant-scoped. |
 | Tenant safety and operability | 4 (Excellent) | RLS on all tables, JWT claim propagation, no BYPASS RLS, automated compliance checks, structured logging, correlation IDs, health checks, retry behavior. Integration tests verify cross-tenant isolation. |
-| Architecture judgment | 3 (Strong) | Coherent capability boundaries, explicit trade-offs, 5 ADRs, architecture doc with diagram. Dual-provider extraction shows practical AI integration. Postgres-centered retrieval avoids unnecessary infrastructure. |
+| Architecture judgment | 3 (Strong) | Coherent capability boundaries, explicit trade-offs, 5 ADRs, architecture doc with diagram. A staged multi-provider extraction model and Postgres-centered retrieval preserve reliability and explainability.
 
 ## Trade-offs and rationale
 
@@ -91,16 +91,16 @@ Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1-4):
 
 2. **Append-only extraction attempts**: Supports auditability and confidence-based review. More storage but clearly improves trust and traceability.
 
-3. **Dual-provider extraction over single-provider**: Mock OCR provides deterministic demo reliability; OpenAI Vision provides real extraction quality. Both run on every document and the best candidate wins per field. Trade-off: higher cost per extraction when Vision is enabled.
+3. **Multi-provider extraction over single-provider**: A staged combination of OpenAI Vision and optional providers (normalizer/escalation stages) is used before finalization. Trade-off: higher compute cost on escalated/complex documents.
 
 4. **Shared Postgres tenancy with RLS backstop**: Single operational footprint with defense-in-depth isolation. Trade-off: query discipline mandatory, cross-tenant analytics become explicit product work.
 
-5. **Mock OCR as default provider**: Ensures the system works reliably without external API keys. OpenAI Vision is opt-in. Trade-off: demo quality is limited to deterministic mock output unless Vision is configured.
+- **Current extraction defaults**: `UseOpenAiVision` defaults to `true` and requires an OpenAI key; Paddle OCR, OpenAI normalizer, and additional providers run only when explicitly enabled.
 
 ## Known gaps
 
 - **Production auth hardening**: bcrypt hashing is in place, but token refresh, rate limiting, and account lockout are not implemented.
-- **OpenAI Vision in Docker**: the worker container requires `OPENAI_API_KEY` in the worker environment for Vision extraction; defaults to mock provider otherwise.
+- **OpenAI Vision in Docker**: the worker container requires `OPENAI_API_KEY` in the worker environment when `Extraction:UseOpenAiVision` is true.
 - **UI smoke tests**: Playwright e2e test scaffold exists; full automation in CI is a follow-on item.
 
 ## AI-assisted development
@@ -118,13 +118,13 @@ four most consequential decisions. Identify what I should NOT build to avoid une
 → Produced the one-API-one-worker design, the Postgres-for-retrieval decision (no separate vector DB),
 the RLS tenancy model, and ADRs 001-005 including the portable extraction pipeline design.
 
-**2. Dual-provider extraction pipeline (issue #27)**
+**2. Staged extraction pipeline (issue #27)**
 ```
-Run both PaddleOCR and OpenAI gpt-5.4-nano vision in the extraction pipeline on every document.
+Run the configured extraction stages (PaddleOCR and OpenAI vision) in sequence and preserve append-only attempt history.
 Log token usage (prompt, completion, total) in extraction_attempts.details as numeric JSONB.
-Escalate to gpt-5.4-mini if nano fails. Preserve append-only attempt history.
+Escalate to the mini model when confidence gates fail. Keep provider metadata for auditability.
 ```
-→ Produced `OpenAiVisionProvider`, `CallWithFallback`, token logging in JSONB, and 8 new unit tests.
+→ Produced `OpenAiVisionProvider`, `CallWithFallback`, token logging in JSONB, and extraction test coverage.
 The agent caught that `Dictionary<string,string>` needed to become `Dictionary<string,object>`
 for numeric JSON serialization — a detail not in the original spec.
 
@@ -140,7 +140,7 @@ persisted), null byte Postgres crash, and missing input validation. Each became 
 **4. Confidence tier implementation (issue #42)**
 ```
 ADR 005 promises three confidence tiers but they aren't implemented. Fix this completely:
-- Remove mock provider as default (UseOpenAiVision should default true)
+- Removed mock provider as default path; `UseOpenAiVision` defaults true
 - Implement auto-accept at >= 0.90, review_ready for 0.75-0.90, forced review below 0.75
 - Escalate nano -> mini if avg field confidence < 0.75 after extraction
 - Separate transient errors (retry 3x) from capability failures (escalate) from hard errors (fail)

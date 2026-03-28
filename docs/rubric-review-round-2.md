@@ -18,7 +18,7 @@ This is the second rubric review pass (issue #10), run after round 1 (#9) fixes 
 
 | Area | Round 1 | Round 2 | Evidence |
 |------|--------:|--------:|----------|
-| Intake digitization | 3 | 3 | 4 templates per tenant. Upload triggers background dual-provider extraction (mock OCR + optional OpenAI Vision). Status transitions tracked. Fields extracted with per-field confidence. Append-only attempt history with run metadata. |
+| Intake digitization | 3 | 3 | 4 templates per tenant. Upload triggers background extraction pipeline with OpenAI-backed providers, including staging + confidence scoring, status transitions, and per-field confidence + append-only attempt metadata. |
 | Human review | 3 | 3 | Review queue shows uncertain field count. Review detail shows fields sorted by confidence (uncertain first), source document in sandboxed iframe, audit events. Finalize persists corrections with reviewer note. |
 | Similar-case assistance | 3 | 3 | Hybrid retrieval (FTS + vector + trigram + structured boosts with reciprocal rank fusion) embedded in review payload. Returns match score + explanatory summary. Tenant-isolated. 3-4 similar cases returned for seed data. |
 | Case visibility | 3 | 3 | Full-text search with snippet highlighting. Case aggregate view groups documents by person. Both tenant-scoped. |
@@ -69,7 +69,7 @@ This is the second rubric review pass (issue #10), run after round 1 (#9) fixes 
 | #24 | Auth token persistence in localStorage | Session survives page reload |
 | #25 | Bcrypt password hashing | No more plaintext passwords |
 | #26 | Login input validation | Missing fields/null bytes return 400 not 500 |
-| #27 | Dual-provider extraction (mock OCR + OpenAI Vision) | Better extraction quality, token usage logging |
+| #27 | Multi-provider extraction (OpenAI Vision + optional staging providers) | Better extraction quality, token usage logging |
 | Metrics | Tenant-scoped ReviewFinalizationCount | Integration test now passes |
 | Iframe | Added `sandbox="allow-same-origin"` | CodeRabbit finding addressed |
 

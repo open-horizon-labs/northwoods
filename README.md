@@ -100,7 +100,7 @@ cp .env.example .env.local
 # Set Extraction__UseOpenAiVision=true
 ```
 
-Without an API key, the system uses the mock OCR provider (deterministic extraction for demo reliability).
+Without an API key, extraction is disabled until one provider is enabled in configuration.
 
 ---
 
@@ -127,7 +127,7 @@ Intake Worker → [Upload PDF] → API → MinIO (store) + Postgres (metadata)
 | Component | Technology | Responsibility |
 |---|---|---|
 | API | .NET 10 minimal API | Auth, upload, review, search, audit, tenant scoping |
-| Extraction Worker | .NET BackgroundService | Polling, dual-provider OCR, confidence gating, append-only attempts |
+| Extraction Worker | .NET BackgroundService | Polling, staged provider extraction, confidence gating, append-only attempts |
 | Frontend | React + TypeScript + Tailwind | Role-based dashboards, confidence visualization, similar case panel |
 | Database | Postgres 18 + pgvector + pg_trgm | System of record, RLS, hybrid retrieval, FTS |
 | Object Storage | MinIO (S3-compatible) | Document blobs |

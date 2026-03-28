@@ -56,13 +56,6 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
     {
         var providers = new List<IExtractionProvider>();
 
-        var useMock = configuration.GetValue("Extraction:UseMockProvider", false);
-        if (useMock)
-        {
-            // Mock mode is mutually exclusive: return only the mock provider
-            return [new MockTesseractProvider()];
-        }
-
         var usePaddle = configuration.GetValue("Extraction:UsePaddleOcr", false);
         if (usePaddle)
         {
@@ -92,6 +85,11 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
             var modelNano = configuration["Extraction:OpenAi:VisionModel"] ?? "gpt-5.4-nano";
             var modelMini = configuration["Extraction:OpenAi:ModelMini"] ?? "gpt-5.4-mini";
             providers.Add(new OpenAiVisionProvider(apiKey, modelNano, modelMini));
+        }
+
+        if (providers.Count == 0)
+        {
+            throw new InvalidOperationException("No extraction providers are enabled. Set at least one of Extraction:UseOpenAiVision, Extraction:UseOpenAiNormalizer, or Extraction:UsePaddleOcr to true.");
         }
 
         return [.. providers.OrderBy(p => p.Order)];

@@ -78,7 +78,7 @@ A single extraction result record must be represented as:
   - Capability failure (avg field confidence < 0.75, empty response, unparseable JSON): escalate to mini immediately
   - Hard error (400 Bad Request): fail the document, do not escalate
   - Escalation metadata logged in `extraction_attempts.details`: `escalation_reason`, `escalated_from`
-- `UseOpenAiVision` defaults to `true` in appsettings.json; `MockTesseractProvider` only runs when `UseMockProvider=true`.
+- `UseOpenAiVision` is enabled by default; `OpenAiNormalizer` is optional and `PaddleOCR` runs only when explicitly enabled.
 - Store every stage attempt; never overwrite previous attempts.
 - Test coverage for:
   - provider agreement (confidence boost)
