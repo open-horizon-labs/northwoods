@@ -17,6 +17,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filterText, setFilterText] = useState('')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const loadDocuments = useCallback(async () => {
     setBusy(true)
@@ -178,13 +179,17 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
                             <button
                               type="button"
                               title={doc.documentId}
+                              aria-label={copiedId === doc.documentId ? 'Copied!' : `Copy ID ${doc.documentId}`}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                void navigator.clipboard.writeText(doc.documentId)
+                                navigator.clipboard.writeText(doc.documentId).then(() => {
+                                  setCopiedId(doc.documentId)
+                                  setTimeout(() => setCopiedId(null), 1500)
+                                }).catch(() => undefined)
                               }}
                               className="font-mono text-xs text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-700 rounded"
                             >
-                              {shortId}
+                              {copiedId === doc.documentId ? 'Copied!' : shortId}
                             </button>
                           </td>
                           <td className="px-4 py-3 font-medium text-slate-900">{doc.applicantName}</td>
