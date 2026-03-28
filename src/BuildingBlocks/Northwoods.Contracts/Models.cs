@@ -106,3 +106,10 @@ public sealed record CaseDocumentItem(
 public sealed record CaseAggregateResponse(
     string PersonKey,
     IReadOnlyList<CaseDocumentItem> Documents);
+
+public sealed record DocumentListItem(
+    Guid DocumentId,
+    string TemplateId,
+    string ApplicantName,
+    string Status,
+    DateTimeOffset CreatedAt);

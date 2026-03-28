@@ -9,8 +9,9 @@ const ReviewerDashboard = lazy(() => import('./pages/ReviewerDashboard'))
 const DevPage = lazy(() => import('./pages/DevPage'))
 const AdminTemplates = lazy(() => import('./pages/AdminTemplates'))
 const RagReportPage = lazy(() => import('./pages/RagReportPage'))
+const SubmissionsPage = lazy(() => import('./pages/SubmissionsPage'))
 
-/** Hash-based routing: #dev opens the developer scaffold, #rag-report opens RAG report. */
+/** Hash-based routing: #dev, #rag-report, #submissions map to dedicated pages. */
 function useHashRoute(): string {
   const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => {
@@ -74,6 +75,15 @@ export default function App() {
     return (
       <Suspense fallback={<Spinner />}>
         <WorkerDashboard auth={auth} onLogout={handleLogout} />
+      </Suspense>
+    )
+  }
+
+  // Submissions view — accessible to any authenticated user
+  if (hash === '#submissions') {
+    return (
+      <Suspense fallback={<Spinner />}>
+        <SubmissionsPage auth={auth} onLogout={handleLogout} />
       </Suspense>
     )
   }

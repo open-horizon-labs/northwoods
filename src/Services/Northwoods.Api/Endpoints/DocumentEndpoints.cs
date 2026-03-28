@@ -1,4 +1,7 @@
+using Amazon.S3;
+using Amazon.S3.Model;
 using Dapper;
+using Northwoods.Contracts;
 using Northwoods.Tenancy;
 
 namespace Northwoods.Api;
@@ -23,7 +26,16 @@ internal static class DocumentEndpoints
             if (fileKey is null)
                 return Results.NotFound();
 
-            var s3Response = await objectStore.GetObjectStreamAsync(fileKey);
+            GetObjectResponse s3Response;
+            try
+            {
+                s3Response = await objectStore.GetObjectStreamAsync(fileKey);
+            }
+            catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchKey")
+            {
+                return Results.NotFound(new { error = "Source document not available." });
+            }
+
             httpContext.Response.RegisterForDispose(s3Response);
 
             var contentType = s3Response.Headers.ContentType ?? "application/pdf";
@@ -38,6 +50,33 @@ internal static class DocumentEndpoints
         })
             .WithName("GetDocumentSource").WithTags("Documents")
             .WithSummary("Streams the original source document for a given document ID.")
+            .RequireAuthorization();
+
+        app.MapGet("/documents", async (HttpContext httpContext, DbConnectionFactory dbFactory) =>
+        {
+            var authContext = ApiHelpers.GetAuthContext(httpContext.User);
+            if (authContext is null)
+                return Results.Unauthorized();
+
+            await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
+
+            var items = (await session.Connection.QueryAsync<DocumentListItem>(
+                """
+                SELECT d.id AS DocumentId,
+                       d.template_id AS TemplateId,
+                       COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.field_key = 'applicantName' LIMIT 1), '(unknown)') AS ApplicantName,
+                       d.status AS Status,
+                       d.created_at AS CreatedAt
+                FROM documents d
+                WHERE d.tenant_id = @TenantId
+                ORDER BY d.created_at DESC
+                """,
+                new { TenantId = authContext.TenantId },
+                transaction: session.Transaction)).ToList();
+            return Results.Ok(items);
+        })
+            .WithName("ListDocuments").WithTags("Documents")
+            .WithSummary("Lists all documents for the active tenant.")
             .RequireAuthorization();
 
         return app;
