@@ -93,9 +93,9 @@ test.describe('Worker upload', () => {
 
     // After upload, a status badge or record should appear.
     // The worker dashboard renders upload records with a StatusBadge component.
-    // Wait for any status indicator to appear (Uploaded, Extracting, etc.)
+    // Wait for any status indicator to appear (Queued, Processing, etc.)
     await expect(
-      page.getByText(/uploaded|extracting|review ready|completed|failed/i).first(),
+      page.getByText(/queued|processing|ready for review|finalized|failed/i).first(),
     ).toBeVisible({ timeout: 15_000 })
   })
 })
@@ -139,7 +139,7 @@ test.describe('Cross-tenant isolation', () => {
     await fileInput.setInputFiles(samplePdf)
     await page.getByRole('button', { name: /submit|upload/i }).click()
     await expect(
-      page.getByText(/uploaded|extracting|review ready|completed|failed/i).first(),
+      page.getByText(/queued|processing|ready for review|finalized|failed/i).first(),
     ).toBeVisible({ timeout: 15_000 })
 
     // Logout and login as tenant-b reviewer.
