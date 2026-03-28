@@ -52,8 +52,12 @@ login() {
 # 1. Homepage loads
 # ---------------------------------------------------------------------------
 
-check "Homepage returns 200" \
-  bash -c "curl -sS -o /dev/null -w '' --fail '${BASE_URL}/' --max-time 15"
+homepage_check() {
+  local http_code
+  http_code=$(curl -sS -o /dev/null -w '%{http_code}' "${BASE_URL}/" --max-time 15)
+  [ "$http_code" = "200" ]
+}
+check "Homepage returns 200" homepage_check
 
 # ---------------------------------------------------------------------------
 # 2. Worker login succeeds and returns a JWT

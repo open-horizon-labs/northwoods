@@ -96,6 +96,8 @@ jobs:
   smoke-test:
     needs: deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # Give Render free-tier services time to spin up after deploy
     steps:
       - uses: actions/checkout@v4
