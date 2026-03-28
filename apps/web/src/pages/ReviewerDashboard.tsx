@@ -143,7 +143,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
         return items.some((i) => i.reviewId === current) ? current : (items[0]?.reviewId ?? null)
       })
     } catch (err) {
-      setQueueError(userMessage(err, 'Unable to load review queue. The service may be temporarily unavailable.'))
+      setQueueError(userMessage(err, 'Unable to load review queue. Please try again.'))
       setQueue([])
     } finally {
       setQueueBusy(false)
