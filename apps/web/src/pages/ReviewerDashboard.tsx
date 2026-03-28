@@ -740,9 +740,9 @@ function ReviewDetail({
     })
 
   return (
-    <div className="grid h-full grid-cols-1 xl:grid-cols-[1fr_360px]">
+    <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] xl:h-full">
       {/* Document viewer */}
-      <section className="flex flex-col border-r border-slate-200" aria-label="Source document">
+      <section className="flex flex-col border-r border-slate-200 max-h-[60vh] xl:max-h-none" aria-label="Source document">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 py-1">
           <p className="truncate text-xs text-slate-500">
             {review.templateId} &middot; {statusLabel(review.status)}
