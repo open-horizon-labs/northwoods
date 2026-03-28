@@ -119,4 +119,5 @@ public sealed record DocumentListItem(
     string TemplateId,
     string ApplicantName,
     string Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? DocumentDate = null);

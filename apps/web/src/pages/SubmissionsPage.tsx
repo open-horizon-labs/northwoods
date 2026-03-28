@@ -38,7 +38,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
 
   const filtered = filterText.trim()
     ? documents.filter((d) =>
-        `${d.applicantName} ${d.templateId} ${d.status}`.toLowerCase().includes(filterText.trim().toLowerCase()),
+        `${d.applicantName} ${d.templateId} ${d.status} ${d.documentId}`.toLowerCase().includes(filterText.trim().toLowerCase()),
       )
     : documents
 
@@ -154,8 +154,10 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
+                      <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">ID</th>
                       <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Applicant</th>
                       <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Template</th>
+                      <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Form Date</th>
                       <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Status</th>
                       <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Uploaded</th>
                     </tr>
@@ -163,22 +165,37 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
                   <tbody className="divide-y divide-slate-100">
                     {filtered.map((doc) => {
                       const badge = statusBadge(doc.status)
-                      const date = new Date(doc.createdAt)
-                      const dateStr = date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+                      const uploadedDate = new Date(doc.createdAt)
+                      const uploadedStr = uploadedDate.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+                      const shortId = doc.documentId.slice(0, 8)
                       return (
                         <tr
                           key={doc.documentId}
                           className="cursor-pointer hover:bg-slate-50"
                           onClick={() => { window.location.hash = `#doc/${doc.documentId}` }}
                         >
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              title={doc.documentId}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void navigator.clipboard.writeText(doc.documentId)
+                              }}
+                              className="font-mono text-xs text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-700 rounded"
+                            >
+                              {shortId}
+                            </button>
+                          </td>
                           <td className="px-4 py-3 font-medium text-slate-900">{doc.applicantName}</td>
                           <td className="px-4 py-3 text-slate-600">{doc.templateId}</td>
+                          <td className="px-4 py-3 text-slate-500">{doc.documentDate ?? ''}</td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${badge.badgeClass}`}>
                               {badge.label}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-slate-500">{dateStr}</td>
+                          <td className="px-4 py-3 text-slate-500">{uploadedStr}</td>
                         </tr>
                       )
                     })}

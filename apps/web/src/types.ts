@@ -219,4 +219,5 @@ export type DocumentListItem = {
   applicantName: string
   status: string
   createdAt: string
+  documentDate?: string | null
 }
