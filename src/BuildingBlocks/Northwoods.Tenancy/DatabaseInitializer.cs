@@ -16,40 +16,50 @@ public static class DatabaseInitializer
     /// </summary>
     public static async Task InitializeAsync(string connectionString, bool setupRls, ILogger logger)
     {
-        await using var conn = new NpgsqlConnection(connectionString);
-        await conn.OpenAsync();
-
-        logger.LogInformation("DatabaseInitializer: running schema initialization");
-
-        // Phase 1: Extensions (may require owner privileges)
-        await ExecuteSqlAsync(conn, ExtensionsSql, logger, "extensions");
-
-        // Phase 2: Tables + Indexes (all IF NOT EXISTS)
-        await ExecuteSqlAsync(conn, TablesSql, logger, "tables");
-        await ExecuteSqlAsync(conn, IndexesSql, logger, "indexes");
-
-        // Phase 3: RLS setup (optional — skip on managed Postgres without app_user role)
-        if (setupRls)
+        try
         {
-            await ExecuteSqlSafe(conn, RoleSetupSql, logger, "app_user role");
-            await ExecuteSqlSafe(conn, GrantsSql, logger, "grants");
-            await ExecuteSqlSafe(conn, RlsPoliciesSql, logger, "RLS policies");
+            await using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            logger.LogInformation("DatabaseInitializer: running schema initialization");
+
+            // Phase 1: Extensions (may require owner privileges on managed Postgres)
+            await ExecuteSqlSafe(conn, ExtensionsSql, logger, "extensions");
+
+            // Phase 2: Tables + Indexes (all IF NOT EXISTS)
+            await ExecuteSqlSafe(conn, CoreTablesSql, logger, "core tables");
+            await ExecuteSqlSafe(conn, VectorTablesSql, logger, "vector tables");
+            await ExecuteSqlSafe(conn, IndexesSql, logger, "indexes");
+
+            // Phase 3: RLS setup (optional — skip on managed Postgres without app_user role)
+            if (setupRls)
+            {
+                await ExecuteSqlSafe(conn, RoleSetupSql, logger, "app_user role");
+                await ExecuteSqlSafe(conn, GrantsSql, logger, "grants");
+                await ExecuteSqlSafe(conn, RlsPoliciesSql, logger, "RLS policies");
+            }
+            else
+            {
+                logger.LogInformation("DatabaseInitializer: skipping RLS/role setup (UseAppUserRole=false)");
+            }
+
+            // Phase 3b: Schema migrations (safe to re-run)
+            await ExecuteSqlSafe(conn, MigrationsSql, logger, "migrations");
+
+            // Phase 4: Seed data (ON CONFLICT — idempotent)
+            await ExecuteSqlSafe(conn, SeedTenantsSql, logger, "seed tenants");
+            await ExecuteSqlSafe(conn, SeedUsersSql, logger, "seed users");
+            await ExecuteSqlSafe(conn, SeedTemplatesSql, logger, "seed templates");
+            await ExecuteSqlSafe(conn, SeedDocumentsSql, logger, "seed documents");
+
+            logger.LogInformation("DatabaseInitializer: initialization complete");
         }
-        else
+        catch (Exception ex)
         {
-            logger.LogInformation("DatabaseInitializer: skipping RLS/role setup (UseAppUserRole=false)");
+            // Log but don't prevent startup — the app may still serve requests
+            // if the schema was already initialized by a previous run.
+            logger.LogError(ex, "DatabaseInitializer: initialization failed");
         }
-
-        // Phase 3b: Schema migrations (safe to re-run)
-        await ExecuteSqlSafe(conn, MigrationsSql, logger, "migrations");
-
-        // Phase 4: Seed data (ON CONFLICT — idempotent)
-        await ExecuteSqlAsync(conn, SeedTenantsSql, logger, "seed tenants");
-        await ExecuteSqlAsync(conn, SeedUsersSql, logger, "seed users");
-        await ExecuteSqlAsync(conn, SeedTemplatesSql, logger, "seed templates");
-        await ExecuteSqlAsync(conn, SeedDocumentsSql, logger, "seed documents");
-
-        logger.LogInformation("DatabaseInitializer: initialization complete");
     }
 
     private static async Task ExecuteSqlAsync(NpgsqlConnection conn, string sql, ILogger logger, string label)
@@ -98,7 +108,7 @@ public static class DatabaseInitializer
         CREATE EXTENSION IF NOT EXISTS pg_trgm;
         """;
 
-    private const string TablesSql = """
+    private const string CoreTablesSql = """
         CREATE TABLE IF NOT EXISTS tenants (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -153,20 +163,6 @@ public static class DatabaseInitializer
             UNIQUE(document_id, field_key)
         );
 
-        CREATE TABLE IF NOT EXISTS case_profiles (
-            document_id UUID PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
-            tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-            template_id TEXT NOT NULL,
-            applicant_name TEXT,
-            date_of_birth TEXT,
-            address TEXT,
-            search_text TEXT NOT NULL,
-            search_tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('simple', COALESCE(search_text, ''))) STORED,
-            embedding VECTOR(1536),
-            created_at TIMESTAMPTZ DEFAULT now(),
-            updated_at TIMESTAMPTZ DEFAULT now()
-        );
-
         CREATE TABLE IF NOT EXISTS extraction_attempts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -193,6 +189,23 @@ public static class DatabaseInitializer
             details JSONB,
             actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
             created_at TIMESTAMPTZ DEFAULT now()
+        );
+        """;
+
+    // Separated because it depends on the vector extension which may not be available
+    private const string VectorTablesSql = """
+        CREATE TABLE IF NOT EXISTS case_profiles (
+            document_id UUID PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+            tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            template_id TEXT NOT NULL,
+            applicant_name TEXT,
+            date_of_birth TEXT,
+            address TEXT,
+            search_text TEXT NOT NULL,
+            search_tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('simple', COALESCE(search_text, ''))) STORED,
+            embedding VECTOR(1536),
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now()
         );
         """;
 
