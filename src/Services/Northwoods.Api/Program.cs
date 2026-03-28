@@ -146,6 +146,20 @@ app.Use(async (httpContext, next) =>
 // Ensure database schema and seed data exist on startup
 await DatabaseInitializer.InitializeAsync(connectionString, useAppUserRole, app.Logger);
 
+// Verify tenant isolation is enforced before accepting any requests.
+// If UseAppUserRole=false the app runs as the DB owner, which PostgreSQL exempts from RLS,
+// meaning every query can see every tenant's data — a critical security failure.
+if (useAppUserRole)
+{
+    await DatabaseInitializer.AssertRlsEnforcedAsync(connectionString, app.Logger);
+}
+else
+{
+    app.Logger.LogCritical(
+        "SECURITY: Database:UseAppUserRole=false — RLS is disabled. " +
+        "All tenant data is visible to all connections. DO NOT run in production.");
+}
+
 // Ensure the MinIO bucket exists on startup
 await store.EnsureBucketAsync();
 

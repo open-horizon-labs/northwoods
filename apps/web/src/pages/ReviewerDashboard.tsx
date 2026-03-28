@@ -721,7 +721,6 @@ function ReviewDetail({
             src={documentSourceUrl(accessToken, review.reviewId)}
             title="Source intake document"
             className="flex-1 border-0"
-            sandbox="allow-same-origin"
           />
         ) : (
           <div className="flex flex-1 items-center justify-center bg-slate-50 p-8">

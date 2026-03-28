@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -10,6 +11,31 @@ namespace Northwoods.Tenancy;
 /// </summary>
 public static class DatabaseInitializer
 {
+    /// <summary>
+    /// Verifies that row-level security is actually enforced: opens a tenant-a scoped session
+    /// and asserts that tenant-b rows in the users table are not visible.
+    /// Throws if RLS is bypassed — call this after InitializeAsync to crash the app on misconfiguration
+    /// rather than silently serving cross-tenant data.
+    /// </summary>
+    public static async Task AssertRlsEnforcedAsync(string connectionString, ILogger logger)
+    {
+        var factory = new DbConnectionFactory(connectionString, useAppUserRole: true);
+        await using var session = await factory.OpenSessionAsync("tenant-a");
+
+        var crossTenantCount = await session.Connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*)::int FROM users WHERE tenant_id = 'tenant-b'",
+            transaction: session.Transaction);
+
+        if (crossTenantCount > 0)
+        {
+            throw new InvalidOperationException(
+                $"SECURITY: RLS is not enforced — a tenant-a session can see {crossTenantCount} tenant-b user(s). " +
+                "Ensure the app_user role exists, grants are applied, and Database:UseAppUserRole=true.");
+        }
+
+        logger.LogInformation("DatabaseInitializer: RLS enforcement verified — tenant isolation is active");
+    }
+
     /// <summary>
     /// Ensures the database schema, indexes, and seed data exist.
     /// Safe to call on every startup — all statements are idempotent.
@@ -55,8 +81,8 @@ public static class DatabaseInitializer
             await ExecuteSqlSafe(conn, CleanupOldTemplatesSql, logger, "cleanup old templates");
             await ExecuteSqlSafe(conn, SeedTemplatesSql, logger, "seed templates");
 
-            // Phase 5: Corpus seed (only if case_profiles is nearly empty)
-            await SeedCorpusIfNeededAsync(conn, logger);
+            // Phase 5: Corpus seed (idempotent — ON CONFLICT DO NOTHING)
+            await SeedCorpusAsync(conn, logger);
 
             logger.LogInformation("DatabaseInitializer: initialization complete");
         }
@@ -531,29 +557,22 @@ public static class DatabaseInitializer
         """;
 
     /// <summary>
-    /// Seeds a condensed corpus for the RAG demo if case_profiles has fewer than 10 rows.
-    /// Includes key narrative arc people: P019 (Raymond Castillo), P039 (Gloria Navarro),
-    /// P017 (Carlton Hughes), P037 (Bernard Oduya).
+    /// Seeds a condensed corpus for the RAG demo.
+    /// All statements use ON CONFLICT DO NOTHING — safe to run on every startup.
+    /// The owner connection is intentional here (seeds both tenants), but we avoid
+    /// any cross-tenant reads to prevent owner-bypasses-RLS data leaks.
     /// </summary>
-    private static async Task SeedCorpusIfNeededAsync(NpgsqlConnection conn, ILogger logger)
+    private static async Task SeedCorpusAsync(NpgsqlConnection conn, ILogger logger)
     {
         try
         {
-            await using var countCmd = new NpgsqlCommand("SELECT COUNT(*)::int FROM case_profiles", conn);
-            countCmd.CommandTimeout = 10;
-            var count = (int)(await countCmd.ExecuteScalarAsync())!;
-            if (count >= 10)
-            {
-                logger.LogInformation("DatabaseInitializer: corpus seed skipped ({Count} case_profiles exist)", count);
-                return;
-            }
             await ExecuteSqlSafe(conn, CorpusSeedDocsSql, logger, "corpus seed documents");
             await ExecuteSqlSafe(conn, CorpusSeedFieldsSql, logger, "corpus seed extracted_fields");
             await ExecuteSqlSafe(conn, CorpusSeedProfilesSql, logger, "corpus seed case_profiles");
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "DatabaseInitializer: corpus seed check failed, skipping");
+            logger.LogWarning(ex, "DatabaseInitializer: corpus seed failed, skipping");
         }
     }
 

@@ -39,7 +39,7 @@ internal static class ReviewEndpoints
                        (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount,
                        d.created_at AS UploadDate
                 FROM documents d
-                WHERE d.tenant_id = @TenantId AND d.status IN ('review_ready', 'completed')
+                WHERE d.tenant_id = @TenantId
                 ORDER BY d.created_at
                 """,
                 new { TenantId = authContext.TenantId },

@@ -52,4 +52,5 @@ internal static class ProviderHelpers
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(tenantId));
         return Convert.ToHexString(hash.AsSpan(0, 4));
     }
+
 }
