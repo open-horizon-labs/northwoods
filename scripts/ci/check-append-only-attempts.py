@@ -62,6 +62,14 @@ def check_sql() -> None:
 # C# + SQL file checks
 # ---------------------------------------------------------------------------
 
+# Files legitimately allowed to DELETE/UPDATE extraction_attempts.
+# DatabaseInitializer: removes mock/test data on startup (not live data mutations).
+# AdminEndpoints: tenant-reset endpoint used only by admins to wipe a tenant's data.
+EXEMPT_PATHS = [
+    "BuildingBlocks/Northwoods.Tenancy/DatabaseInitializer.cs",
+    "Services/Northwoods.Api/Endpoints/AdminEndpoints.cs",
+]
+
 MUTATION_PATTERNS = [
     # UPDATE extraction_attempts (with optional SET clause starting)
     (re.compile(r"\bUPDATE\s+extraction_attempts\b", re.IGNORECASE), "UPDATE"),
@@ -72,8 +80,15 @@ MUTATION_PATTERNS = [
 ]
 
 
+def is_exempt(path: Path) -> bool:
+    rel = relative(path)
+    return any(exempt in rel for exempt in EXEMPT_PATHS)
+
+
 def check_files(files: list[Path]) -> None:
     for path in files:
+        if is_exempt(path):
+            continue
         content = path.read_text(errors="replace")
         for pattern, label in MUTATION_PATTERNS:
             for m in pattern.finditer(content):
