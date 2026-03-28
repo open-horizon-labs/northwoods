@@ -40,9 +40,11 @@ check() {
 
 login() {
   local email="$1" password="$2"
+  local payload
+  payload=$(jq -n --arg e "$email" --arg p "$password" '{email: $e, password: $p}')
   curl -sS -f -X POST "${BASE_URL}/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d "{\"email\":\"${email}\",\"password\":\"${password}\"}" \
+    -d "$payload" \
     --max-time 30
 }
 
