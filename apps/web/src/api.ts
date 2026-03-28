@@ -214,5 +214,5 @@ export const api = {
 
 /** Build an authenticated URL for streaming a document source (PDF) in iframes/links. */
 export function documentSourceUrl(accessToken: string, documentId: string): string {
-  return `${API_BASE}/documents/${documentId}/source?access_token=${encodeURIComponent(accessToken)}`
+  return `${API_BASE}/documents/${encodeURIComponent(documentId)}/source?access_token=${encodeURIComponent(accessToken)}`
 }

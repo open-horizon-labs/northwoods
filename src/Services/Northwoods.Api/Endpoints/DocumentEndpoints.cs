@@ -24,13 +24,16 @@ internal static class DocumentEndpoints
                 return Results.NotFound();
 
             var s3Response = await objectStore.GetObjectStreamAsync(fileKey);
+            httpContext.Response.RegisterForDispose(s3Response);
 
-            httpContext.Response.Headers["Content-Disposition"] = $"inline; filename=\"{id}.pdf\"";
+            var contentType = s3Response.Headers.ContentType ?? "application/pdf";
+            var extension = contentType == "application/pdf" ? ".pdf" : "";
+            httpContext.Response.Headers["Content-Disposition"] = $"inline; filename=\"{id}{extension}\"";
             httpContext.Response.Headers["Cache-Control"] = "private, max-age=300";
 
             return Results.Stream(
                 s3Response.ResponseStream,
-                contentType: s3Response.Headers.ContentType ?? "application/pdf",
+                contentType: contentType,
                 enableRangeProcessing: true);
         })
             .WithName("GetDocumentSource").WithTags("Documents")
