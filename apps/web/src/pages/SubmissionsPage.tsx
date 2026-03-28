@@ -121,7 +121,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
               type="search"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              placeholder="Filter by name, template, or status…"
+              placeholder="Filter by ID, name, template, or status…"
               className={`w-full max-w-sm rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 transition focus:border-sky-600 ${FOCUS_RING}`}
             />
           </div>
