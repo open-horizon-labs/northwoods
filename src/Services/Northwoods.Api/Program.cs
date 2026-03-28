@@ -667,6 +667,21 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
         new { Id = id, TenantId = authContext.TenantId },
         session.Transaction)).ToList();
 
+    // Fetch per-field extraction attempts for confidence reasoning
+    var attemptRows = (await session.Connection.QueryAsync<(string field_key, string provider, string raw_value, decimal raw_confidence)>(
+        """
+        SELECT field_key, provider, COALESCE(normalized_value, raw_value) AS raw_value, COALESCE(normalized_confidence, raw_confidence) AS raw_confidence
+        FROM extraction_attempts
+        WHERE document_id = @Id AND tenant_id = @TenantId
+        ORDER BY field_key, provider
+        """,
+        new { Id = id, TenantId = authContext.TenantId },
+        session.Transaction)).ToList();
+
+    var attemptsByField = attemptRows
+        .GroupBy(a => a.field_key, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
     var auditEvents = (await session.Connection.QueryAsync<string>(
         "SELECT event_type FROM audit_events WHERE document_id = @Id AND tenant_id = @TenantId ORDER BY created_at",
         new { Id = id, TenantId = authContext.TenantId },
@@ -674,10 +689,28 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
 
     var similarCases = await FindSimilarCasesAsync(session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5);
 
+    // Build enriched fields with per-provider breakdown and consensus notes
+    var reviewFields = fields.Select(f =>
+    {
+        var attempts = attemptsByField.TryGetValue(f.FieldKey, out var rows)
+            ? rows.Select(r => new FieldAttempt(r.provider, r.raw_value, r.raw_confidence)).ToList()
+            : new List<FieldAttempt>();
+
+        var distinctProviders = attempts.Select(a => a.Provider).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var consensusNote = distinctProviders.Count switch
+        {
+            0 => "No extraction data available",
+            1 => "Single provider extraction",
+            _ => AllProvidersAgree(attempts) ? "All providers agree" : "Providers disagree on value",
+        };
+
+        return new ReviewField(f.FieldKey, f.Value, f.Confidence, f.RequiresReview, attempts, consensusNote);
+    }).ToList();
+
     var sourceUrl = objectStore.GetPresignedUrl(doc.original_file_key, TimeSpan.FromMinutes(15));
     var status = ParseStatus(doc.status);
 
-    return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, fields, similarCases, auditEvents));
+    return Results.Ok(new ReviewDetailResponse(doc.id, doc.id, doc.tenant_id, doc.template_id, sourceUrl, status, reviewFields, similarCases, auditEvents));
 })
     .WithName("GetReview").WithTags("Reviews")
     .WithSummary("Returns the document, extracted fields, and audit trail for a review task.")
@@ -1037,6 +1070,17 @@ static ProcessingStatus ParseStatus(string dbStatus) => dbStatus switch
     "failed" => ProcessingStatus.Failed,
     _ => throw new ArgumentException($"Unknown status: {dbStatus}")
 };
+
+static bool AllProvidersAgree(IReadOnlyList<FieldAttempt> attempts)
+{
+    if (attempts.Count <= 1) return true;
+    var values = attempts
+        .Where(a => !string.IsNullOrWhiteSpace(a.Value))
+        .Select(a => a.Value.Trim().ToUpperInvariant())
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
+    return values.Count <= 1;
+}
 
 static string SerializeFieldSchema(IReadOnlyList<TemplateField> fields)
 {

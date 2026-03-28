@@ -20,6 +20,21 @@ export type ConfidenceField = {
   requiresReview: boolean
 }
 
+export type FieldAttempt = {
+  provider: string
+  value: string
+  confidence: number
+}
+
+export type ReviewField = {
+  fieldKey: string
+  value: string
+  confidence: number
+  requiresReview: boolean
+  attempts: FieldAttempt[]
+  consensusNote: string
+}
+
 export type CreateIntakeResponse = {
   intakeId: string
   status: ProcessingStatus
@@ -57,7 +72,7 @@ export type ReviewDetailResponse = {
   templateId: string
   sourceDocumentUrl: string
   status: ProcessingStatus
-  fields: ConfidenceField[]
+  fields: ReviewField[]
   similarCases: SimilarCase[]
   auditEvents: string[]
 }
