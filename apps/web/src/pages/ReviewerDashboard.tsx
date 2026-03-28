@@ -7,6 +7,7 @@ import type {
   CaseAggregateResponse,
   CaseDocumentItem,
   ConfidenceField,
+  DocumentListItem,
   FinalizeReviewRequest,
   LoginResponse,
   ReviewDetailResponse,
@@ -102,13 +103,16 @@ const formatAuditTimestamp = (iso: string): string => {
   }
 }
 
+export type SidebarMode = 'queue' | 'documents' | 'search'
+
 type Props = {
   auth: LoginResponse
   onLogout: () => void
   initialDocumentId?: string
+  initialMode?: SidebarMode
 }
 
-export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }: Props) {
+export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, initialMode }: Props) {
   const [queue, setQueue] = useState<ReviewQueueItem[]>([])
   const [queueSearch, setQueueSearch] = useState('')
   const [queueBusy, setQueueBusy] = useState(false)
@@ -128,8 +132,15 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
   const [retryBusy, setRetryBusy] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
 
-  // Sidebar mode: queue vs search
-  const [sidebarMode, setSidebarMode] = useState<'queue' | 'search'>('queue')
+  // Sidebar mode: queue vs documents vs search
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialMode ?? 'queue')
+
+  // Documents list state (loaded lazily when the user first switches to documents mode)
+  const [documents, setDocuments] = useState<DocumentListItem[]>([])
+  const [docsBusy, setDocsBusy] = useState(false)
+  const [docsError, setDocsError] = useState<string | null>(null)
+  const [docsLoaded, setDocsLoaded] = useState(false)
+  const [docsFilter, setDocsFilter] = useState('')
 
   // Global search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -153,6 +164,14 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
     )
   }, [queue, queueSearch])
 
+  const filteredDocuments = useMemo(() => {
+    const q = docsFilter.trim().toLowerCase()
+    if (!q) return documents
+    return documents.filter((d) =>
+      `${d.applicantName} ${d.templateId} ${d.status}`.toLowerCase().includes(q),
+    )
+  }, [documents, docsFilter])
+
   const refreshQueue = useCallback(async () => {
     setQueueBusy(true)
     setQueueError(null)
@@ -172,6 +191,21 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
       setQueueBusy(false)
     }
   }, [auth.accessToken, initialDocumentId])
+
+  const loadDocuments = useCallback(async () => {
+    setDocsBusy(true)
+    setDocsError(null)
+    try {
+      const items = await api.getDocuments(auth.accessToken)
+      setDocuments(items)
+      setDocsLoaded(true)
+    } catch (err) {
+      setDocsError(userMessage(err, 'Unable to load documents. Please try again.'))
+      setDocuments([])
+    } finally {
+      setDocsBusy(false)
+    }
+  }, [auth.accessToken])
 
   // request seq prevents stale async responses from a previous review overwriting a newer one
   const reviewReqSeq = useRef(0)
@@ -223,6 +257,13 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
   useEffect(() => {
     void refreshQueue()
   }, [refreshQueue])
+
+  // Load documents lazily when the user first switches to documents mode
+  useEffect(() => {
+    if (sidebarMode === 'documents' && !docsLoaded && !docsBusy) {
+      void loadDocuments()
+    }
+  }, [sidebarMode, docsLoaded, docsBusy, loadDocuments])
 
   // Load review when selection changes
   useEffect(() => {
@@ -349,19 +390,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
               </span>
             ) : null}
             <nav className="flex gap-0.5 border-l border-slate-200 pl-3" aria-label="Reviewer navigation">
-              <span
-                className="rounded px-2.5 py-1 text-xs font-semibold text-sky-900 bg-sky-50"
-                aria-current="page"
-              >
-                Queue
-              </span>
-              <a
-                href="#submissions"
-                onClick={(e) => { e.preventDefault(); window.location.hash = '#submissions'; }}
-                className={`rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 ${FOCUS_RING}`}
-              >
-                All Documents
-              </a>
               <a
                 href="#rag-report"
                 onClick={(e) => { e.preventDefault(); window.location.hash = '#rag-report'; }}
@@ -386,11 +414,11 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
 
       {/* Two-pane layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Queue pane */}
+        {/* Sidebar pane */}
         <aside
           id="queue"
           className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white xl:w-80"
-          aria-label="Review queue"
+          aria-label="Document sidebar"
         >
           {/* Tab bar */}
           <div className="shrink-0 border-b border-slate-200">
@@ -398,7 +426,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
               <button
                 type="button"
                 onClick={() => setSidebarMode('queue')}
-                className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
+                className={`flex-1 px-3 py-2.5 text-xs font-semibold transition ${
                   sidebarMode === 'queue'
                     ? 'border-b-2 border-sky-700 text-sky-900'
                     : 'text-slate-500 hover:text-slate-700'
@@ -409,8 +437,20 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
               </button>
               <button
                 type="button"
+                onClick={() => setSidebarMode('documents')}
+                className={`flex-1 px-3 py-2.5 text-xs font-semibold transition ${
+                  sidebarMode === 'documents'
+                    ? 'border-b-2 border-sky-700 text-sky-900'
+                    : 'text-slate-500 hover:text-slate-700'
+                } ${FOCUS_RING}`}
+                aria-current={sidebarMode === 'documents' ? 'page' : undefined}
+              >
+                All Docs
+              </button>
+              <button
+                type="button"
                 onClick={() => setSidebarMode('search')}
-                className={`flex-1 px-4 py-2.5 text-xs font-semibold transition ${
+                className={`flex-1 px-3 py-2.5 text-xs font-semibold transition ${
                   sidebarMode === 'search'
                     ? 'border-b-2 border-sky-700 text-sky-900'
                     : 'text-slate-500 hover:text-slate-700'
@@ -504,6 +544,95 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                                   {item.uncertainFieldCount}
                                 </span>
                               ) : null}
+                            </div>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </>
+          ) : sidebarMode === 'documents' ? (
+            <>
+              {/* Documents controls */}
+              <div className="shrink-0 border-b border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-slate-900">All Documents</h2>
+                  <button
+                    type="button"
+                    onClick={() => void loadDocuments()}
+                    disabled={docsBusy}
+                    className={`${btnSecondary} px-2.5 py-1.5 text-xs`}
+                    aria-label="Refresh documents"
+                  >
+                    {docsBusy ? 'Loading…' : 'Refresh'}
+                  </button>
+                </div>
+                <label htmlFor="docs-filter" className="mt-3 block">
+                  <span className="sr-only">Filter documents</span>
+                  <input
+                    id="docs-filter"
+                    type="search"
+                    value={docsFilter}
+                    onChange={(e) => setDocsFilter(e.target.value)}
+                    placeholder="Filter by name, template, or status…"
+                    className={`${inputInteractive} text-xs`}
+                  />
+                </label>
+                {filteredDocuments.length > 0 ? (
+                  <p className="mt-1.5 text-xs text-slate-500" role="status" aria-live="polite">
+                    {filteredDocuments.length} document{filteredDocuments.length === 1 ? '' : 's'}
+                    {docsFilter ? ' matching filter' : ''}
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Documents list */}
+              <div className="flex-1 overflow-y-auto">
+                {docsError ? (
+                  <p role="alert" className="px-4 py-3 text-xs text-rose-700">
+                    {docsError}
+                  </p>
+                ) : docsBusy && documents.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-slate-500" role="status">
+                    Loading documents…
+                  </p>
+                ) : filteredDocuments.length === 0 ? (
+                  <div className="p-4 text-center">
+                    <p className="text-xs text-slate-500">
+                      {docsFilter ? 'No matches for your filter.' : 'No documents found.'}
+                    </p>
+                  </div>
+                ) : (
+                  <ul role="list" aria-live="polite" aria-busy={docsBusy} className="divide-y divide-slate-100">
+                    {filteredDocuments.map((doc) => {
+                      const badge = statusBadge(doc.status)
+                      const isSelected = selectedReviewId === doc.documentId && !caseView
+                      return (
+                        <li key={doc.documentId}>
+                          <button
+                            type="button"
+                            onClick={() => { closeCaseView(); setSelectedReviewId(doc.documentId) }}
+                            aria-pressed={isSelected}
+                            aria-current={isSelected ? 'true' : undefined}
+                            aria-label={`Open document for ${doc.applicantName}`}
+                            className={`w-full px-4 py-3 text-left transition ${
+                              isSelected ? 'bg-sky-50' : 'hover:bg-slate-50'
+                            } ${FOCUS_RING}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className={`truncate text-sm font-medium ${isSelected ? 'text-sky-900' : 'text-slate-900'}`}>
+                                  {doc.applicantName}
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-slate-500">
+                                  {doc.templateId}
+                                </p>
+                              </div>
+                              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${badge.badgeClass}`}>
+                                {badge.label}
+                              </span>
                             </div>
                           </button>
                         </li>
