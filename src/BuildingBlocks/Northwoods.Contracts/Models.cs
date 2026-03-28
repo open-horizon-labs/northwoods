@@ -112,4 +112,4 @@ public sealed record DocumentListItem(
     string TemplateId,
     string ApplicantName,
     string Status,
-    DateTimeOffset CreatedAt);
+    DateTime CreatedAt);

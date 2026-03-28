@@ -46,6 +46,9 @@ public static class DatabaseInitializer
             // Phase 3b: Schema migrations (safe to re-run)
             await ExecuteSqlSafe(conn, MigrationsSql, logger, "migrations");
 
+            // Phase 3c: Data cleanup (remove stale mock data from pre-existing DBs)
+            await ExecuteSqlSafe(conn, CleanupMockDataSql, logger, "cleanup mock data");
+
             // Phase 4: Seed data (ON CONFLICT — idempotent)
             await ExecuteSqlSafe(conn, SeedTenantsSql, logger, "seed tenants");
             await ExecuteSqlSafe(conn, SeedUsersSql, logger, "seed users");
@@ -321,6 +324,40 @@ public static class DatabaseInitializer
                 WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
         EXCEPTION WHEN duplicate_object THEN NULL;
         END $$;
+        """;
+
+    // Delete fabricated mock data left by earlier MockTesseractProvider seeds.
+    // These rows have hardcoded UUIDs and technique='tesseract-mock' that no longer exist in the codebase.
+    private const string CleanupMockDataSql = """
+        -- Remove extraction attempts from mock provider
+        DELETE FROM extraction_attempts WHERE provider = 'tesseract-mock';
+        DELETE FROM extraction_attempts WHERE provider = 'mock-template-values';
+        
+        -- Remove documents with known mock UUIDs (Jamie Carter, Luis Romero, Morgan Lee, etc.)
+        DELETE FROM audit_events WHERE document_id IN (
+            '11111111-1111-1111-1111-111111111111',
+            '22222222-2222-2222-2222-222222222222',
+            '33333333-3333-3333-3333-333333333333',
+            '44444444-4444-4444-4444-444444444444'
+        );
+        DELETE FROM extracted_fields WHERE document_id IN (
+            '11111111-1111-1111-1111-111111111111',
+            '22222222-2222-2222-2222-222222222222',
+            '33333333-3333-3333-3333-333333333333',
+            '44444444-4444-4444-4444-444444444444'
+        );
+        DELETE FROM case_profiles WHERE document_id IN (
+            '11111111-1111-1111-1111-111111111111',
+            '22222222-2222-2222-2222-222222222222',
+            '33333333-3333-3333-3333-333333333333',
+            '44444444-4444-4444-4444-444444444444'
+        );
+        DELETE FROM documents WHERE id IN (
+            '11111111-1111-1111-1111-111111111111',
+            '22222222-2222-2222-2222-222222222222',
+            '33333333-3333-3333-3333-333333333333',
+            '44444444-4444-4444-4444-444444444444'
+        );
         """;
 
     private const string SeedTenantsSql = """
