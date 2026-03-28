@@ -25,12 +25,15 @@ jobs:
           - name: api
             dockerfile: src/Services/Northwoods.Api/Dockerfile
             context: src/
+            render_service_id: srv-d73ber19fqoc73ci2l60
           - name: worker
             dockerfile: src/Workers/Extraction.Worker/Dockerfile
             context: src/
+            render_service_id: srv-d73bervkijhs73dee48g
           - name: web
             dockerfile: apps/web/Dockerfile
             context: .
+            render_service_id: srv-d73bhic2kvos738c3t6g
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +54,21 @@ jobs:
           tags: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:latest,${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+
+      - name: Update Render service image
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          IMAGE="${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:latest"
+          echo "Updating ${{ matrix.render_service_id }} to $IMAGE"
+          # Render credential rgc-d73tmlnfte5s73b88010 handles ghcr.io auth
+          curl -sf -X PATCH \
+            "https://api.render.com/v1/services/${{ matrix.render_service_id }}" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"image\": {\"imagePath\": \"$IMAGE\", \"registryCredentialId\": \"rgc-d73tmlnfte5s73b88010\"}}" \
+            | jq -r '.name // "updated"'
 
   deploy:
     needs: build-and-push
