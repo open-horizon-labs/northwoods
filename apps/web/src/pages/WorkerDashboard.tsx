@@ -24,16 +24,16 @@ const inputInteractive = `${inputStyle} ${FOCUS_RING}`
 type StatusBadgeProps = { status: IntakeStatusResponse['status'] }
 
 const statusConfig = {
-  Uploaded: { label: 'Uploaded', className: 'border-slate-300 bg-slate-100 text-slate-700' },
-  Extracting: { label: 'Extracting\u2026', className: 'border-blue-200 bg-blue-50 text-blue-700' },
-  ReviewReady: { label: 'Review ready', className: 'border-amber-200 bg-amber-50 text-amber-700' },
-  Completed: { label: 'Completed', className: 'border-teal-200 bg-teal-50 text-teal-700' },
+  Uploaded: { label: 'Queued', className: 'border-slate-300 bg-slate-100 text-slate-700' },
+  Extracting: { label: 'Processing', className: 'border-blue-200 bg-blue-50 text-blue-700' },
+  ReviewReady: { label: 'Ready for Review', className: 'border-amber-200 bg-amber-50 text-amber-700' },
+  Completed: { label: 'Finalized', className: 'border-teal-200 bg-teal-50 text-teal-700' },
   Finalized: { label: 'Finalized', className: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
   Failed: { label: 'Failed', className: 'border-rose-200 bg-rose-50 text-rose-700' },
-  0: { label: 'Uploaded', className: 'border-slate-300 bg-slate-100 text-slate-700' },
-  1: { label: 'Extracting\u2026', className: 'border-blue-200 bg-blue-50 text-blue-700' },
-  2: { label: 'Review ready', className: 'border-amber-200 bg-amber-50 text-amber-700' },
-  3: { label: 'Completed', className: 'border-teal-200 bg-teal-50 text-teal-700' },
+  0: { label: 'Queued', className: 'border-slate-300 bg-slate-100 text-slate-700' },
+  1: { label: 'Processing', className: 'border-blue-200 bg-blue-50 text-blue-700' },
+  2: { label: 'Ready for Review', className: 'border-amber-200 bg-amber-50 text-amber-700' },
+  3: { label: 'Finalized', className: 'border-teal-200 bg-teal-50 text-teal-700' },
   4: { label: 'Finalized', className: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
   5: { label: 'Failed', className: 'border-rose-200 bg-rose-50 text-rose-700' },
 } as const
@@ -465,7 +465,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
             </ul>
 
             <p className="mt-3 text-xs text-slate-500">
-              Status updates automatically. Documents in &ldquo;Review ready&rdquo; state are queued for a reviewer.
+              Status updates automatically. Documents in &ldquo;Ready for Review&rdquo; state are queued for a reviewer.
             </p>
           </section>
         ) : null}
