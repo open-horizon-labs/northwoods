@@ -195,5 +195,6 @@ app.MapIntakeEndpoints(reviewersCanUpload);
 app.MapReviewEndpoints(embeddingHttpClient, openAiApiKey, useAiSummaries, observability);
 app.MapDocumentEndpoints();
 app.MapSearchEndpoints();
+app.MapAdminEndpoints();
 
 app.Run();
