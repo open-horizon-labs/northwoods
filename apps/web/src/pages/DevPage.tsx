@@ -420,7 +420,7 @@ export default function DevPage() {
       return
     }
 
-    if (statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Review Ready' || statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Finalized') {
+    if (statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Ready for Review' || statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Finalized') {
       return
     }
 
@@ -429,7 +429,7 @@ export default function DevPage() {
         const status = await api.getIntake(auth.accessToken, activeIntakeId)
         setIntakeStatus(status)
 
-        if (statusLabel(status.status) === 'Review Ready' || statusLabel(status.status) === 'Finalized') {
+        if (statusLabel(status.status) === 'Ready for Review' || statusLabel(status.status) === 'Finalized') {
           await refreshQueue(auth.accessToken)
           window.clearInterval(timer)
         }

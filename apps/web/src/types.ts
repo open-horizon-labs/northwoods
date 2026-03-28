@@ -105,16 +105,16 @@ export const statusLabel = (status: ProcessingStatus) => {
   switch (status) {
     case 0:
     case 'Uploaded':
-      return 'Uploaded'
+      return 'Queued'
     case 1:
     case 'Extracting':
-      return 'Extracting'
+      return 'Processing'
     case 2:
     case 'ReviewReady':
-      return 'Review Ready'
+      return 'Ready for Review'
     case 3:
     case 'Completed':
-      return 'Completed'
+      return 'Finalized'
     case 4:
     case 'Finalized':
       return 'Finalized'
@@ -138,7 +138,7 @@ export type StatusBadgeConfig = {
 export const statusBadge = (status: string): StatusBadgeConfig => {
   const s = status.toLowerCase()
   if (s === 'reviewready' || s === '2')
-    return { label: 'Needs Review', badgeClass: 'border-amber-200 bg-amber-50 text-amber-700' }
+    return { label: 'Ready for Review', badgeClass: 'border-amber-200 bg-amber-50 text-amber-700' }
   if (s === 'completed' || s === 'finalized' || s === '3' || s === '4')
     return { label: 'Finalized', badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
   if (s === 'extracting' || s === '1')
