@@ -384,6 +384,25 @@ public sealed class WorkflowIntegrationTests
         var fallback = Path.Combine("samples", "intakes", "chatgpt-sample-general-intake.pdf");
         return Path.GetFullPath(fallback);
     }
+
+    [Trait("Category", "runtime")]
+    [Fact]
+    public async Task ReviewerEndpoints_WorkerRole_Returns403()
+    {
+        using var client = new HttpClient { BaseAddress = new Uri("http://localhost:5100"), Timeout = DefaultTimeout };
+        if (!await IntegrationTestHelpers.IsRuntimeAvailableAsync(client)) return;
+
+        var workerToken = await IntegrationTestHelpers.LoginAsync(client, "tenant-a", "worker@sunrise.example", "password");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", workerToken);
+
+        // GET /review-queue should be 403 for IntakeWorker
+        var queueResponse = await client.GetAsync("/review-queue");
+        Assert.Equal(HttpStatusCode.Forbidden, queueResponse.StatusCode);
+
+        // GET /reviews/{random-guid} should be 403 for IntakeWorker (not 404)
+        var reviewResponse = await client.GetAsync($"/reviews/{Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.Forbidden, reviewResponse.StatusCode);
+    }
 }
 
 internal sealed record ApiMetricsResponse(

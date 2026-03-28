@@ -621,6 +621,9 @@ app.MapGet("/review-queue", async (HttpContext httpContext, DbConnectionFactory 
     if (authContext is null)
         return Results.Unauthorized();
 
+    if (authContext.Role != UserRole.Reviewer)
+        return Results.Forbid();
+
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
     var items = (await session.Connection.QueryAsync<ReviewQueueItem>(
@@ -647,6 +650,9 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
     var authContext = GetAuthContext(httpContext.User);
     if (authContext is null)
         return Results.Unauthorized();
+
+    if (authContext.Role != UserRole.Reviewer)
+        return Results.Forbid();
 
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
