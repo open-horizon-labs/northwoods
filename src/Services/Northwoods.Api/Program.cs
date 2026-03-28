@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Net;
+using System.Net.Http.Headers;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Dapper;
@@ -96,6 +98,7 @@ var observability = new ApiObservability();
 const string correlationIdHeader = "X-Correlation-Id";
 const double SearchFuzzySimilarityThreshold = 0.3;
 const double CaseAggregateSimilarityThreshold = 0.6;
+var embeddingHttpClient = new HttpClient();
 
 app.UseCors();
 
@@ -692,8 +695,8 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
 
     await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
-    var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string status)>(
-        "SELECT id, status FROM documents WHERE id = @Id AND tenant_id = @TenantId",
+    var doc = await session.Connection.QueryFirstOrDefaultAsync<(Guid id, string template_id, string status)>(
+        "SELECT id, template_id, status FROM documents WHERE id = @Id AND tenant_id = @TenantId",
         new { Id = id, TenantId = authContext.TenantId },
         session.Transaction);
 
@@ -770,6 +773,74 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
             })
         },
         session.Transaction);
+
+    // Regenerate case profile search_text to include reviewer corrections and note
+    if (await SupportsCaseProfiles(session.Connection, session.Transaction))
+    {
+        var ocrSegments = (await session.Connection.QueryAsync<(string field_key, string raw_value)>(
+            "SELECT field_key, raw_value FROM extraction_attempts WHERE document_id = @DocId AND tenant_id = @TenantId AND stage = 'ocr'",
+            new { DocId = id, TenantId = authContext.TenantId },
+            session.Transaction)).ToList();
+
+        var searchText = CaseProfileText.BuildFinalized(
+            doc.template_id,
+            request.Fields,
+            ocrSegments.Select(o => (o.field_key, o.raw_value)),
+            request.ReviewerNote);
+
+        string? embeddingLiteral = null;
+        var apiKey = builder.Configuration["OPENAI_API_KEY"] ?? builder.Configuration["Extraction:OpenAi:ApiKey"];
+        if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(searchText))
+        {
+            try
+            {
+                var (embedding, promptTokens, totalTokens) = await GenerateCaseEmbeddingAsync(embeddingHttpClient, searchText, apiKey, httpContext.RequestAborted);
+                embeddingLiteral = ToPgVectorLiteral(embedding);
+
+                await session.Connection.ExecuteAsync(
+                    """
+                    INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
+                    VALUES (@DocId, @TenantId, 'embedding_regenerated', @ActorId, @Details::jsonb)
+                    """,
+                    new
+                    {
+                        DocId = id,
+                        TenantId = authContext.TenantId,
+                        ActorId = authContext.UserId,
+                        Details = JsonSerializer.Serialize(new
+                        {
+                            model = "text-embedding-3-small",
+                            dimensions = 1536,
+                            prompt_tokens = promptTokens,
+                            total_tokens = totalTokens,
+                            trigger = "finalization"
+                        })
+                    },
+                    session.Transaction);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                app.Logger.LogWarning(ex, "Failed to regenerate embedding for {DocId} during finalization; updating search_text only", id);
+            }
+        }
+
+        await session.Connection.ExecuteAsync(
+            """
+            UPDATE case_profiles
+            SET search_text = @SearchText,
+                embedding = CASE WHEN @Embedding IS NULL THEN embedding ELSE CAST(@Embedding AS vector(1536)) END,
+                updated_at = now()
+            WHERE document_id = @DocId AND tenant_id = @TenantId
+            """,
+            new
+            {
+                DocId = id,
+                TenantId = authContext.TenantId,
+                SearchText = searchText,
+                Embedding = embeddingLiteral
+            },
+            session.Transaction);
+    }
 
     await session.CommitAsync();
     observability.IncrementReviewFinalizationCount();
@@ -1340,6 +1411,48 @@ static async Task<bool> SupportsCaseProfiles(NpgsqlConnection connection, Npgsql
 
     return exists == 1;
 }
+
+static async Task<(double[] Embedding, long PromptTokens, long TotalTokens)> GenerateCaseEmbeddingAsync(
+    HttpClient httpClient, string text, string apiKey, CancellationToken ct)
+{
+    var requestPayload = new { model = "text-embedding-3-small", input = text };
+
+    using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/embeddings")
+    {
+        Content = new StringContent(JsonSerializer.Serialize(requestPayload), Encoding.UTF8, "application/json")
+    };
+    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+    using var res = await httpClient.SendAsync(req, ct);
+    var body = await res.Content.ReadAsStringAsync(ct);
+    if (!res.IsSuccessStatusCode)
+        throw new InvalidOperationException($"OpenAI embedding failed ({(int)res.StatusCode}): {body}");
+
+    using var doc = JsonDocument.Parse(body);
+    var dataArray = doc.RootElement.GetProperty("data");
+    var embeddingElement = dataArray[0].GetProperty("embedding");
+    var values = new double[1536];
+    var idx = 0;
+    foreach (var el in embeddingElement.EnumerateArray())
+    {
+        if (idx < values.Length)
+            values[idx++] = el.GetDouble();
+    }
+
+    long promptTokens = 0, totalTokens = 0;
+    if (doc.RootElement.TryGetProperty("usage", out var usage))
+    {
+        if (usage.TryGetProperty("prompt_tokens", out var pt) && pt.ValueKind == JsonValueKind.Number)
+            promptTokens = pt.GetInt64();
+        if (usage.TryGetProperty("total_tokens", out var tt) && tt.ValueKind == JsonValueKind.Number)
+            totalTokens = tt.GetInt64();
+    }
+
+    return (values, promptTokens, totalTokens);
+}
+
+static string ToPgVectorLiteral(double[] values)
+    => $"[{string.Join(',', values.Select(v => v.ToString(CultureInfo.InvariantCulture)))}]";
 
 file sealed class ApiObservability
 {
