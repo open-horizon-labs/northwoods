@@ -268,16 +268,16 @@ public sealed class WorkflowIntegrationTests
         using var tenantAClient = IntegrationTestHelpers.CreateClient(tenantAToken);
         using var tenantBClient = IntegrationTestHelpers.CreateClient(tenantBToken);
 
-        // Case view with a name that might exist in tenant-a
-        using var caseResponseA = await tenantAClient.GetAsync("/cases/Jamie%20Carter");
+        // Case view with a name that exists in tenant-a seed corpus
+        using var caseResponseA = await tenantAClient.GetAsync("/cases/Marcus%20Delgado");
         Assert.Equal(HttpStatusCode.OK, caseResponseA.StatusCode);
 
         var caseA = await caseResponseA.Content.ReadFromJsonAsync<CaseAggregateResponse>();
         Assert.NotNull(caseA);
-        Assert.Equal("Jamie Carter", caseA.PersonKey);
+        Assert.Equal("Marcus Delgado", caseA.PersonKey);
 
         // Same name with tenant-b should return empty (tenant isolation)
-        using var caseResponseB = await tenantBClient.GetAsync("/cases/Jamie%20Carter");
+        using var caseResponseB = await tenantBClient.GetAsync("/cases/Marcus%20Delgado");
         Assert.Equal(HttpStatusCode.OK, caseResponseB.StatusCode);
 
         var caseB = await caseResponseB.Content.ReadFromJsonAsync<CaseAggregateResponse>();

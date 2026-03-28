@@ -337,7 +337,7 @@ def main():
         f.write("  (document_id, tenant_id, template_id, applicant_name, date_of_birth, address, search_text, embedding)\n")
         f.write("VALUES\n")
         f.write(",\n".join(all_profile_rows))
-        f.write("\nON CONFLICT (id) DO NOTHING;\n")
+        f.write("\nON CONFLICT (document_id) DO NOTHING;\n")
 
     print(f"Written: {out_path}")
     print(f"Documents: {doc_count}  |  Field sets: {len(all_field_rows)}  |  Profiles: {len(all_profile_rows)}")

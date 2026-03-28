@@ -1597,4 +1597,4 @@ VALUES
   ('402763ba-b519-5452-9d3d-1d67b10ce634', 'tenant-b', 'soap-note', 'Gloria Navarro', '11/12/1968', '815 Clearwater Dr', 'Gloria Navarro DOB:11/12/1968 session:5 S:In new apartment 3 weeks. Feels safe. Attending parenting support group. Anxious A:PTSD, acute (F43.10). Adjustment disorder secondary to domestic violence (F43.20). risk:Low', NULL),
   ('2d3d0938-a3dd-5a42-a314-9aad2d3b1cbf', 'tenant-b', 'general-assistance', 'Kofi Asante', '04/06/1985', '122 Lakeview Ct', 'Kofi Asante DOB:04/06/1985 housing:Renting income:$980 household:1 Recently separated. Adjusting to single income.', NULL),
   ('b4e2f045-7856-5114-b4a0-086006746da3', 'tenant-b', 'general-assistance', 'Kofi Asante', '04/06/1985', '122 Lakeview Ct', 'Kofi Asante DOB:04/06/1985 housing:Renting income:$1200 household:3 New part-time work. Requesting help with transportation costs.', NULL)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (document_id) DO NOTHING;
