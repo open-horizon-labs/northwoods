@@ -1,231 +1,172 @@
 # Northwoods
 
-Northwoods is an intake-processing system for human services workflows. It ingests uploaded intake documents, extracts structured fields with confidence metadata, and routes records into a human-in-the-loop review flow with similar-case assistance.
+Northwoods processes handwritten intake documents into structured, confidence-scored fields that route through human-in-the-loop review before acceptance. It was built for the Banyan Software CTO assignment.
 
-## What is in this repo
+**Live instance:** [northwoods.muness.com](https://northwoods.muness.com)
 
-- `src/Services/Northwoods.Api` -- API for intake upload, review, search, and case endpoints
-- `src/Workers/Extraction.Worker` -- background extraction pipeline (dual-provider: mock OCR + OpenAI vision)
-- `src/BuildingBlocks` -- shared tenancy, storage, and infrastructure utilities
-- `apps/web` -- React/TypeScript web UI
-- `infra/postgres/init.sql` -- database schema bootstrap with seed data (4 templates, 2 tenants, synthetic case profiles)
-- `samples/intakes` -- sample intake PDFs for local validation
-- `tests/` -- unit tests (tenancy, worker) and API integration tests
-- `docs/` -- architecture rationale, ADRs, self-assessment, fuzz reports
+## For the reviewer
 
-## Quick start (from fresh clone)
+This section is for you. It maps the assignment requirements to where they live in the codebase.
+
+### Try the live system
+
+| Role | Email | Password | What you'll see |
+|---|---|---|---|
+| Intake Worker | worker@sunrise.example | password | Upload dashboard — select template, attach PDF, watch status |
+| Reviewer | reviewer@sunrise.example | password | Review queue — confidence indicators, field corrections, similar cases, finalize |
+
+Tenant-b (Lakewood) credentials also exist (`worker@lakewood.example`, `reviewer@lakewood.example`) — use them to verify tenant isolation.
+
+The developer scaffold (preset login buttons, raw API explorer) is at [northwoods.muness.com/#dev](https://northwoods.muness.com/#dev). It is not linked from the main UI.
+
+### Evaluate the architecture
+
+| Document | What it covers |
+|---|---|
+| [Architecture Rationale](docs/architecture.md) | System diagram, component responsibilities, extraction model, RAG strategy, tenancy model, trade-offs |
+| [ADR 001: Postgres hybrid retrieval](docs/ADRs/001-postgres-hybrid-retrieval-with-pgvector-and-pg-trgm.md) | Why Postgres for vector search instead of a dedicated vector DB |
+| [ADR 002: Temporal for workflows](docs/ADRs/002-temporal-for-document-processing-workflows.md) | Considered and deferred — worker polling used instead |
+| [ADR 003: MinIO for storage](docs/ADRs/003-minio-for-s3-compatible-document-storage.md) | S3-compatible object store for documents |
+| [ADR 004: Shared tenancy with RLS](docs/ADRs/004-shared-postgres-tenancy-with-rls-backstop.md) | Row-level security as defense-in-depth for tenant isolation |
+| [ADR 005: Consensus extraction pipeline](docs/ADRs/005-portable-consensus-extraction-pipeline.md) | Multi-provider extraction with append-only attempt history |
+
+### Evaluate AI tool usage
+
+| Document | What it covers |
+|---|---|
+| [AI Development Tooling](docs/ai-tooling.md) | What tools were used, how, and what remained human-owned |
+| [Self-Assessment](docs/self-assessment.md) | What's complete, what's missing, 5 concrete prompts with outputs |
+
+The agentic development pipeline is in `.claude/agents/dev-pipeline.md` and `.claude/agents/dev-pipeline-oversight.md`. Each GitHub issue was worked end-to-end by an agent: branch, implement, `/review`, `/dissent`, CodeRabbit, merge. The human role was scoping, reviewing output, catching drift, and making architectural calls.
+
+### RAG pipeline report
+
+Log in as a reviewer and navigate to [/#rag-report](https://northwoods.muness.com/#rag-report) to see the RAG pipeline results: expected vs. actual similar case retrieval for known narrative arcs across 40 fictional people. This page runs live queries — it is not canned data.
+
+### What to look for
+
+- **Confidence drives behavior.** Low-confidence fields route to review. High-confidence fields can auto-accept. The review UI shows *why* the system is uncertain (per-provider breakdown).
+- **Tenant isolation is provable.** RLS on all data tables. `scripts/ci/check-rls-compliance.py` verifies it. Integration tests confirm cross-tenant returns empty.
+- **Audit trail is append-only.** `extraction_completed → field_corrected × N → finalized` — each event with actor, timestamp, correlation ID, before/after values.
+- **The corpus tells a story.** 40 people across two tenants, two visual form styles, longitudinal narrative arcs. Frequent flyers (P019 Raymond Castillo, P039 Gloria Navarro) show progression from crisis to stability across months. The RAG report page shows whether the system found these relationships.
+
+---
+
+## Run locally
 
 ### Prerequisites
 
-- Docker + Docker Compose
-- .NET SDK 10 (via `mise` or local install)
+- Docker and Docker Compose
+- .NET SDK 10
 - Node 22+ and pnpm
-- Python 3 (for local OCR helper scripts)
 
-### 1. Start all services
+### Start everything
 
 ```bash
 docker compose up -d
 ```
 
-This starts Postgres (with pgvector), MinIO, the API, and the extraction worker. Schema and seed data load automatically on first run.
+Starts Postgres (with pgvector), MinIO, the API, the extraction worker, and the web frontend. Schema and seed data load automatically.
 
-- API: `http://localhost:5100`
-- OpenAPI/Swagger: `http://localhost:5100/openapi/v1.json`
-- MinIO console: `http://localhost:9001` (northwoods/northwoods)
-
-### 2. Verify health
-
-```bash
-curl http://localhost:5100/healthz
-# => Healthy
-```
-
-### 3. Run the full workflow
-
-```bash
-# Login as an intake worker (tenant-a)
-TOKEN=$(curl -sS -X POST http://localhost:5100/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"worker@sunrise.example","password":"password","tenantId":"tenant-a"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
-
-# Upload a sample intake
-curl -sS -F "file=@samples/intakes/chatgpt-sample-general-intake.pdf" \
-  -F "templateId=general-assistance" \
-  -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5100/intakes
-# => {"intakeId":"...","status":0}
-
-# Wait ~10 seconds for extraction, then check status
-curl -sS -H "Authorization: Bearer $TOKEN" http://localhost:5100/intakes/{id}
-
-# Login as a reviewer
-REV_TOKEN=$(curl -sS -X POST http://localhost:5100/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"reviewer@sunrise.example","password":"password","tenantId":"tenant-a"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
-
-# View review payload (fields, confidence, similar cases, audit trail)
-curl -sS -H "Authorization: Bearer $REV_TOKEN" http://localhost:5100/reviews/{id}
-
-# Finalize with corrections
-curl -sS -X POST -H "Authorization: Bearer $REV_TOKEN" \
-  -H "Content-Type: application/json" \
-  http://localhost:5100/reviews/{id}/finalize \
-  -d '{"fields":[],"reviewerNote":"Verified"}'
-
-# Search across processed intakes
-curl -sS -H "Authorization: Bearer $REV_TOKEN" "http://localhost:5100/search?q=Jamie"
-
-# Case aggregate view
-curl -sS -H "Authorization: Bearer $REV_TOKEN" "http://localhost:5100/cases/Jamie%20Carter"
-```
-
-### 4. Build checks and tests
-
-```bash
-# Build all projects (frontend + backend)
-pnpm check
-
-# Run unit tests
-dotnet test tests/Northwoods.Tenancy.UnitTests/
-dotnet test tests/Northwoods.Worker.UnitTests/
-
-# Run integration tests (requires running Docker stack)
-dotnet test tests/Northwoods.Api.IntegrationTests/
-```
-
-## Seed data
-
-The database initializes with:
-
-- **2 tenants:** `tenant-a` (Sunrise Agency) and `tenant-b` (Lakewood Services)
-- **6 users:** worker + reviewer + admin per tenant (password: `password`)
-- **4 templates per tenant:** General Assistance, Housing Stability, Behavioral Health, SOAP Progress Note
-- **4 synthetic case profiles** with embeddings for similar-case retrieval
-
-All data is tenant-isolated via RLS policies.
-
-## Extraction pipeline
-
-The worker runs a dual-provider extraction model with per-field confidence and append-only attempt history.
-
-Providers:
-1. **Mock OCR** -- deterministic field extraction for demo reliability
-2. **OpenAI Vision** (optional) -- sends document image to gpt-5.4-nano via Responses API with structured field extraction and per-field confidence
-
-Each provider's results are stored as separate extraction attempts. The pipeline selects the best candidate per field based on confidence.
-
-Key confidence thresholds:
-- `>= 0.90` auto-acceptable
-- `0.75 - 0.90` warning/review band
-- `< 0.75` review-required
-
-All extraction attempts are persisted with run-level metadata (`extraction_run_id`, provider, stage, technique, confidence, token usage where applicable).
-
-### Enabling OpenAI Vision
-
-```bash
-cp .env.example .env.local
-# Set in .env.local:
-# OPENAI_API_KEY=sk-...
-# Extraction__UseOpenAiVision=true
-```
-
-Then pass the env file to the worker container or run the worker locally.
-
-## Environment configuration
-
-Use `.env.example` as the template:
-
-```bash
-cp .env.example .env.local
-```
-
-Notable flags:
-- `Extraction__UsePaddleOcr=true|false`
-- `Extraction__UseOpenAiVision=true|false`
-- `Extraction__UseOpenAiNormalizer=true|false`
-- `OPENAI_API_KEY=...`
-- `Extraction__MaxRetryAttempts=3`
-
-## Live demo
-
-A deployed instance is running at **https://northwoods.muness.com**.
-
-### Demo credentials
-
-| Email | Password | Tenant | Role |
-|---|---|---|---|
-| worker@sunrise.example | password | Sunrise (tenant-a) | Intake Worker |
-| reviewer@sunrise.example | password | Sunrise (tenant-a) | Reviewer |
-| worker@lakewood.example | password | Lakewood (tenant-b) | Intake Worker |
-| reviewer@lakewood.example | password | Lakewood (tenant-b) | Reviewer |
-
-Login as an **Intake Worker** to reach the upload dashboard (mobile-first, template select + file attach + status polling).
-Login as a **Reviewer** to reach the review queue (desktop-optimized, confidence indicators, similar-case panel, finalize action).
-
-### Developer scaffold
-
-The developer scaffold (preset login buttons, raw API explorer) is not linked from the main UI. Navigate directly to:
-
-```
-https://northwoods.muness.com/#dev
-```
-
-### Deployment topology
-
-Hosted on [Render](https://render.com). Blueprint in `render.yaml`.
-
-| Service | Description |
+| Service | URL |
 |---|---|
-| northwoods-api | .NET API (Docker, Render Web Service) |
-| northwoods-worker | .NET extraction worker (Docker, Render Background Worker) |
-| northwoods-minio | MinIO S3-compatible object store (Docker, Render Web Service) |
-| northwoods-web | React/nginx frontend (Docker, Render Web Service) |
-| northwoods-db | Render Managed Postgres 18 |
+| Web UI | http://localhost:5173 |
+| API | http://localhost:5100 |
+| OpenAPI spec | http://localhost:5100/openapi/v1.json |
+| MinIO console | http://localhost:9001 (northwoods/northwoods) |
+| Health check | http://localhost:5100/healthz |
 
-Custom domain `northwoods.muness.com` is a Cloudflare CNAME pointing to the Render frontend service.
-OpenAI vision extraction is enabled in the live environment (`Extraction__UseOpenAiVision=true`, `gpt-5.4-nano`).
-Paddle OCR is disabled in production (local Python dependency not available in the Docker image).
+### Run tests
 
-Deployment notes and obstacles encountered during the initial Render setup are in `.oh/2026-03-27-morning-sprint.md` under "Render Deployment (Issue #35)".
+```bash
+# All backend tests
+dotnet test src/Northwoods.slnx
 
-## Observability
+# Frontend type check + lint
+pnpm --filter web check
 
-- API and worker emit structured JSON logs with scope metadata.
-- API generates/echoes `X-Correlation-Id` per request and persists `correlation_id` into `audit_events`.
-- `GET /metrics` returns tenant-scoped counters: request count, review finalization count, extraction success/failure counts.
-- `GET /healthz` is the health endpoint for service readiness/liveness.
+# Playwright e2e (requires running stack + pnpm dev)
+pnpm --filter web test:e2e
 
-## API endpoints
+# RAG pipeline test (requires running stack + OPENAI_API_KEY)
+dotnet test tests/Northwoods.Api.IntegrationTests/ --filter Category=RAG
+```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/login` | Authenticate and receive JWT |
-| GET | `/templates` | List tenant-scoped templates |
-| GET | `/templates/{id}/blank` | Download printable blank template |
-| POST | `/intakes` | Upload intake document |
-| GET | `/intakes/{id}` | Check intake processing status |
-| GET | `/review-queue` | List documents awaiting review |
-| GET | `/reviews/{id}` | Review payload with fields, confidence, similar cases |
-| POST | `/reviews/{id}/finalize` | Finalize with corrections |
-| GET | `/search?q=` | Search processed intakes |
-| GET | `/cases/{personKey}` | Aggregate case view across documents |
-| GET | `/metrics` | Tenant-scoped service metrics |
-| GET | `/healthz` | Health check |
+### Enable OpenAI Vision extraction
 
-Full OpenAPI spec: `http://localhost:5100/openapi/v1.json`
+```bash
+cp .env.example .env.local
+# Set OPENAI_API_KEY=sk-...
+# Set Extraction__UseOpenAiVision=true
+```
 
-## Related docs
+Without an API key, the system uses the mock OCR provider (deterministic extraction for demo reliability).
 
-- [Architecture Rationale](docs/architecture.md)
-- [Self-Assessment](docs/self-assessment.md)
-- [ADR 001: Postgres hybrid retrieval with pgvector and pg_trgm](docs/ADRs/001-postgres-hybrid-retrieval-with-pgvector-and-pg-trgm.md)
-- [ADR 002: Temporal for document processing workflows](docs/ADRs/002-temporal-for-document-processing-workflows.md)
-- [ADR 003: MinIO for S3-compatible document storage](docs/ADRs/003-minio-for-s3-compatible-document-storage.md)
-- [ADR 004: Shared Postgres tenancy with RLS backstop](docs/ADRs/004-shared-postgres-tenancy-with-rls-backstop.md)
-- [ADR 005: Portable multi-stage consensus extraction pipeline](docs/ADRs/005-portable-consensus-extraction-pipeline.md)
-- [AI Development Tooling Used](docs/ai-tooling.md)
-- [Reviewer Rubric](docs/reviewer-rubric.md)
+---
+
+## System overview
+
+```
+Intake Worker → [Upload PDF] → API → MinIO (store) + Postgres (metadata)
+                                        ↓
+                              Extraction Worker polls
+                                        ↓
+                              OCR/AI extraction → confidence scoring
+                                        ↓
+                              review_ready → Reviewer sees queue
+                                        ↓
+                              Reviewer: correct fields, finalize
+                                        ↓
+                              Embeddings regenerated → case_profiles updated
+                                        ↓
+                              RAG: similar cases surfaced for next review
+```
+
+### Stack
+
+| Component | Technology | Responsibility |
+|---|---|---|
+| API | .NET 10 minimal API | Auth, upload, review, search, audit, tenant scoping |
+| Extraction Worker | .NET BackgroundService | Polling, dual-provider OCR, confidence gating, append-only attempts |
+| Frontend | React + TypeScript + Tailwind | Role-based dashboards, confidence visualization, similar case panel |
+| Database | Postgres 18 + pgvector + pg_trgm | System of record, RLS, hybrid retrieval, FTS |
+| Object Storage | MinIO (S3-compatible) | Document blobs |
+
+### Seed data
+
+- **2 tenants:** Sunrise (tenant-a) and Lakewood (tenant-b)
+- **6 users per system:** worker + reviewer + admin per tenant (password: `password`)
+- **4 templates per tenant:** General Assistance, Housing Stability, Behavioral Health, SOAP Progress Note
+- **184 seeded documents** across two visual form cohorts with narrative arc data
+- **Corpus generators** in `scripts/corpus/` — regenerate with `python3 scripts/corpus/generate_seed_sql.py`
+
+---
+
+## Deployment
+
+Hosted on [Render](https://render.com). Images built by GitHub Actions (`.github/workflows/deploy.yml`), pushed to GitHub Container Registry (private), pulled by Render on deploy hook trigger.
+
+Push to `main` → GH Action builds linux/amd64 images → pushes to ghcr.io → triggers Render deploys.
+
+Blueprint: `render.yaml`. Custom domain via Cloudflare CNAME.
+
+---
+
+## API reference
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/login` | None | Authenticate, receive JWT |
+| GET | `/templates` | JWT | List tenant-scoped templates |
+| GET | `/templates/{id}/blank` | JWT | Printable blank template |
+| POST | `/intakes` | JWT (Worker) | Upload intake document |
+| GET | `/intakes/{id}` | JWT | Check processing status |
+| GET | `/review-queue` | JWT (Reviewer) | Documents awaiting review |
+| GET | `/reviews/{id}` | JWT (Reviewer) | Fields, confidence, similar cases, audit trail |
+| POST | `/reviews/{id}/finalize` | JWT (Reviewer) | Finalize with corrections |
+| GET | `/search?q=` | JWT | Full-text search |
+| GET | `/cases/{personKey}` | JWT | Case aggregate across documents |
+| GET | `/healthz` | None | Service health |
+| GET | `/metrics` | JWT | Tenant-scoped counters |
+
+OpenAPI spec: `http://localhost:5100/openapi/v1.json`
