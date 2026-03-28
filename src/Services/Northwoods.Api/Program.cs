@@ -827,7 +827,7 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
             request.ReviewerNote);
 
         string? embeddingLiteral = null;
-        var apiKey = builder.Configuration["OPENAI_API_KEY"] ?? builder.Configuration["Extraction:OpenAi:ApiKey"];
+        var apiKey = openAiApiKey;
         if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(searchText))
         {
             try
@@ -1406,7 +1406,7 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
                 summary = await GenerateContextualSummaryAsync(
                     httpClient, apiKey, signals, sourceTemplateId, sourceFieldDict, caseItem, candidateFields, logger, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
             {
                 logger.LogWarning(ex, "AI summary generation failed for case {CaseId}, using algorithmic fallback", caseItem.IntakeId);
             }
@@ -1544,11 +1544,14 @@ static async Task<string> GenerateContextualSummaryAsync(
             promptTokens, completionTokens, totalTokens);
     }
 
-    var choices = root.GetProperty("choices");
+    if (!root.TryGetProperty("choices", out var choices))
+        throw new InvalidOperationException("OpenAI response missing 'choices' property");
     if (choices.GetArrayLength() == 0)
         throw new InvalidOperationException("OpenAI returned empty choices array");
-    var message = choices[0].GetProperty("message");
-    var content = message.GetProperty("content").GetString()?.Trim();
+    var firstChoice = choices[0];
+    if (!firstChoice.TryGetProperty("message", out var message))
+        throw new InvalidOperationException("OpenAI response missing 'message' property in first choice");
+    var content = message.TryGetProperty("content", out var contentEl) ? contentEl.GetString()?.Trim() : null;
 
     if (string.IsNullOrWhiteSpace(content))
         throw new InvalidOperationException("OpenAI returned empty summary content");
