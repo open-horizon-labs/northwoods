@@ -144,7 +144,7 @@ Intake Worker → [Upload PDF] → API → MinIO (store) + Postgres (metadata)
 
 ## Deployment
 
-Deployment is release-driven. Create and push a `v*` tag (for example `v0.1.0`) and GitHub Actions will build images and publish a GitHub Release for that tag.
+Deployment is release-driven. Create and push a `v*` tag (for example `v0.3.0`) and GitHub Actions will build images and publish a GitHub Release for that tag.
 
 It then updates all three Render services (api, worker, web) and triggers deploys.
 
