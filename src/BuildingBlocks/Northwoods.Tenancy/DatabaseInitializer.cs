@@ -101,6 +101,19 @@ public static class DatabaseInitializer
             ALTER TABLE users ADD CONSTRAINT users_role_check
                 CHECK (role IN ('IntakeWorker', 'Reviewer', 'Admin'));
         END $$;
+
+        -- M002: Add columns that were added after initial schema creation
+        ALTER TABLE templates ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false;
+        ALTER TABLE templates ADD COLUMN IF NOT EXISTS blank_pdf_key TEXT;
+        ALTER TABLE templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+        -- M003: Add extraction_attempts columns that may be missing
+        ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS stage TEXT NOT NULL DEFAULT 'extract';
+        ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS technique TEXT NOT NULL DEFAULT 'unknown';
+        ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS normalized_value TEXT;
+        ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS normalized_confidence DECIMAL(5, 4) NOT NULL DEFAULT 0;
+        ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS requires_review BOOLEAN NOT NULL DEFAULT false;
+        ALTER TABLE extraction_attempts ADD COLUMN IF NOT EXISTS details JSONB;
         """;
 
     private const string ExtensionsSql = """
