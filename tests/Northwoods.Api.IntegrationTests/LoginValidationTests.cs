@@ -19,12 +19,12 @@ public sealed class LoginValidationTests
 
     [Trait("Category", "runtime")]
     [Theory]
-    [InlineData(null, "dev", "tenant-a", "Email is required.")]
-    [InlineData("", "dev", "tenant-a", "Email is required.")]
+    [InlineData(null, "password", "tenant-a", "Email is required.")]
+    [InlineData("", "password", "tenant-a", "Email is required.")]
     [InlineData("worker@sunrise.example", null, "tenant-a", "Password is required.")]
     [InlineData("worker@sunrise.example", "", "tenant-a", "Password is required.")]
-    [InlineData("worker@sunrise.example", "dev", null, "TenantId is required.")]
-    [InlineData("worker@sunrise.example", "dev", "", "TenantId is required.")]
+    [InlineData("worker@sunrise.example", "password", null, "TenantId is required.")]
+    [InlineData("worker@sunrise.example", "password", "", "TenantId is required.")]
     public async Task Login_MissingRequiredField_Returns400(
         string? email, string? password, string? tenantId, string expectedError)
     {
@@ -68,9 +68,9 @@ public sealed class LoginValidationTests
 
     [Trait("Category", "runtime")]
     [Theory]
-    [InlineData("worker@sunrise.example\0evil", "dev", "tenant-a")]
-    [InlineData("worker@sunrise.example", "dev\0evil", "tenant-a")]
-    [InlineData("worker@sunrise.example", "dev", "tenant-a\0evil")]
+    [InlineData("worker@sunrise.example\0evil", "password", "tenant-a")]
+    [InlineData("worker@sunrise.example", "password\0evil", "tenant-a")]
+    [InlineData("worker@sunrise.example", "password", "tenant-a\0evil")]
     public async Task Login_NullByteInField_Returns400(
         string email, string password, string tenantId)
     {

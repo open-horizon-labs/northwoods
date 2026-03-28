@@ -47,7 +47,7 @@ curl http://localhost:5100/healthz
 # Login as an intake worker (tenant-a)
 TOKEN=$(curl -sS -X POST http://localhost:5100/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"worker@sunrise.example","password":"dev","tenantId":"tenant-a"}' \
+  -d '{"email":"worker@sunrise.example","password":"password","tenantId":"tenant-a"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
 
 # Upload a sample intake
@@ -63,7 +63,7 @@ curl -sS -H "Authorization: Bearer $TOKEN" http://localhost:5100/intakes/{id}
 # Login as a reviewer
 REV_TOKEN=$(curl -sS -X POST http://localhost:5100/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"reviewer@sunrise.example","password":"dev","tenantId":"tenant-a"}' \
+  -d '{"email":"reviewer@sunrise.example","password":"password","tenantId":"tenant-a"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
 
 # View review payload (fields, confidence, similar cases, audit trail)
@@ -101,7 +101,7 @@ dotnet test tests/Northwoods.Api.IntegrationTests/
 The database initializes with:
 
 - **2 tenants:** `tenant-a` (Sunrise Agency) and `tenant-b` (Lakewood Services)
-- **4 users:** worker + reviewer per tenant (password: `dev`)
+- **6 users:** worker + reviewer + admin per tenant (password: `password`)
 - **4 templates per tenant:** General Assistance, Housing Stability, Financial Assistance, Clinical SOAP Note
 - **4 synthetic case profiles** with embeddings for similar-case retrieval
 
