@@ -263,9 +263,9 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
-    ('tenant-a', 'worker@sunrise.example', '$2b$12$XdxwoTKBe8qDqRqUDkrPEenp/V8/MLOG4U8tlQMZu7dfA.4sRKbOm', 'IntakeWorker'),
-    ('tenant-a', 'reviewer@sunrise.example', '$2b$12$XdxwoTKBe8qDqRqUDkrPEenp/V8/MLOG4U8tlQMZu7dfA.4sRKbOm', 'Reviewer'),
-    ('tenant-a', 'admin@sunrise.example', '$2b$12$XdxwoTKBe8qDqRqUDkrPEenp/V8/MLOG4U8tlQMZu7dfA.4sRKbOm', 'Admin')
+    ('tenant-a', 'worker@sunrise.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'IntakeWorker'),
+    ('tenant-a', 'reviewer@sunrise.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Reviewer'),
+    ('tenant-a', 'admin@sunrise.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Admin')
 ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- ============================================================================
@@ -273,9 +273,9 @@ ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_h
 -- ============================================================================
 
 INSERT INTO users (tenant_id, email, password_hash, role) VALUES
-    ('tenant-b', 'worker@lakewood.example', '$2b$12$XdxwoTKBe8qDqRqUDkrPEenp/V8/MLOG4U8tlQMZu7dfA.4sRKbOm', 'IntakeWorker'),
-    ('tenant-b', 'reviewer@lakewood.example', '$2b$12$XdxwoTKBe8qDqRqUDkrPEenp/V8/MLOG4U8tlQMZu7dfA.4sRKbOm', 'Reviewer'),
-    ('tenant-b', 'admin@lakewood.example', '$2b$12$XdxwoTKBe8qDqRqUDkrPEenp/V8/MLOG4U8tlQMZu7dfA.4sRKbOm', 'Admin')
+    ('tenant-b', 'worker@lakewood.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'IntakeWorker'),
+    ('tenant-b', 'reviewer@lakewood.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Reviewer'),
+    ('tenant-b', 'admin@lakewood.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Admin')
 ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- ============================================================================
