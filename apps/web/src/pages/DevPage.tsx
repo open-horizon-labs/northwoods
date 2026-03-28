@@ -1,6 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { api } from '../api'
+import { api, ApiError, userMessage } from '../api'
 import { clearStoredAuth, readStoredAuth, storeAuth } from '../lib/auth'
 import type {
   CaseAggregateResponse,
@@ -256,7 +256,7 @@ export default function DevPage() {
 
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
     } catch (error) {
-      setTemplatesError(error instanceof Error ? error.message : 'Failed to load blank template.')
+      setTemplatesError(userMessage(error, 'Unable to load blank template. Please try again.'))
     }
   }, [auth])
 
@@ -313,7 +313,7 @@ export default function DevPage() {
         return nextReview
       })
     } catch (error) {
-      setQueueError(error instanceof Error ? error.message : 'Failed to load review queue.')
+      setQueueError(userMessage(error, 'Unable to load review queue. The service may be temporarily unavailable.'))
       setReviewQueue([])
       setSelectedReviewId(null)
     } finally {
@@ -334,7 +334,7 @@ export default function DevPage() {
         setSelectedTemplateId('')
       }
     } catch (error) {
-      setTemplatesError(error instanceof Error ? error.message : 'Failed to load template catalog.')
+      setTemplatesError(userMessage(error, 'Unable to load form types. Please try again or contact support.'))
       setTemplates([])
       setSelectedTemplateId('')
     } finally {
@@ -353,7 +353,7 @@ export default function DevPage() {
     } catch (error) {
       setReviewDetail(null)
       setEditableFields([])
-      setReviewLoadError(error instanceof Error ? error.message : 'Unable to load review details.')
+      setReviewLoadError(userMessage(error, 'Unable to load review details. Please try again.'))
     } finally {
       setReviewLoading(false)
     }
@@ -370,7 +370,13 @@ export default function DevPage() {
       setAuth(nextAuth)
       await Promise.all([refreshTemplates(nextAuth.accessToken), refreshQueue(nextAuth.accessToken)])
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Login failed.')
+      if (error instanceof ApiError && error.status === 401) {
+        setAuthError('Incorrect email or password. Please try again.')
+      } else if (error instanceof ApiError && error.status >= 500) {
+        setAuthError('The sign-in service is temporarily unavailable. Please try again later.')
+      } else {
+        setAuthError(userMessage(error, 'Sign in failed. Please try again.'))
+      }
     } finally {
       setAuthBusy(false)
     }
@@ -392,7 +398,7 @@ export default function DevPage() {
       setIntakeStatus(status)
       await refreshQueue(auth.accessToken)
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Upload failed.')
+      setUploadError(userMessage(error, 'Upload failed. Please try again.'))
     } finally {
       setUploadBusy(false)
     }
@@ -490,7 +496,7 @@ export default function DevPage() {
       }
       await refreshQueue(auth.accessToken)
     } catch (error) {
-      setFinalizeError(error instanceof Error ? error.message : 'Failed to finalize review.')
+      setFinalizeError(userMessage(error, 'Unable to finalize review. Please try again.'))
     } finally {
       setFinalizeBusy(false)
     }
@@ -508,7 +514,7 @@ export default function DevPage() {
       const response = await api.search(auth.accessToken, searchQuery.trim())
       setSearchResults(response.results)
     } catch (error) {
-      setSearchError(error instanceof Error ? error.message : 'Search failed.')
+      setSearchError(userMessage(error, 'Search failed. Please try again.'))
       setSearchResults([])
     } finally {
       setSearchBusy(false)
@@ -525,7 +531,7 @@ export default function DevPage() {
       const response = await api.getCaseAggregate(auth.accessToken, personKey)
       setCaseView(response)
     } catch (error) {
-      setCaseError(error instanceof Error ? error.message : 'Failed to load case.')
+      setCaseError(userMessage(error, 'Unable to load case details. Please try again.'))
       setCaseView(null)
     } finally {
       setCaseBusy(false)

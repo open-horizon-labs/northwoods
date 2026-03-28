@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { api } from '../api'
+import { api, userMessage } from '../api'
 import type { LoginResponse, SearchResultItem, SimilarCase } from '../types'
 
 // ── Ground truth from scripts/corpus/narrative.py ────────────────────────────
@@ -191,7 +191,7 @@ export default function RagReportPage({ auth, onLogout }: Props) {
           const review = await api.getReview(auth.accessToken, anchor.intakeId)
           similarCases = review.similarCases ?? []
         } catch (err) {
-          error = err instanceof Error ? err.message : 'Failed to fetch review'
+          error = userMessage(err, 'Unable to fetch review details.')
         }
 
         // 4. Evaluate pass/fail
@@ -219,7 +219,7 @@ export default function RagReportPage({ auth, onLogout }: Props) {
           similarCases: [],
           passed: false,
           tenantViolation: false,
-          error: err instanceof Error ? err.message : 'Unexpected error',
+          error: userMessage(err, 'An unexpected error occurred while running this query.'),
         })
       }
     }

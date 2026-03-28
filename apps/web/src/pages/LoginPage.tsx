@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react'
 
-import { api } from '../api'
+import { api, ApiError, userMessage } from '../api'
 import { storeAuth } from '../lib/auth'
 import type { LoginResponse } from '../types'
 
@@ -34,13 +34,13 @@ export default function LoginPage({ onLogin }: Props) {
       storeAuth(auth)
       onLogin(auth)
     } catch (err) {
-      setError(
-        err instanceof Error && err.message
-          ? err.message.includes('401') || err.message.toLowerCase().includes('unauthorized')
-            ? 'Incorrect email or password. Please try again.'
-            : err.message
-          : 'Sign in failed. Please try again.',
-      )
+      if (err instanceof ApiError && err.status === 401) {
+        setError('Incorrect email or password. Please try again.')
+      } else if (err instanceof ApiError && err.status >= 500) {
+        setError('The sign-in service is temporarily unavailable. Please try again later.')
+      } else {
+        setError(userMessage(err, 'Sign in failed. Please try again.'))
+      }
     } finally {
       setBusy(false)
     }
