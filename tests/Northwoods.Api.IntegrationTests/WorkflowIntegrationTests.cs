@@ -12,7 +12,6 @@ namespace Northwoods.Api.IntegrationTests;
 
 public sealed class WorkflowIntegrationTests
 {
-    private const string DefaultBaseUrl = "http://localhost:5100";
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
 
@@ -27,16 +26,16 @@ public sealed class WorkflowIntegrationTests
     [Fact]
     public async Task Upload_WorkerPipeline_TransitionsStatusFromUploadedToTerminal()
     {
-        using var baselineClient = CreateClient();
+        using var baselineClient = IntegrationTestHelpers.CreateClient();
 
-        if (!await IsRuntimeAvailableAsync(baselineClient))
+        if (!await IntegrationTestHelpers.IsRuntimeAvailableAsync(baselineClient))
         {
             _output.WriteLine("API runtime is not available at test time; skipping runtime integration assertions.");
             return;
         }
 
-        var workerToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
-        using var workerClient = CreateClient(workerToken);
+        var workerToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "password");
+        using var workerClient = IntegrationTestHelpers.CreateClient(workerToken);
 
         var sampleFile = ResolveSampleFile();
         if (!File.Exists(sampleFile))
@@ -60,23 +59,23 @@ public sealed class WorkflowIntegrationTests
     [Fact]
     public async Task UploadReviewQueueFinalize_Workflow_HonorsTenantBoundaries()
     {
-        using var baselineClient = CreateClient();
+        using var baselineClient = IntegrationTestHelpers.CreateClient();
 
-        if (!await IsRuntimeAvailableAsync(baselineClient))
+        if (!await IntegrationTestHelpers.IsRuntimeAvailableAsync(baselineClient))
         {
             _output.WriteLine("API runtime is not available at test time; skipping runtime integration assertions.");
             return;
         }
 
-        var tenantAWorkerToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
-        var tenantAReviewerToken = await LoginAsync(baselineClient, "tenant-a", "reviewer@sunrise.example", "dev");
-        var tenantBWorkerToken = await LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "dev");
-        var tenantBReviewerToken = await LoginAsync(baselineClient, "tenant-b", "reviewer@lakewood.example", "dev");
+        var tenantAWorkerToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "password");
+        var tenantAReviewerToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-a", "reviewer@sunrise.example", "password");
+        var tenantBWorkerToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "password");
+        var tenantBReviewerToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-b", "reviewer@lakewood.example", "password");
 
-        using var tenantAWorkerClient = CreateClient(tenantAWorkerToken);
-        using var tenantAReviewerClient = CreateClient(tenantAReviewerToken);
-        using var tenantBClient = CreateClient(tenantBWorkerToken);
-        using var tenantBReviewerClient = CreateClient(tenantBReviewerToken);
+        using var tenantAWorkerClient = IntegrationTestHelpers.CreateClient(tenantAWorkerToken);
+        using var tenantAReviewerClient = IntegrationTestHelpers.CreateClient(tenantAReviewerToken);
+        using var tenantBClient = IntegrationTestHelpers.CreateClient(tenantBWorkerToken);
+        using var tenantBReviewerClient = IntegrationTestHelpers.CreateClient(tenantBReviewerToken);
 
         var sampleFile = ResolveSampleFile();
         if (!File.Exists(sampleFile))
@@ -110,7 +109,7 @@ public sealed class WorkflowIntegrationTests
         Assert.Equal(intakeId, review.IntakeId);
 
         var finalizePayload = new FinalizeReviewRequest(
-            review.Fields.ToList(),
+            review.Fields.Select(f => new ConfidenceField(f.FieldKey, f.Value, f.Confidence, f.RequiresReview)).ToList(),
             "Representatively finalized by runtime integration test");
 
         using var finalizeResponse = await tenantAReviewerClient.PostAsJsonAsync($"/reviews/{intakeId}/finalize", finalizePayload);
@@ -138,19 +137,19 @@ public sealed class WorkflowIntegrationTests
     [Fact]
     public async Task Finalize_WithFieldCorrections_WritesFieldCorrectedAuditEvents()
     {
-        using var baselineClient = CreateClient();
+        using var baselineClient = IntegrationTestHelpers.CreateClient();
 
-        if (!await IsRuntimeAvailableAsync(baselineClient))
+        if (!await IntegrationTestHelpers.IsRuntimeAvailableAsync(baselineClient))
         {
             _output.WriteLine("API runtime is not available at test time; skipping field_corrected audit test.");
             return;
         }
 
-        var workerToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
-        var reviewerToken = await LoginAsync(baselineClient, "tenant-a", "reviewer@sunrise.example", "dev");
+        var workerToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "password");
+        var reviewerToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-a", "reviewer@sunrise.example", "password");
 
-        using var workerClient = CreateClient(workerToken);
-        using var reviewerClient = CreateClient(reviewerToken);
+        using var workerClient = IntegrationTestHelpers.CreateClient(workerToken);
+        using var reviewerClient = IntegrationTestHelpers.CreateClient(reviewerToken);
 
         var sampleFile = ResolveSampleFile();
         if (!File.Exists(sampleFile))
@@ -206,19 +205,19 @@ public sealed class WorkflowIntegrationTests
     [Fact]
     public async Task Search_ReturnsTenantScopedResults()
     {
-        using var baselineClient = CreateClient();
+        using var baselineClient = IntegrationTestHelpers.CreateClient();
 
-        if (!await IsRuntimeAvailableAsync(baselineClient))
+        if (!await IntegrationTestHelpers.IsRuntimeAvailableAsync(baselineClient))
         {
             _output.WriteLine("API runtime is not available; skipping search integration test.");
             return;
         }
 
-        var tenantAToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
-        var tenantBToken = await LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "dev");
+        var tenantAToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "password");
+        var tenantBToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "password");
 
-        using var tenantAClient = CreateClient(tenantAToken);
-        using var tenantBClient = CreateClient(tenantBToken);
+        using var tenantAClient = IntegrationTestHelpers.CreateClient(tenantAToken);
+        using var tenantBClient = IntegrationTestHelpers.CreateClient(tenantBToken);
 
         // Search with a generic query that may return results for tenant-a
         using var searchResponseA = await tenantAClient.GetAsync("/search?q=intake");
@@ -255,19 +254,19 @@ public sealed class WorkflowIntegrationTests
     [Fact]
     public async Task CaseAggregate_ReturnsTenantScopedDocuments()
     {
-        using var baselineClient = CreateClient();
+        using var baselineClient = IntegrationTestHelpers.CreateClient();
 
-        if (!await IsRuntimeAvailableAsync(baselineClient))
+        if (!await IntegrationTestHelpers.IsRuntimeAvailableAsync(baselineClient))
         {
             _output.WriteLine("API runtime is not available; skipping case aggregate integration test.");
             return;
         }
 
-        var tenantAToken = await LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "dev");
-        var tenantBToken = await LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "dev");
+        var tenantAToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-a", "worker@sunrise.example", "password");
+        var tenantBToken = await IntegrationTestHelpers.LoginAsync(baselineClient, "tenant-b", "worker@lakewood.example", "password");
 
-        using var tenantAClient = CreateClient(tenantAToken);
-        using var tenantBClient = CreateClient(tenantBToken);
+        using var tenantAClient = IntegrationTestHelpers.CreateClient(tenantAToken);
+        using var tenantBClient = IntegrationTestHelpers.CreateClient(tenantBToken);
 
         // Case view with a name that might exist in tenant-a
         using var caseResponseA = await tenantAClient.GetAsync("/cases/Jamie%20Carter");
@@ -300,47 +299,6 @@ public sealed class WorkflowIntegrationTests
         Assert.Empty(notFoundCase.Documents);
     }
 
-    private static HttpClient CreateClient(string? token = null)
-    {
-        var client = new HttpClient
-        {
-            BaseAddress = new Uri(Environment.GetEnvironmentVariable("NORTHWOODS_API_BASE_URL") ?? DefaultBaseUrl)
-        };
-
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-
-        return client;
-    }
-
-    private static async Task<bool> IsRuntimeAvailableAsync(HttpClient client)
-    {
-        try
-        {
-            using var response = await client.GetAsync("/healthz");
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static async Task<string> LoginAsync(HttpClient client, string tenantId, string email, string password)
-    {
-        using var response = await client.PostAsJsonAsync("/auth/login", new LoginRequest(email, password, tenantId));
-        response.EnsureSuccessStatusCode();
-
-        var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
-        if (payload is null)
-        {
-            throw new InvalidOperationException("Login response payload was empty.");
-        }
-
-        return payload.AccessToken;
-    }
 
     private static async Task<CreateIntakeResponse> CreateIntakeAsync(HttpClient client, string sampleFile)
     {
