@@ -481,7 +481,7 @@ internal static class ReviewEndpoints
                 cp.date_of_birth AS DateOfBirth,
                 cp.address AS Address,
                 ROUND(f.match_score::numeric, 4) AS MatchScore,
-                f.match_sources AS MatchSources
+                array_to_string(f.match_sources, ',') AS MatchSourcesCsv
             FROM fused f
             JOIN case_profiles cp ON cp.document_id = f.document_id
             ORDER BY f.match_score DESC, cp.applicant_name NULLS LAST
@@ -544,7 +544,7 @@ internal static class ReviewEndpoints
         IReadOnlyDictionary<string, string> candidateFields)
     {
         var signals = new List<string>();
-        var sources = candidate.MatchSources ?? [];
+        var sources = candidate.MatchSources;
 
         // Field-level exact/fuzzy matches
         var candidateApplicant = candidate.ApplicantName;
