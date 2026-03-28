@@ -340,7 +340,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
 
       {/* Nav */}
       <header className="shrink-0 border-b border-slate-200 bg-white">
-        <div className="flex h-14 items-center justify-between px-4 sm:px-6">
+        <div className="flex h-10 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <p className="text-sm font-semibold text-slate-900">Northwoods</p>
             {queue.length > 0 ? (
@@ -348,6 +348,28 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                 {queue.length} pending
               </span>
             ) : null}
+            <nav className="flex gap-0.5 border-l border-slate-200 pl-3" aria-label="Reviewer navigation">
+              <span
+                className="rounded px-2.5 py-1 text-xs font-semibold text-sky-900 bg-sky-50"
+                aria-current="page"
+              >
+                Queue
+              </span>
+              <a
+                href="#submissions"
+                onClick={(e) => { e.preventDefault(); window.location.hash = '#submissions'; }}
+                className={`rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 ${FOCUS_RING}`}
+              >
+                All Documents
+              </a>
+              <a
+                href="#rag-report"
+                onClick={(e) => { e.preventDefault(); window.location.hash = '#rag-report'; }}
+                className={`rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 ${FOCUS_RING}`}
+              >
+                RAG Report
+              </a>
+            </nav>
           </div>
           <div className="flex items-center gap-4">
             <span className="hidden text-xs text-slate-500 sm:block">{auth.tenantId}</span>
@@ -360,31 +382,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
             </button>
           </div>
         </div>
-        {/* Reviewer page nav */}
-        <nav className="border-t border-slate-100 px-4 sm:px-6" aria-label="Reviewer navigation">
-          <div className="flex gap-1">
-            <span
-              className="border-b-2 border-sky-700 px-3 py-2 text-xs font-semibold text-sky-900"
-              aria-current="page"
-            >
-              Queue
-            </span>
-            <a
-              href="#submissions"
-              onClick={(e) => { e.preventDefault(); window.location.hash = '#submissions'; }}
-              className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
-            >
-              All Documents
-            </a>
-            <a
-              href="#rag-report"
-              onClick={(e) => { e.preventDefault(); window.location.hash = '#rag-report'; }}
-              className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
-            >
-              RAG Report
-            </a>
-          </div>
-        </nav>
       </header>
 
       {/* Two-pane layout */}
@@ -746,19 +743,16 @@ function ReviewDetail({
     <div className="grid h-full grid-cols-1 xl:grid-cols-[1fr_360px]">
       {/* Document viewer */}
       <section className="flex flex-col border-r border-slate-200" aria-label="Source document">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900">{review.intakeId}</p>
-            <p className="text-xs text-slate-500">
-              Template {review.templateId} &middot; {statusLabel(review.status)}
-            </p>
-          </div>
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 py-1">
+          <p className="truncate text-xs text-slate-500">
+            {review.templateId} &middot; {statusLabel(review.status)}
+          </p>
           {sourceAvailable ? (
             <a
               href={documentSourceUrl(accessToken, review.reviewId)}
               target="_blank"
               rel="noreferrer"
-              className={`${btnSecondary} px-3 py-1.5 text-xs`}
+              className={`${btnSecondary} ml-2 shrink-0 px-2.5 py-1 text-xs`}
             >
               Open in new tab
             </a>
