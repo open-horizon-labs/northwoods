@@ -112,7 +112,20 @@ app.Use(async (httpContext, next) =>
                ["CorrelationId"] = correlationId
            }))
     {
-        await next();
+        try
+        {
+            await next();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Unhandled exception on {Path}", httpContext.Request.Path);
+            if (!httpContext.Response.HasStarted)
+            {
+                httpContext.Response.StatusCode = 500;
+                httpContext.Response.ContentType = "application/json";
+                await httpContext.Response.WriteAsJsonAsync(new { error = ex.Message, type = ex.GetType().Name });
+            }
+        }
     }
 });
 
