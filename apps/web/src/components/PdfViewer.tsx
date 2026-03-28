@@ -82,7 +82,7 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
     return (
       <div className="flex flex-1 items-center justify-center bg-slate-50">
         <p className="text-sm text-slate-500" role="status">
-          Loading document\u2026
+          Loading document…
         </p>
       </div>
     )
@@ -159,7 +159,7 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
           loading={
             <div className="flex items-center justify-center py-8">
               <p className="text-sm text-slate-500" role="status">
-                Rendering\u2026
+                Rendering…
               </p>
             </div>
           }

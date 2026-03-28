@@ -108,7 +108,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
               disabled={busy}
               className={`inline-flex items-center rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 ${FOCUS_RING}`}
             >
-              {busy ? 'Loading\u2026' : 'Refresh'}
+              {busy ? 'Loading…' : 'Refresh'}
             </button>
           </div>
 
@@ -135,7 +135,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
           {/* Loading */}
           {busy && documents.length === 0 ? (
             <p className="mt-6 text-sm text-slate-500" role="status" aria-live="polite">
-              Loading documents\u2026
+              Loading documents…
             </p>
           ) : null}
 

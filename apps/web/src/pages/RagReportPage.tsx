@@ -320,7 +320,7 @@ export default function RagReportPage({ auth, onLogout }: Props) {
           {running && (
             <div className="rounded border border-slate-200 bg-white p-8 text-center">
               <p className="text-sm text-slate-500" role="status" aria-live="polite">
-                Running arc queries against live system{'\u2026'}
+                Running arc queries against live system{'…'}
               </p>
               <p className="mt-1 text-xs text-slate-400">
                 Searching for corpus documents and fetching similar cases.

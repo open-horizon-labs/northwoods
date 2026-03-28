@@ -384,7 +384,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
               disabled={!selectedFile || !selectedTemplateId || uploadBusy}
               className={`${btnPrimary} w-full sm:w-auto`}
             >
-              {uploadBusy ? 'Submitting\u2026' : 'Submit intake'}
+              {uploadBusy ? 'Submitting…' : 'Submit intake'}
             </button>
           </form>
         </section>

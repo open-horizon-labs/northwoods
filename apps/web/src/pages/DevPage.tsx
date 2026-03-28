@@ -1156,7 +1156,7 @@ export default function DevPage() {
                 disabled={!auth || searchBusy || !searchQuery.trim()}
                 className={focusablePrimary}
               >
-                {searchBusy ? 'Searching\u2026' : 'Search'}
+                {searchBusy ? 'Searching…' : 'Search'}
               </button>
             </form>
 
@@ -1168,7 +1168,7 @@ export default function DevPage() {
 
             {searchBusy ? (
               <p className="mt-4 text-sm text-slate-600" role="status" aria-live="polite">
-                Searching\u2026
+                Searching…
               </p>
             ) : searchResults.length > 0 ? (
               <div className="mt-4 space-y-3">
@@ -1239,7 +1239,7 @@ export default function DevPage() {
 
             {caseBusy ? (
               <p className="mt-4 text-sm text-slate-600" role="status" aria-live="polite">
-                Loading case\u2026
+                Loading case…
               </p>
             ) : caseView ? (
               <div className="mt-4 space-y-4">

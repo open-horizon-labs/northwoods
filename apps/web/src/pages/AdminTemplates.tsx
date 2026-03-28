@@ -224,7 +224,7 @@ function TemplateEditor({
 
       <div className="flex gap-3 border-t border-slate-200 pt-4">
         <button type="submit" className={btnPrimary} disabled={saving}>
-          {saving ? 'Saving\u2026' : isCreate ? 'Create template' : 'Save changes'}
+          {saving ? 'Saving…' : isCreate ? 'Create template' : 'Save changes'}
         </button>
         <button type="button" className={btnSecondary} onClick={onCancel} disabled={saving}>
           Cancel
@@ -442,7 +442,7 @@ export default function AdminTemplates({ auth, onLogout }: Props) {
                         onClick={() => handleArchive(t.id)}
                         disabled={archiving === t.id}
                       >
-                        {archiving === t.id ? 'Archiving\u2026' : 'Archive'}
+                        {archiving === t.id ? 'Archiving…' : 'Archive'}
                       </button>
                     </div>
                   </div>

@@ -424,7 +424,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                     className={`${btnSecondary} px-2.5 py-1.5 text-xs`}
                     aria-label="Refresh queue"
                   >
-                    {queueBusy ? 'Refreshing\u2026' : 'Refresh'}
+                    {queueBusy ? 'Refreshing…' : 'Refresh'}
                   </button>
                 </div>
 
@@ -455,7 +455,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                   </p>
                 ) : queueBusy && queue.length === 0 ? (
                   <p className="px-4 py-3 text-xs text-slate-500" role="status">
-                    Loading queue\u2026
+                    Loading queue…
                   </p>
                 ) : filteredQueue.length === 0 ? (
                   <div className="p-4 text-center">
@@ -524,7 +524,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                       disabled={searchBusy || !searchQuery.trim()}
                       className={`${btnSecondary} shrink-0 px-3 py-1.5 text-xs`}
                     >
-                      {searchBusy ? 'Searching\u2026' : 'Search'}
+                      {searchBusy ? 'Searching…' : 'Search'}
                     </button>
                   </div>
                 </form>
@@ -543,7 +543,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                   </p>
                 ) : searchBusy ? (
                   <p className="px-4 py-3 text-xs text-slate-500" role="status" aria-live="polite">
-                    Searching\u2026
+                    Searching…
                   </p>
                 ) : searchResults.length > 0 ? (
                   <ul role="list" className="divide-y divide-slate-100">
@@ -620,7 +620,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
           ) : reviewLoading ? (
             <div className="flex flex-1 items-center justify-center p-8">
               <p className="text-sm text-slate-500" role="status" aria-live="polite">
-                Loading review\u2026
+                Loading review…
               </p>
             </div>
           ) : reviewLoadError ? (
@@ -839,7 +839,7 @@ function ReviewDetail({
                             >
                               <span className="font-medium text-slate-700">{attempt.provider}:</span>
                               <span className="flex-1 truncate text-slate-600" title={attempt.value}>
-                                {attempt.value || '\u2014'}
+                                {attempt.value || '—'}
                               </span>
                               <span className={`shrink-0 tabular-nums ${attemptConfidenceColor(attempt.confidence)}`}>
                                 {confidencePercent(attempt.confidence)}
@@ -942,7 +942,7 @@ function ReviewDetail({
                 disabled={retryBusy}
                 className={`${btnSecondary} mt-3 w-full`}
               >
-                {retryBusy ? 'Retrying\u2026' : 'Retry extraction'}
+                {retryBusy ? 'Retrying…' : 'Retry extraction'}
               </button>
             </div>
           ) : !isFinalized ? (
@@ -977,7 +977,7 @@ function ReviewDetail({
                 disabled={finalizeBusy}
                 className={`${btnSuccess} mt-3 w-full`}
               >
-                {finalizeBusy ? 'Finalizing\u2026' : 'Finalize review'}
+                {finalizeBusy ? 'Finalizing…' : 'Finalize review'}
               </button>
             </div>
           ) : (
@@ -1008,7 +1008,7 @@ function CaseTimeline({ caseData, caseBusy, caseError, onClose, onOpenReview }: 
   if (caseBusy) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <p className="text-sm text-slate-500" role="status" aria-live="polite">Loading case\u2026</p>
+        <p className="text-sm text-slate-500" role="status" aria-live="polite">Loading case…</p>
       </div>
     )
   }
@@ -1086,7 +1086,7 @@ function CaseTimeline({ caseData, caseBusy, caseError, onClose, onOpenReview }: 
                         {keyFields.map((f) => (
                           <div key={f.fieldKey} className="flex items-baseline gap-2 text-xs">
                             <dt className="shrink-0 text-slate-500">{f.fieldKey}:</dt>
-                            <dd className="truncate font-medium text-slate-700">{f.value || '\u2014'}</dd>
+                            <dd className="truncate font-medium text-slate-700">{f.value || '—'}</dd>
                           </div>
                         ))}
                         {doc.fields.length > 3 ? (
