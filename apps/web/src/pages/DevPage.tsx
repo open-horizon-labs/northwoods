@@ -17,7 +17,7 @@ import type {
   TemplateDescriptor,
   UserRole,
 } from '../types'
-import { roleLabel, statusLabel } from '../types'
+import { roleLabel, statusBadge, statusLabel } from '../types'
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-700 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50'
 
@@ -1172,6 +1172,7 @@ export default function DevPage() {
                 <ul className="space-y-3" role="list">
                   {searchResults.map((item) => {
                     const confidence = confidenceTone(item.confidence)
+                    const badge = statusBadge(item.status)
                     return (
                       <li key={item.intakeId}>
                         <button
@@ -1184,7 +1185,7 @@ export default function DevPage() {
                             <div className="space-y-1">
                               <p className="text-sm font-medium text-slate-900">{item.applicantName}</p>
                               <p className="text-xs text-slate-600">
-                                Template {item.templateId} · Status {item.status}
+                                Template {item.templateId}
                               </p>
                               {item.snippet ? (
                                 <p className="mt-1 text-xs leading-relaxed text-slate-700">
@@ -1192,6 +1193,11 @@ export default function DevPage() {
                                 </p>
                               ) : null}
                             </div>
+                            <span
+                              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${badge.badgeClass}`}
+                            >
+                              {badge.label}
+                            </span>
                             <span
                               className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${confidence.className}`}
                             >
@@ -1241,52 +1247,67 @@ export default function DevPage() {
                     No documents found for this person in your tenant.
                   </div>
                 ) : (
-                  <ul className="space-y-4" role="list">
-                    {caseView.documents.map((doc: CaseDocumentItem) => (
-                      <li key={doc.intakeId} className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-slate-900">
-                              Template {doc.templateId}
-                            </p>
-                            <p className="text-xs text-slate-600">
-                              Created {new Date(doc.createdAt).toLocaleDateString()} · Status {doc.status}
-                            </p>
+                  <ol className="relative border-l-2 border-slate-200 ml-2 mt-2" aria-label="Document timeline">
+                    {caseView.documents.map((doc: CaseDocumentItem) => {
+                      const badge = statusBadge(doc.status)
+                      const date = new Date(doc.createdAt)
+                      const dateLabel = date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+                      const timeLabel = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      return (
+                        <li key={doc.intakeId} className="relative mb-6 last:mb-0 pl-8">
+                          <span
+                            className={`absolute -left-[7px] top-1.5 h-3 w-3 rounded-full border-2 border-white ${
+                              badge.badgeClass.includes('emerald') ? 'bg-emerald-500'
+                                : badge.badgeClass.includes('amber') ? 'bg-amber-500'
+                                : badge.badgeClass.includes('rose') ? 'bg-rose-500'
+                                : 'bg-slate-400'
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <p className="text-xs font-medium text-slate-500">{dateLabel} &middot; {timeLabel}</p>
+                          <div className="mt-1.5 rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">Template {doc.templateId}</p>
+                              </div>
+                              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${badge.badgeClass}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReviewId(doc.intakeId)}
+                              className={focusableSecondary}
+                            >
+                              Open review
+                            </button>
+                            {doc.fields.length > 0 ? (
+                              <ul className="space-y-1">
+                                {doc.fields.map((field) => {
+                                  const confidence = confidenceTone(field.confidence)
+                                  return (
+                                    <li
+                                      key={field.fieldKey}
+                                      className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-1.5 text-sm"
+                                    >
+                                      <span className="text-slate-700">{field.fieldKey}: <span className="font-medium text-slate-900">{field.value}</span></span>
+                                      <span
+                                        className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidence.className}`}
+                                      >
+                                        {confidence.label}
+                                      </span>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            ) : (
+                              <p className="text-sm text-slate-600">No extracted fields.</p>
+                            )}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedReviewId(doc.intakeId)}
-                            className={focusableSecondary}
-                          >
-                            Open review
-                          </button>
-                        </div>
-
-                        {doc.fields.length > 0 ? (
-                          <ul className="space-y-1">
-                            {doc.fields.map((field) => {
-                              const confidence = confidenceTone(field.confidence)
-                              return (
-                                <li
-                                  key={field.fieldKey}
-                                  className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-1.5 text-sm"
-                                >
-                                  <span className="text-slate-700">{field.fieldKey}: <span className="font-medium text-slate-900">{field.value}</span></span>
-                                  <span
-                                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${confidence.className}`}
-                                  >
-                                    {confidence.label}
-                                  </span>
-                                </li>
-                              )
-                            })}
-                          </ul>
-                        ) : (
-                          <p className="text-sm text-slate-600">No extracted fields.</p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                        </li>
+                      )
+                    })}
+                  </ol>
                 )}
               </div>
             ) : (

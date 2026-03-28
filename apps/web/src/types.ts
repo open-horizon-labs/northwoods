@@ -126,6 +126,30 @@ export const statusLabel = (status: ProcessingStatus) => {
   }
 }
 
+export type StatusBadgeConfig = {
+  label: string
+  badgeClass: string
+}
+
+/**
+ * Maps a document lifecycle status string to a display label and badge styling.
+ * Colors follow AGENTS.md palette: amber=review, green=finalized, red=failed, gray=processing/queued.
+ */
+export const statusBadge = (status: string): StatusBadgeConfig => {
+  const s = status.toLowerCase()
+  if (s === 'reviewready' || s === '2')
+    return { label: 'Needs Review', badgeClass: 'border-amber-200 bg-amber-50 text-amber-700' }
+  if (s === 'completed' || s === 'finalized' || s === '3' || s === '4')
+    return { label: 'Finalized', badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+  if (s === 'extracting' || s === '1')
+    return { label: 'Processing', badgeClass: 'border-slate-200 bg-slate-100 text-slate-600' }
+  if (s === 'failed' || s === '5')
+    return { label: 'Failed', badgeClass: 'border-rose-200 bg-rose-50 text-rose-700' }
+  if (s === 'uploaded' || s === '0')
+    return { label: 'Queued', badgeClass: 'border-slate-200 bg-slate-100 text-slate-600' }
+  return { label: status, badgeClass: 'border-slate-200 bg-slate-100 text-slate-600' }
+}
+
 export const roleLabel = (role: UserRole): string => {
   switch (role) {
     case 0:
