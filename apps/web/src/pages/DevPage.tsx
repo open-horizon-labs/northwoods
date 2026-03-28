@@ -313,7 +313,7 @@ export default function DevPage() {
         return nextReview
       })
     } catch (error) {
-      setQueueError(userMessage(error, 'Unable to load review queue. The service may be temporarily unavailable.'))
+      setQueueError(userMessage(error, 'Unable to load review queue. Please try again.'))
       setReviewQueue([])
       setSelectedReviewId(null)
     } finally {
