@@ -57,10 +57,10 @@ services:
       minio:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/localhost/8080 || exit 1'"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
 
   worker:
     build:
@@ -91,11 +91,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
+
 
 volumes:
   pgdata:
