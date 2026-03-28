@@ -16,17 +16,13 @@ RUN pnpm build
 
 FROM nginx:alpine
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/nginx.conf /etc/nginx/templates/default.conf.template
 
-# Run as non-root user for security
-RUN chown -R nginx:nginx /usr/share/nginx/html && \
-    chown -R nginx:nginx /var/cache/nginx && \
-    chown -R nginx:nginx /var/log/nginx && \
-    touch /var/run/nginx.pid && \
-    chown -R nginx:nginx /var/run/nginx.pid
-
-USER nginx
+# nginx:alpine image runs envsubst on /etc/nginx/templates/*.template at startup
+# This resolves ${PORT} and ${API_URL} from environment variables
+ENV PORT=80
+ENV API_URL=http://api:8080
 
 EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost/ || exit 1
+  CMD wget -qO- http://localhost:${PORT}/ || exit 1

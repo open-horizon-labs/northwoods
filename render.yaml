@@ -115,3 +115,9 @@ services:
     image:
       url: ghcr.io/open-horizon-labs/northwoods-web:latest
     # Custom domain: northwoods.muness.com (CNAME via Cloudflare)
+
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: API_URL
+        value: https://northwoods-api.onrender.com
