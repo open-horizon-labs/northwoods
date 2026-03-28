@@ -14,7 +14,16 @@ internal sealed record SimilarCaseCandidate(
     string? DateOfBirth,
     string? Address,
     decimal MatchScore,
-    string[] MatchSources);
+    string? MatchSourcesCsv)
+{
+    // MatchSources is derived from the CSV string returned by the SQL query.
+    // array_agg() cannot be automatically mapped to string[] by Dapper+Npgsql,
+    // so we convert it via a comma-separated string column instead.
+    public IReadOnlyList<string> MatchSources =>
+        string.IsNullOrEmpty(MatchSourcesCsv)
+            ? []
+            : MatchSourcesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries);
+}
 
 internal sealed record CaseFieldValue(
     Guid IntakeId,
