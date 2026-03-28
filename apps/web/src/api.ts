@@ -95,12 +95,11 @@ export const api = {
     return handleResponse<TemplateDescriptor[]>(response)
   },
 
-  getTemplateBlank: async (accessToken: string, templateId: string, download: boolean) => {
-    const mode = download ? '?download=true' : '?download=false'
-    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}/blank${mode}`, {
+  getTemplateBlank: async (accessToken: string, templateId: string) => {
+    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}/blank`, {
       headers: {
         ...(authHeader(accessToken) ?? {}),
-        Accept: 'text/html',
+        Accept: 'application/pdf',
       },
     })
 
