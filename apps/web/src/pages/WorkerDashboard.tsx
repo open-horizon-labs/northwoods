@@ -86,6 +86,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
   const [uploadBusy, setUploadBusy] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [templatesError, setTemplatesError] = useState<string | null>(null)
+  const [blankError, setBlankError] = useState<string | null>(null)
 
   const [uploads, setUploads] = useState<UploadRecord[]>([])
   const [activePolling, setActivePolling] = useState<Set<string>>(new Set())
@@ -191,6 +192,29 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
   }
 
   const templateName = (id: string) => templates.find((t) => t.id === id)?.name ?? id
+
+  const openTemplateBlank = useCallback(async (templateId: string, download: boolean) => {
+    setBlankError(null)
+    try {
+      const blob = await api.getTemplateBlank(auth.accessToken, templateId, download)
+      const objectUrl = URL.createObjectURL(blob)
+
+      if (download) {
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = `${templateId}-blank.html`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        window.open(objectUrl, '_blank', 'noopener,noreferrer')
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
+    } catch (err) {
+      setBlankError(err instanceof Error ? err.message : 'Failed to load blank form.')
+    }
+  }, [auth.accessToken])
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -364,6 +388,54 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
             </button>
           </form>
         </section>
+
+        {/* Blank forms */}
+        {!isLoadingTemplates && templates.length > 0 ? (
+          <section
+            className="mt-8 rounded-lg border border-slate-200 bg-white p-5 sm:p-6"
+            aria-labelledby="blank-forms-heading"
+          >
+            <h2 id="blank-forms-heading" className="text-base font-semibold text-slate-900">
+              Blank forms
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              View or download blank forms to hand out for completion.
+            </p>
+
+            {blankError ? (
+              <p role="alert" className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {blankError}
+              </p>
+            ) : null}
+
+            <ul className="mt-4 divide-y divide-slate-100" role="list">
+              {templates.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex flex-col gap-2.5 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
+                  <p className="text-sm font-medium text-slate-900">{t.name}</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void openTemplateBlank(t.id, false)}
+                      className={`${btnSecondary} flex-1 sm:flex-none`}
+                    >
+                      View blank
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void openTemplateBlank(t.id, true)}
+                      className={`${btnSecondary} flex-1 sm:flex-none`}
+                    >
+                      Download blank
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {/* Uploads list */}
         {uploads.length > 0 ? (
