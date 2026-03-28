@@ -34,7 +34,7 @@ internal static class ReviewEndpoints
             var items = (await session.Connection.QueryAsync<ReviewQueueItem>(
                 """
                 SELECT d.id AS ReviewId, d.id AS IntakeId,
-                       COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND LOWER(ef.field_key) = 'applicantname' LIMIT 1), d.template_id) AS ApplicantName,
+                       COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND LOWER(ef.field_key) = 'applicantname' ORDER BY ef.id LIMIT 1), d.template_id) AS ApplicantName,
                        d.template_id AS TemplateId,
                        (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount,
                        d.created_at AS UploadDate
