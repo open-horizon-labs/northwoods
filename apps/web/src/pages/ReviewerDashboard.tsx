@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, documentSourceUrl, userMessage } from '../api'
+import { PdfViewer } from '../components/PdfViewer'
 import type {
   AuditEventItem,
   CaseAggregateResponse,
@@ -717,13 +718,6 @@ function ReviewDetail({
 
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
   const [sourceAvailable, setSourceAvailable] = useState<boolean | null>(null)
-  useEffect(() => {
-    setSourceAvailable(null)
-    const url = documentSourceUrl(accessToken, review.reviewId)
-    fetch(url, { method: 'HEAD' })
-      .then((r) => setSourceAvailable(r.ok))
-      .catch(() => setSourceAvailable(false))
-  }, [accessToken, review.reviewId])
 
   const toggleReason = (fieldKey: string) =>
     setOpenReasons((prev) => {
@@ -755,17 +749,12 @@ function ReviewDetail({
             </a>
           ) : null}
         </div>
-        {sourceAvailable === null ? (
-          <div className="flex flex-1 items-center justify-center bg-slate-50">
-            <p className="text-sm text-slate-500" role="status">Loading document\u2026</p>
-          </div>
-        ) : sourceAvailable ? (
-          <iframe
-            src={documentSourceUrl(accessToken, review.reviewId)}
-            title="Source intake document"
-            className="flex-1 border-0"
-          />
-        ) : (
+        <PdfViewer
+          accessToken={accessToken}
+          documentId={review.reviewId}
+          onAvailabilityChange={(available) => setSourceAvailable(available)}
+        />
+        {sourceAvailable === false ? (
           <div className="flex flex-1 items-center justify-center bg-slate-50 p-8">
             <div className="text-center">
               <p className="text-sm font-medium text-slate-700">Source document not available</p>
@@ -774,7 +763,7 @@ function ReviewDetail({
               </p>
             </div>
           </div>
-        )}
+        ) : null}
       </section>
 
       {/* Fields + actions */}
