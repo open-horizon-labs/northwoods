@@ -1,5 +1,3 @@
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using Dapper;
 using Northwoods.Contracts;
@@ -40,7 +38,6 @@ internal static class TemplateEndpoints
         app.MapGet("/templates/{templateId}/blank", async (
             HttpContext httpContext,
             string templateId,
-            bool? download,
             DbConnectionFactory dbFactory,
             ObjectStore objectStore) =>
         {
@@ -58,26 +55,15 @@ internal static class TemplateEndpoints
             if (template == default)
                 return Results.NotFound();
 
-            if (!string.IsNullOrWhiteSpace(template.blank_pdf_key))
-            {
-                var pdfBytes = await objectStore.DownloadAsync(template.blank_pdf_key);
-                var pdfFilename = $"{template.id}-template.pdf";
-                if (download is true)
-                    return Results.File(pdfBytes, "application/pdf", pdfFilename);
-                return Results.File(pdfBytes, "application/pdf");
-            }
+            if (string.IsNullOrWhiteSpace(template.blank_pdf_key))
+                return Results.NotFound(new { error = "No printable PDF is available for this template. Contact your administrator to upload one." });
 
-            var fields = ParseTemplateFields(template.field_schema);
-            var html = BuildBlankTemplateHtml(template.name, fields);
-            var filename = $"{template.id}-template.html";
-
-            if (download is true)
-                return Results.File(Encoding.UTF8.GetBytes(html), "text/html", filename);
-
-            return Results.Text(html, "text/html");
+            var pdfBytes = await objectStore.DownloadAsync(template.blank_pdf_key);
+            var pdfFilename = $"{template.id}-template.pdf";
+            return Results.File(pdfBytes, "application/pdf", pdfFilename);
         })
             .WithName("GetTemplateBlankForm").WithTags("Templates")
-            .WithSummary("Generates a printable blank template form for preview/download.")
+            .WithSummary("Downloads the blank PDF template from storage. Returns 404 if no PDF has been uploaded for this template.")
             .RequireAuthorization();
 
         app.MapPost("/templates", async (CreateTemplateRequest request, HttpContext httpContext, DbConnectionFactory dbFactory) =>
@@ -350,98 +336,4 @@ internal static class TemplateEndpoints
         return property.GetBoolean();
     }
 
-    private static string BuildTemplateInputName(string key)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            return "field";
-
-        var builder = new StringBuilder();
-        var wroteSeparator = false;
-
-        foreach (var ch in key.Trim())
-        {
-            if (char.IsLetterOrDigit(ch))
-            {
-                builder.Append(char.ToLowerInvariant(ch));
-                wroteSeparator = false;
-            }
-            else if (!wroteSeparator && builder.Length > 0)
-            {
-                builder.Append('-');
-                wroteSeparator = true;
-            }
-        }
-
-        var normalized = builder.ToString().Trim('-');
-        return string.IsNullOrWhiteSpace(normalized) ? "field" : normalized;
-    }
-
-    private static string BuildBlankTemplateHtml(string templateName, IReadOnlyList<TemplateField> fields)
-    {
-        var displayName = WebUtility.HtmlEncode(templateName);
-        var fieldRows = new StringBuilder();
-
-        if (fields.Count == 0)
-        {
-            fieldRows.AppendLine("<p style=\"margin:0;color:#555;\">No fields are defined for this template.</p>");
-        }
-        else
-        {
-            for (var index = 0; index < fields.Count; index++)
-            {
-                var field = fields[index];
-                var label = WebUtility.HtmlEncode(field.Key);
-                var type = WebUtility.HtmlEncode(field.Type);
-                var requiredText = field.Required ? " *" : string.Empty;
-                var requiredAttribute = field.Required ? " required" : string.Empty;
-                var inputType = field.Type switch
-                {
-                    "date" => "date",
-                    "integer" => "number",
-                    "decimal" => "number",
-                    _ => "text"
-                };
-
-                var fieldId = WebUtility.HtmlEncode($"{BuildTemplateInputName(field.Key)}-{index + 1}");
-                var inputHint = field.Type.Equals("array", StringComparison.OrdinalIgnoreCase)
-                    ? "Separate multiple values with commas"
-                    : string.Empty;
-
-                fieldRows.AppendLine($"    <div style=\"margin-bottom: 14px;\">\n" +
-                                 $"      <label for=\"{fieldId}\" style=\"font-size:12px;display:block;color:#444;letter-spacing:.02em;margin-bottom:4px;text-transform:uppercase;\">{label}{requiredText} <span style=\"color:#666;font-style:italic;\">({type})</span></label>\n" +
-                                 $"      <input type=\"{inputType}\" id=\"{fieldId}\" name=\"{fieldId}\"{requiredAttribute} style=\"width:100%;height:36px;border:1px solid #bdbdbd;border-radius:6px;padding:6px 10px;box-sizing:border-box;font-size:14px;\" />\n" +
-                                 (string.IsNullOrWhiteSpace(inputHint)
-                                     ? ""
-                                     : $"      <small style=\"color:#666;\">{inputHint}</small>\n") +
-                                 "    </div>");
-            }
-        }
-
-        return $$"""
-<!doctype html>
-<html lang=\"en\">
-  <head>
-    <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>{{displayName}}</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 0; background: #f7f7f7; }
-      .page { width: min(760px, calc(100vw - 24px)); margin: 24px auto; background: #fff; border: 1px solid #ccc; padding: 24px; }
-      h1 { margin: 0 0 8px; }
-      .field-note { color: #555; font-size: 12px; margin-bottom: 20px; }
-      @media print { .print-note { display: none; } }
-    </style>
-  </head>
-  <body>
-    <div class=\"page\">
-      <h1>{{displayName}}</h1>
-      <p class=\"field-note\">Use this blank intake template when collecting values for this form. All fields can be printed as a paper form.</p>
-      <form autocomplete=\"off\"> 
-{{fieldRows}}\n      </form>
-      <p class=\"print-note\" style=\"margin-top:18px;font-size:11px;color:#666;\">Generated for demo usage only.</p>
-    </div>
-  </body>
-</html>
-""";
-    }
 }

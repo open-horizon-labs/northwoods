@@ -193,26 +193,20 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
 
   const templateName = (id: string) => templates.find((t) => t.id === id)?.name ?? id
 
-  const openTemplateBlank = useCallback(async (templateId: string, download: boolean) => {
+  const downloadTemplateBlank = useCallback(async (templateId: string) => {
     setBlankError(null)
     try {
-      const blob = await api.getTemplateBlank(auth.accessToken, templateId, download)
+      const blob = await api.getTemplateBlank(auth.accessToken, templateId)
       const objectUrl = URL.createObjectURL(blob)
-
-      if (download) {
-        const link = document.createElement('a')
-        link.href = objectUrl
-        link.download = `${templateId}-blank.html`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      } else {
-        window.open(objectUrl, '_blank', 'noopener,noreferrer')
-      }
-
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = `${templateId}-blank.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
     } catch (err) {
-      setBlankError(userMessage(err, 'Unable to load blank form. Please try again.'))
+      setBlankError(userMessage(err, 'Unable to download blank form. Please try again.'))
     }
   }, [auth.accessToken])
 
@@ -415,21 +409,18 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
                   className="flex flex-col gap-2.5 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                 >
                   <p className="text-sm font-medium text-slate-900">{t.name}</p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void openTemplateBlank(t.id, false)}
-                      className={`${btnSecondary} flex-1 sm:flex-none`}
-                    >
-                      View blank
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void openTemplateBlank(t.id, true)}
-                      className={`${btnSecondary} flex-1 sm:flex-none`}
-                    >
-                      Download blank
-                    </button>
+                  <div className="flex items-center gap-2">
+                    {t.blankPdfKey ? (
+                      <button
+                        type="button"
+                        onClick={() => void downloadTemplateBlank(t.id)}
+                        className={`${btnSecondary} flex-1 sm:flex-none`}
+                      >
+                        Download blank
+                      </button>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">No printable form available -- contact your administrator.</p>
+                    )}
                   </div>
                 </li>
               ))}
