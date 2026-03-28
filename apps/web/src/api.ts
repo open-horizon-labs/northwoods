@@ -2,6 +2,7 @@ import type {
   CaseAggregateResponse,
   CreateIntakeResponse,
   CreateTemplateRequest,
+  DocumentListItem,
   FinalizeReviewRequest,
   FinalizeReviewResponse,
   IntakeStatusResponse,
@@ -208,6 +209,13 @@ export const api = {
       headers: authHeader(accessToken),
     })
     return handleResponse<TemplateDescriptor[]>(response)
+  },
+
+  getDocuments: async (accessToken: string) => {
+    const response = await fetch(`${API_BASE}/documents`, {
+      headers: authHeader(accessToken),
+    })
+    return handleResponse<DocumentListItem[]>(response)
   },
 }
 

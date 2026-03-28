@@ -242,14 +242,7 @@ export default function RagReportPage({ auth, onLogout }: Props) {
       <header className="shrink-0 border-b border-slate-200 bg-white">
         <div className="flex h-14 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <a
-              href="#"
-              className={`text-sm font-semibold text-slate-900 hover:underline ${FOCUS_RING} rounded px-1 py-0.5`}
-            >
-              Northwoods
-            </a>
-            <span className="text-xs text-slate-400" aria-hidden="true">/</span>
-            <span className="text-sm font-medium text-slate-600">RAG Pipeline Report</span>
+            <p className="text-sm font-semibold text-slate-900">Northwoods</p>
           </div>
           <div className="flex items-center gap-4">
             <span className="hidden text-xs text-slate-500 sm:block">{auth.tenantId}</span>
@@ -262,6 +255,29 @@ export default function RagReportPage({ auth, onLogout }: Props) {
             </button>
           </div>
         </div>
+        {/* Reviewer page nav */}
+        <nav className="border-t border-slate-100 px-4 sm:px-6" aria-label="Reviewer navigation">
+          <div className="flex gap-1">
+            <a
+              href="#"
+              className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
+            >
+              Queue
+            </a>
+            <a
+              href="#submissions"
+              className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
+            >
+              All Documents
+            </a>
+            <span
+              className="border-b-2 border-sky-700 px-3 py-2 text-xs font-semibold text-sky-900"
+              aria-current="page"
+            >
+              RAG Report
+            </span>
+          </div>
+        </nav>
       </header>
 
       {/* Content */}

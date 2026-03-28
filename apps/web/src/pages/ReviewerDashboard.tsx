@@ -310,6 +310,29 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
             </button>
           </div>
         </div>
+        {/* Reviewer page nav */}
+        <nav className="border-t border-slate-100 px-4 sm:px-6" aria-label="Reviewer navigation">
+          <div className="flex gap-1">
+            <span
+              className="border-b-2 border-sky-700 px-3 py-2 text-xs font-semibold text-sky-900"
+              aria-current="page"
+            >
+              Queue
+            </span>
+            <a
+              href="#submissions"
+              className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
+            >
+              All Documents
+            </a>
+            <a
+              href="#rag-report"
+              className={`border-b-2 border-transparent px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 ${FOCUS_RING}`}
+            >
+              RAG Report
+            </a>
+          </div>
+        </nav>
       </header>
 
       {/* Two-pane layout */}
@@ -646,6 +669,15 @@ function ReviewDetail({
   }, [review.fields])
 
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
+  const [sourceAvailable, setSourceAvailable] = useState<boolean | null>(null)
+  useEffect(() => {
+    setSourceAvailable(null)
+    const url = documentSourceUrl(accessToken, review.reviewId)
+    fetch(url, { method: 'HEAD' })
+      .then((r) => setSourceAvailable(r.ok))
+      .catch(() => setSourceAvailable(false))
+  }, [accessToken, review.reviewId])
+
   const toggleReason = (fieldKey: string) =>
     setOpenReasons((prev) => {
       const next = new Set(prev)
@@ -665,21 +697,38 @@ function ReviewDetail({
               Template {review.templateId} &middot; {statusLabel(review.status)}
             </p>
           </div>
-          <a
-            href={documentSourceUrl(accessToken, review.reviewId)}
-            target="_blank"
-            rel="noreferrer"
-            className={`${btnSecondary} px-3 py-1.5 text-xs`}
-          >
-            Open in new tab
-          </a>
+          {sourceAvailable ? (
+            <a
+              href={documentSourceUrl(accessToken, review.reviewId)}
+              target="_blank"
+              rel="noreferrer"
+              className={`${btnSecondary} px-3 py-1.5 text-xs`}
+            >
+              Open in new tab
+            </a>
+          ) : null}
         </div>
-        <iframe
-          src={documentSourceUrl(accessToken, review.reviewId)}
-          title="Source intake document"
-          className="flex-1 border-0"
-          sandbox="allow-same-origin"
-        />
+        {sourceAvailable === null ? (
+          <div className="flex flex-1 items-center justify-center bg-slate-50">
+            <p className="text-sm text-slate-500" role="status">Loading document\u2026</p>
+          </div>
+        ) : sourceAvailable ? (
+          <iframe
+            src={documentSourceUrl(accessToken, review.reviewId)}
+            title="Source intake document"
+            className="flex-1 border-0"
+            sandbox="allow-same-origin"
+          />
+        ) : (
+          <div className="flex flex-1 items-center justify-center bg-slate-50 p-8">
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-700">Source document not available</p>
+              <p className="mt-1 text-xs text-slate-500">
+                The original document file is not stored for seed data. Review the extracted fields on the right.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Fields + actions */}

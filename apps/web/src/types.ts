@@ -204,3 +204,11 @@ export type UpdateTemplateRequest = {
   name?: string
   fields?: TemplateField[]
 }
+
+export type DocumentListItem = {
+  documentId: string
+  templateId: string
+  applicantName: string
+  status: string
+  createdAt: string
+}
