@@ -1479,8 +1479,9 @@ static async Task<string> GenerateContextualSummaryAsync(
     ILogger logger,
     CancellationToken ct)
 {
-    var sourceFieldsSummary = string.Join("; ", sourceFields.Select(kv => $"{kv.Key}: {kv.Value}"));
-    var matchedFieldsSummary = string.Join("; ", matchedCaseFields.Select(kv => $"{kv.Key}: {kv.Value}"));
+    static string Truncate(string v) => v.Length > 500 ? v[..497] + "..." : v;
+    var sourceFieldsSummary = string.Join("; ", sourceFields.Select(kv => $"{kv.Key}: {Truncate(kv.Value)}"));
+    var matchedFieldsSummary = string.Join("; ", matchedCaseFields.Select(kv => $"{kv.Key}: {Truncate(kv.Value)}"));
     var signalsSummary = string.Join(", ", algorithmicSignals);
 
     var systemPrompt = """
@@ -1544,6 +1545,8 @@ static async Task<string> GenerateContextualSummaryAsync(
     }
 
     var choices = root.GetProperty("choices");
+    if (choices.GetArrayLength() == 0)
+        throw new InvalidOperationException("OpenAI returned empty choices array");
     var message = choices[0].GetProperty("message");
     var content = message.GetProperty("content").GetString()?.Trim();
 
