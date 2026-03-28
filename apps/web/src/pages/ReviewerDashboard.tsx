@@ -235,6 +235,21 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
     void loadReview(selectedReviewId)
   }, [selectedReviewId, loadReview])
 
+  // Keep selectedApplicantName in sync with selectedReviewId.
+  // The queue is authoritative; the click-time state serves as a fallback
+  // for documents that are not in the pending queue (e.g. finalized docs
+  // opened via search). When selectedReviewId clears, reset the name.
+  useEffect(() => {
+    if (!selectedReviewId) {
+      setSelectedApplicantName(undefined)
+      return
+    }
+    const fromQueue = queue.find((i) => i.reviewId === selectedReviewId)?.applicantName
+    if (fromQueue) setSelectedApplicantName(fromQueue)
+    // If not in queue (finalized doc opened via search), the name was already
+    // set in the click handler at selection time -- don't override it.
+  }, [selectedReviewId, queue])
+
   // Scroll detail pane to top when review changes
   useEffect(() => {
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
