@@ -79,16 +79,50 @@ type QueryResult = {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractPersonKeyFromName(name: string): string | null {
-  // In the corpus, applicant names are unique per person key.
-  // We match against the known set from the arc queries.
+  // Full corpus roster from scripts/corpus/people.py — all 40 people.
   const known: Record<string, string> = {
-    'raymond castillo': 'P019',
-    'gloria navarro': 'P039',
-    'carlton hughes': 'P017',
+    // Sunrise (tenant-a)
+    'marcus delgado': 'P001',
+    'tamara okonkwo': 'P002',
+    'jesse huang': 'P003',
     'brianna kowalski': 'P004',
+    'darnell foster': 'P005',
+    'yolanda reyes': 'P006',
+    'anton petrov': 'P007',
+    'keisha williams': 'P008',
+    'rodrigo vega': 'P009',
+    'fatima al-rashid': 'P010',
+    'dennis achebe': 'P011',
+    'luz morales': 'P012',
+    'trevor banks': 'P013',
+    'nadia thornton': 'P014',
+    'elijah santos': 'P015',
+    'priya nair': 'P016',
+    'carlton hughes': 'P017',
     'sonya blackwood': 'P018',
+    'raymond castillo': 'P019',
+    'ingrid larsson': 'P020',
+    // Lakewood (tenant-b)
+    'theo mbeki': 'P021',
+    'angela drummond': 'P022',
+    'victor pham': 'P023',
+    'monique dupont': 'P024',
+    'hakeem osei': 'P025',
+    'camille bouchard': 'P026',
+    'dmitri volkov': 'P027',
+    'imani jefferson': 'P028',
+    'sergio gutierrez': 'P029',
+    'wanda korhonen': 'P030',
+    'calvin pope': 'P031',
+    'esperanza cruz': 'P032',
+    'tobias stern': 'P033',
+    'alicia monroe': 'P034',
+    'patrick adeyemi': 'P035',
+    'giselle fontaine': 'P036',
     'bernard oduya': 'P037',
     'tasha greenfield': 'P038',
+    'gloria navarro': 'P039',
+    'kofi asante': 'P040',
   }
   const key = name.toLowerCase().trim()
   return known[key] ?? null
@@ -97,7 +131,10 @@ function extractPersonKeyFromName(name: string): string | null {
 /** Check if a similar case is from a different tenant than the query person. */
 function isCrossTenant(queryPersonKey: string, caseApplicantName: string): boolean {
   const caseKey = extractPersonKeyFromName(caseApplicantName)
-  if (!caseKey) return false
+  if (!caseKey) {
+    // Unknown applicant — cannot verify tenant; flag as potential violation for safety
+    return true
+  }
   const queryIsSunrise = SUNRISE_PERSON_KEYS.has(queryPersonKey)
   const caseIsSunrise = SUNRISE_PERSON_KEYS.has(caseKey)
   const caseIsLakewood = LAKEWOOD_PERSON_KEYS.has(caseKey)

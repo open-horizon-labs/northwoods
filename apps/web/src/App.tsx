@@ -78,7 +78,8 @@ export default function App() {
     )
   }
 
-  if (hash === '#rag-report') {
+  // RAG report is reviewer-only — explicit check for maintainability
+  if (hash === '#rag-report' && (role === 1 || role === 'Reviewer')) {
     return (
       <Suspense fallback={<Spinner />}>
         <RagReportPage auth={auth} onLogout={handleLogout} />
