@@ -100,6 +100,8 @@ const double SearchFuzzySimilarityThreshold = 0.3;
 const double CaseAggregateSimilarityThreshold = 0.6;
 const int CaseEmbeddingDimensions = 1536;
 var embeddingHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+var useAiSummaries = builder.Configuration.GetValue("Extraction:UseAiSummaries", true);
+var openAiApiKey = builder.Configuration["OPENAI_API_KEY"] ?? builder.Configuration["Extraction:OpenAi:ApiKey"];
 
 app.UseCors();
 
@@ -687,7 +689,9 @@ app.MapGet("/reviews/{id:guid}", async (Guid id, HttpContext httpContext, DbConn
         new { Id = id, TenantId = authContext.TenantId },
         session.Transaction)).ToList();
 
-    var similarCases = await FindSimilarCasesAsync(session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5);
+    var similarCases = await FindSimilarCasesAsync(
+        session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5,
+        embeddingHttpClient, openAiApiKey, useAiSummaries, app.Logger, httpContext.RequestAborted);
 
     // Build enriched fields with per-provider breakdown and consensus notes
     var reviewFields = fields.Select(f =>
@@ -1247,7 +1251,12 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
     string tenantId,
     string sourceTemplateId,
     IReadOnlyList<ConfidenceField> sourceFields,
-    int limit)
+    int limit,
+    HttpClient httpClient,
+    string? apiKey,
+    bool useAiSummaries,
+    ILogger logger,
+    CancellationToken ct)
 {
     if (!await SupportsCaseProfiles(connection, transaction))
     {
@@ -1382,18 +1391,34 @@ static async Task<IReadOnlyList<SimilarCaseItem>> FindSimilarCasesAsync(
         .ToLookup(r => r.IntakeId, r => r)
         .ToDictionary(g => g.Key, g => g.ToDictionary(f => f.FieldKey, f => f.Value, StringComparer.OrdinalIgnoreCase));
 
+    var sourceFieldDict = sourceFields.ToDictionary(f => f.FieldKey, f => f.Value, StringComparer.OrdinalIgnoreCase);
     var result = new List<SimilarCaseItem>(ranked.Count);
     foreach (var caseItem in ranked)
     {
         var candidateFields = fieldsByCase.GetValueOrDefault(caseItem.IntakeId, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
-        var summary = BuildCaseSummary(caseItem, sourceTemplateId, targetApplicant, targetDob, targetAddress, candidateFields);
+        var (algorithmicSummary, signals) = BuildCaseSummary(caseItem, sourceTemplateId, targetApplicant, targetDob, targetAddress, candidateFields);
+
+        var summary = algorithmicSummary;
+        if (useAiSummaries && !string.IsNullOrWhiteSpace(apiKey))
+        {
+            try
+            {
+                summary = await GenerateContextualSummaryAsync(
+                    httpClient, apiKey, signals, sourceTemplateId, sourceFieldDict, caseItem, candidateFields, logger, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "AI summary generation failed for case {CaseId}, using algorithmic fallback", caseItem.IntakeId);
+            }
+        }
+
         result.Add(new SimilarCaseItem(caseItem.IntakeId, caseItem.IntakeId, caseItem.ApplicantName ?? "Unknown applicant", caseItem.TemplateId, caseItem.MatchScore, summary));
     }
 
     return result;
 }
 
-static string BuildCaseSummary(
+static (string Summary, IReadOnlyList<string> Signals) BuildCaseSummary(
     SimilarCaseCandidate candidate,
     string sourceTemplateId,
     string? sourceApplicant,
@@ -1440,7 +1465,92 @@ static string BuildCaseSummary(
 
     var evidence = string.Join(", ", signals);
     var maxSnippet = requestedServices.Length > 120 ? requestedServices[..117] + "…" : requestedServices;
-    return $"{evidence}; top hints: {maxSnippet}";
+    return ($"{evidence}; top hints: {maxSnippet}", signals);
+}
+
+static async Task<string> GenerateContextualSummaryAsync(
+    HttpClient httpClient,
+    string apiKey,
+    IReadOnlyList<string> algorithmicSignals,
+    string sourceTemplateId,
+    IReadOnlyDictionary<string, string> sourceFields,
+    SimilarCaseCandidate matchedCase,
+    IReadOnlyDictionary<string, string> matchedCaseFields,
+    ILogger logger,
+    CancellationToken ct)
+{
+    var sourceFieldsSummary = string.Join("; ", sourceFields.Select(kv => $"{kv.Key}: {kv.Value}"));
+    var matchedFieldsSummary = string.Join("; ", matchedCaseFields.Select(kv => $"{kv.Key}: {kv.Value}"));
+    var signalsSummary = string.Join(", ", algorithmicSignals);
+
+    var systemPrompt = """
+        You are a case reviewer assistant for a human-services intake system.
+        Given a current case and a previously matched case, write a 1-2 sentence factual summary
+        explaining the relationship between them. Reference specific shared fields, dates, statuses,
+        and services. Do NOT speculate, recommend actions, or editorialize. Be concise and precise.
+        """;
+
+    var userPrompt = $"""
+        Current case template: {sourceTemplateId}
+        Current case fields: {sourceFieldsSummary}
+
+        Matched case template: {matchedCase.TemplateId}
+        Matched case applicant: {matchedCase.ApplicantName ?? "unknown"}
+        Matched case DOB: {matchedCase.DateOfBirth ?? "unknown"}
+        Matched case address: {matchedCase.Address ?? "unknown"}
+        Matched case fields: {matchedFieldsSummary}
+        Matched case score: {matchedCase.MatchScore}
+
+        Algorithmic match signals: {signalsSummary}
+        """;
+
+    var requestPayload = new
+    {
+        model = "gpt-5.4-nano",
+        messages = new object[]
+        {
+            new { role = "system", content = systemPrompt },
+            new { role = "user", content = userPrompt }
+        },
+        max_tokens = 200,
+        temperature = 0.2
+    };
+
+    using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions")
+    {
+        Content = new StringContent(JsonSerializer.Serialize(requestPayload), Encoding.UTF8, "application/json")
+    };
+    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+    using var res = await httpClient.SendAsync(req, ct);
+    var body = await res.Content.ReadAsStringAsync(ct);
+    if (!res.IsSuccessStatusCode)
+    {
+        logger.LogWarning("OpenAI chat completion failed ({StatusCode}): {Body}", (int)res.StatusCode, body);
+        throw new InvalidOperationException($"OpenAI chat completion failed ({(int)res.StatusCode})");
+    }
+
+    using var doc = JsonDocument.Parse(body);
+    var root = doc.RootElement;
+
+    // Log token usage
+    if (root.TryGetProperty("usage", out var usage))
+    {
+        var promptTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt64() : 0;
+        var completionTokens = usage.TryGetProperty("completion_tokens", out var cmplt) ? cmplt.GetInt64() : 0;
+        var totalTokens = usage.TryGetProperty("total_tokens", out var tt) ? tt.GetInt64() : 0;
+        logger.LogInformation("AI summary tokens — prompt: {PromptTokens}, completion: {CompletionTokens}, total: {TotalTokens}",
+            promptTokens, completionTokens, totalTokens);
+    }
+
+    var choices = root.GetProperty("choices");
+    var message = choices[0].GetProperty("message");
+    var content = message.GetProperty("content").GetString()?.Trim();
+
+    if (string.IsNullOrWhiteSpace(content))
+        throw new InvalidOperationException("OpenAI returned empty summary content");
+
+    return content;
 }
 
 static async Task<bool> SupportsCaseProfiles(NpgsqlConnection connection, NpgsqlTransaction transaction)
