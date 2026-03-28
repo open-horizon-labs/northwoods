@@ -1111,12 +1111,12 @@ export default function DevPage() {
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                       <p className="text-sm font-medium text-slate-900">Audit trail</p>
                       <ul className="mt-3 space-y-2 text-sm text-slate-700" aria-live="polite">
-                        {reviewDetail.auditEvents.map((eventName, eventIndex) => (
+                        {reviewDetail.auditEvents.map((ev, eventIndex) => (
                           <li
-                            key={`${eventName}-${eventIndex}`}
+                            key={`${ev.eventType}-${eventIndex}`}
                             className="rounded-md border border-slate-200 bg-white px-3 py-2"
                           >
-                            {formatAuditEvent(eventName)}
+                            {formatAuditEvent(ev.eventType)}
                           </li>
                         ))}
                       </ul>
