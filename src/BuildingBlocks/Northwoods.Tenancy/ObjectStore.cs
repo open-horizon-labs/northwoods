@@ -65,6 +65,11 @@ public sealed class ObjectStore
         return buffer.ToArray();
     }
 
+    public async Task<GetObjectResponse> GetObjectStreamAsync(string key)
+    {
+        return await _s3Client.GetObjectAsync(_bucketName, key);
+    }
+
     public async Task EnsureBucketAsync()
     {
         try

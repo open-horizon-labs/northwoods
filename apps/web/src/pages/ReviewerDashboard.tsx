@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { api, userMessage } from '../api'
+import { api, documentSourceUrl, userMessage } from '../api'
 import type {
   CaseAggregateResponse,
   CaseDocumentItem,
@@ -583,6 +583,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
             </div>
           ) : reviewDetail ? (
             <ReviewDetail
+              accessToken={auth.accessToken}
               review={reviewDetail}
               applicantName={queue.find((i) => i.reviewId === selectedReviewId)?.applicantName}
               editableFields={editableFields}
@@ -606,6 +607,7 @@ export default function ReviewerDashboard({ auth, onLogout }: Props) {
 // --- Review Detail Sub-component ---
 
 type ReviewDetailProps = {
+  accessToken: string
   review: ReviewDetailResponse
   applicantName: string | undefined
   editableFields: ConfidenceField[]
@@ -621,6 +623,7 @@ type ReviewDetailProps = {
 }
 
 function ReviewDetail({
+  accessToken,
   review,
   applicantName,
   editableFields,
@@ -663,7 +666,7 @@ function ReviewDetail({
             </p>
           </div>
           <a
-            href={review.sourceDocumentUrl}
+            href={documentSourceUrl(accessToken, review.reviewId)}
             target="_blank"
             rel="noreferrer"
             className={`${btnSecondary} px-3 py-1.5 text-xs`}
@@ -672,7 +675,7 @@ function ReviewDetail({
           </a>
         </div>
         <iframe
-          src={review.sourceDocumentUrl}
+          src={documentSourceUrl(accessToken, review.reviewId)}
           title="Source intake document"
           className="flex-1 border-0"
           sandbox="allow-same-origin"

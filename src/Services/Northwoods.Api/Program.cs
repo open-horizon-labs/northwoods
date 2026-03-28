@@ -78,6 +78,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromMinutes(1),
             RoleClaimType = AuthClaims.Role
         };
+        options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                // Allow query-string token for document streaming endpoints (iframes cannot send Authorization headers)
+                if (context.Request.Path.StartsWithSegments("/documents")
+                    && context.Request.Query.TryGetValue("access_token", out var token)
+                    && !string.IsNullOrWhiteSpace(token))
+                {
+                    context.Token = token!;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 builder.Services.AddAuthorization();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -179,6 +193,7 @@ app.MapAuthEndpoints(jwtSigningCredentials, jwtIssuer, jwtAudience, jwtExpiratio
 app.MapTemplateEndpoints();
 app.MapIntakeEndpoints(reviewersCanUpload);
 app.MapReviewEndpoints(embeddingHttpClient, openAiApiKey, useAiSummaries, observability);
+app.MapDocumentEndpoints();
 app.MapSearchEndpoints();
 
 app.Run();
