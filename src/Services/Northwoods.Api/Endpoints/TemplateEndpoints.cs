@@ -47,8 +47,8 @@ internal static class TemplateEndpoints
 
             await using var session = await dbFactory.OpenSessionAsync(authContext.TenantId);
 
-            var template = await session.Connection.QueryFirstOrDefaultAsync<(string id, string name, string field_schema, string? blank_pdf_key)>(
-                "SELECT id, name, field_schema, blank_pdf_key FROM templates WHERE tenant_id = @TenantId AND id = @TemplateId LIMIT 1",
+            var template = await session.Connection.QueryFirstOrDefaultAsync<(string id, string? blank_pdf_key)>(
+                "SELECT id, blank_pdf_key FROM templates WHERE tenant_id = @TenantId AND id = @TemplateId LIMIT 1",
                 new { TenantId = authContext.TenantId, TemplateId = templateId },
                 session.Transaction);
 
