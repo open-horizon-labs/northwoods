@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Extraction.Worker;
 using WorkerService = Extraction.Worker.Worker;
 using Xunit;
 
@@ -13,7 +14,7 @@ public class ExtractionPipelineTests
     [Fact]
     public async Task PipelineRunsAllProvidersOnAllFields()
     {
-        var context = new WorkerService.ExtractionContext(
+        var context = new ExtractionContext(
             Guid.NewGuid(),
             "tenant-a",
             "general-assistance",
@@ -65,7 +66,7 @@ public class ExtractionPipelineTests
         Assert.True(WorkerService.RequiresReview(notes.SystemConfidence));
     }
 
-    private sealed class TrackingProvider(string name, string stage, int order) : WorkerService.IExtractionProvider
+    private sealed class TrackingProvider(string name, string stage, int order) : IExtractionProvider
     {
         public HashSet<string> RequestedFieldKeys { get; } = [];
 
@@ -77,13 +78,13 @@ public class ExtractionPipelineTests
 
         public Dictionary<string, (string Value, decimal Confidence)> FieldValues { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-        public Task<IReadOnlyList<WorkerService.ExtractionCandidate>> ExtractAsync(
-            WorkerService.ExtractionContext context,
+        public Task<IReadOnlyList<ExtractionCandidate>> ExtractAsync(
+            ExtractionContext context,
             IReadOnlyCollection<string> fieldKeys,
-            IReadOnlyDictionary<string, List<WorkerService.ExtractionCandidate>>? priorAttempts,
+            IReadOnlyDictionary<string, List<ExtractionCandidate>>? priorAttempts,
             CancellationToken ct)
         {
-            var candidates = new List<WorkerService.ExtractionCandidate>();
+            var candidates = new List<ExtractionCandidate>();
             foreach (var key in fieldKeys)
             {
                 RequestedFieldKeys.Add(key);
@@ -93,7 +94,7 @@ public class ExtractionPipelineTests
                 }
 
                 candidates.Add(
-                    new WorkerService.ExtractionCandidate(
+                    new ExtractionCandidate(
                         key,
                         item.Value,
                         item.Confidence,
@@ -105,7 +106,7 @@ public class ExtractionPipelineTests
                         }));
             }
 
-            return Task.FromResult<IReadOnlyList<WorkerService.ExtractionCandidate>>(candidates);
+            return Task.FromResult<IReadOnlyList<ExtractionCandidate>>(candidates);
         }
     }
 }

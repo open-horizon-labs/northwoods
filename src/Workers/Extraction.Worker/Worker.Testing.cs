@@ -25,7 +25,7 @@ public sealed partial class Worker
         IReadOnlyList<string> fieldKeys,
         IReadOnlyList<IExtractionProvider> providers,
         CancellationToken cancellationToken)
-        => RunExtractionPipeline(context, fieldKeys, providers, cancellationToken);
+        => ExtractionPipelineService.RunExtractionPipeline(context, fieldKeys, providers, cancellationToken);
 
     /// <summary>
     /// Determines the document status based on ADR 005 confidence tiers.

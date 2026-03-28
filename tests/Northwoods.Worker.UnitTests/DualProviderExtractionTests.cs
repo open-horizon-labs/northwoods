@@ -9,7 +9,7 @@ public class DualProviderExtractionTests
 {
     private static readonly string[] FieldKeys = ["applicantName", "dateOfBirth", "address", "householdSize", "monthlyIncome", "requestedServices", "notes"];
 
-    private static WorkerService.ExtractionContext MakeContext() =>
+    private static ExtractionContext MakeContext() =>
         new(Guid.NewGuid(), "tenant-a", "general-assistance", "test.pdf", "/tmp/test.pdf", 1024, [0x25, 0x50, 0x44, 0x46]); // %PDF header
 
     /// <summary>
@@ -18,19 +18,19 @@ public class DualProviderExtractionTests
     private sealed class FixedProvider(
         string name, string stage, int order,
         Dictionary<string, (string Value, decimal Confidence)> fieldValues,
-        Dictionary<string, object>? extraMetadata = null) : WorkerService.IExtractionProvider
+        Dictionary<string, object>? extraMetadata = null) : IExtractionProvider
     {
         public string Name => name;
         public string Stage => stage;
         public int Order => order;
 
-        public Task<IReadOnlyList<WorkerService.ExtractionCandidate>> ExtractAsync(
-            WorkerService.ExtractionContext context,
+        public Task<IReadOnlyList<ExtractionCandidate>> ExtractAsync(
+            ExtractionContext context,
             IReadOnlyCollection<string> fieldKeys,
-            IReadOnlyDictionary<string, List<WorkerService.ExtractionCandidate>>? priorAttempts,
+            IReadOnlyDictionary<string, List<ExtractionCandidate>>? priorAttempts,
             CancellationToken ct)
         {
-            var results = new List<WorkerService.ExtractionCandidate>();
+            var results = new List<ExtractionCandidate>();
             foreach (var key in fieldKeys)
             {
                 if (!fieldValues.TryGetValue(key, out var entry))
@@ -46,10 +46,10 @@ public class DualProviderExtractionTests
                         metadata[kv.Key] = kv.Value;
                 }
 
-                results.Add(new WorkerService.ExtractionCandidate(
+                results.Add(new ExtractionCandidate(
                     key, entry.Value, entry.Confidence, stage, name, metadata));
             }
-            return Task.FromResult<IReadOnlyList<WorkerService.ExtractionCandidate>>(results);
+            return Task.FromResult<IReadOnlyList<ExtractionCandidate>>(results);
         }
     }
 
@@ -74,7 +74,7 @@ public class DualProviderExtractionTests
         var visionProvider = new FixedProvider("openai-vision", "ocr", 1, visionValues,
             new Dictionary<string, object> { ["prompt_tokens"] = 100L, ["completion_tokens"] = 50L, ["total_tokens"] = 150L });
 
-        IReadOnlyList<WorkerService.IExtractionProvider> providers = [paddleProvider, visionProvider];
+        IReadOnlyList<IExtractionProvider> providers = [paddleProvider, visionProvider];
         var results = await WorkerService.RunExtractionPipelineForTests(
             MakeContext(), ["applicantName", "dateOfBirth", "address"], providers, CancellationToken.None);
 
@@ -226,7 +226,7 @@ public class DualProviderExtractionTests
     [Fact]
     public void ConsensusResolvesMultipleAttempts()
     {
-        var attempts = new List<WorkerService.ExtractionCandidate>
+        var attempts = new List<ExtractionCandidate>
         {
             new("applicantName", "Maria Lopez", 0.84m, "ocr", "paddleocr",
                 new Dictionary<string, object> { ["technique"] = "paddleocr+label-regex", ["processing_ms"] = 200L }),

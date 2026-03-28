@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Extraction.Worker;
 using WorkerService = Extraction.Worker.Worker;
 using Xunit;
 
@@ -9,7 +10,7 @@ public class FieldConsensusTests
     [Fact]
     public void ChoosesTopScoringAgreedValueAndBoostsConfidence()
     {
-        var attempts = new List<WorkerService.ExtractionCandidate>
+        var attempts = new List<ExtractionCandidate>
         {
             new("applicantName", "Jamie Carter", 0.60m, "ocr", "provider-a", []),
             new("applicantName", "Jamie Carter", 0.68m, "ocr", "provider-b", []),
@@ -28,7 +29,7 @@ public class FieldConsensusTests
     [Fact]
     public void UsesBestAvailableCandidateWhenNoAgreementCanBeMade()
     {
-        var attempts = new List<WorkerService.ExtractionCandidate>
+        var attempts = new List<ExtractionCandidate>
         {
             new("dateOfBirth", "03/15/1988", 0.63m, "ocr", "provider-a", []),
             new("dateOfBirth", string.Empty, 0.20m, "ocr", "provider-b", [])
@@ -44,7 +45,7 @@ public class FieldConsensusTests
     [Fact]
     public void ReturnsEmptyLowConfidenceWhenNoCandidatesHaveValues()
     {
-        var attempts = new List<WorkerService.ExtractionCandidate>
+        var attempts = new List<ExtractionCandidate>
         {
             new("notes", string.Empty, 0.20m, "ocr", "provider-a", [])
         };
