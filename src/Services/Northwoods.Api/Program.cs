@@ -98,7 +98,8 @@ var observability = new ApiObservability();
 const string correlationIdHeader = "X-Correlation-Id";
 const double SearchFuzzySimilarityThreshold = 0.3;
 const double CaseAggregateSimilarityThreshold = 0.6;
-var embeddingHttpClient = new HttpClient();
+const int CaseEmbeddingDimensions = 1536;
+var embeddingHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
 
 app.UseCors();
 
@@ -810,7 +811,7 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
                         Details = JsonSerializer.Serialize(new
                         {
                             model = "text-embedding-3-small",
-                            dimensions = 1536,
+                            dimensions = CaseEmbeddingDimensions,
                             prompt_tokens = promptTokens,
                             total_tokens = totalTokens,
                             trigger = "finalization"
@@ -825,10 +826,10 @@ app.MapPost("/reviews/{id:guid}/finalize", async (Guid id, FinalizeReviewRequest
         }
 
         await session.Connection.ExecuteAsync(
-            """
+            $"""
             UPDATE case_profiles
             SET search_text = @SearchText,
-                embedding = CASE WHEN @Embedding IS NULL THEN embedding ELSE CAST(@Embedding AS vector(1536)) END,
+                embedding = CASE WHEN @Embedding IS NULL THEN embedding ELSE CAST(@Embedding AS vector({CaseEmbeddingDimensions})) END,
                 updated_at = now()
             WHERE document_id = @DocId AND tenant_id = @TenantId
             """,
@@ -1431,7 +1432,7 @@ static async Task<(double[] Embedding, long PromptTokens, long TotalTokens)> Gen
     using var doc = JsonDocument.Parse(body);
     var dataArray = doc.RootElement.GetProperty("data");
     var embeddingElement = dataArray[0].GetProperty("embedding");
-    var values = new double[1536];
+    var values = new double[CaseEmbeddingDimensions];
     var idx = 0;
     foreach (var el in embeddingElement.EnumerateArray())
     {
