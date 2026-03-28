@@ -486,15 +486,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                                 </p>
                                 <p className="mt-0.5 truncate text-xs text-slate-500">
                                   {item.templateId}
-                                  {item.uploadDate ? (
-                                    <>
-                                      {' \u00b7 '}
-                                      {new Date(item.uploadDate).toLocaleDateString([], {
-                                        month: 'short',
-                                        day: 'numeric',
-                                      })}
-                                    </>
-                                  ) : null}
                                 </p>
                               </div>
                               {item.uncertainFieldCount > 0 ? (
@@ -732,7 +723,7 @@ function ReviewDetail({
     })
 
   return (
-    <div className="grid h-full grid-cols-1 xl:grid-cols-[1fr_420px]">
+    <div className="grid h-full grid-cols-1 xl:grid-cols-[1fr_360px]">
       {/* Document viewer */}
       <section className="flex flex-col border-r border-slate-200" aria-label="Source document">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2">

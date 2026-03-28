@@ -157,7 +157,7 @@ export default function SubmissionsPage({ auth, onLogout }: Props) {
                       <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Applicant</th>
                       <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Template</th>
                       <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Status</th>
-                      <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Date</th>
+                      <th scope="col" className="px-4 py-2.5 text-xs font-semibold text-slate-600">Uploaded</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
