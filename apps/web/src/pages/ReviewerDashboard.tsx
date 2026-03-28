@@ -114,6 +114,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(initialDocumentId ?? null)
+  const [selectedApplicantName, setSelectedApplicantName] = useState<string | undefined>(undefined)
 
   const [reviewDetail, setReviewDetail] = useState<ReviewDetailResponse | null>(null)
   const [editableFields, setEditableFields] = useState<ConfidenceField[]>([])
@@ -482,7 +483,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                         <li key={item.reviewId}>
                           <button
                             type="button"
-                            onClick={() => { closeCaseView(); setSelectedReviewId(item.reviewId) }}
+                            onClick={() => { closeCaseView(); setSelectedReviewId(item.reviewId); setSelectedApplicantName(item.applicantName) }}
                             aria-pressed={isSelected}
                             aria-current={isSelected ? 'true' : undefined}
                             aria-label={`Review ${item.applicantName}, ${item.uncertainFieldCount} uncertain field${item.uncertainFieldCount === 1 ? '' : 's'}`}
@@ -564,7 +565,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                         <li key={item.intakeId}>
                           <button
                             type="button"
-                            onClick={() => { closeCaseView(); setSelectedReviewId(item.intakeId) }}
+                            onClick={() => { closeCaseView(); setSelectedReviewId(item.intakeId); setSelectedApplicantName(item.applicantName) }}
                             className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${FOCUS_RING}`}
                             aria-label={`Open review for ${item.applicantName}`}
                           >
@@ -648,10 +649,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
             <ReviewDetail
               accessToken={auth.accessToken}
               review={reviewDetail}
-              applicantName={
-                queue.find((i) => i.reviewId === selectedReviewId)?.applicantName ??
-                searchResults.find((i) => i.intakeId === selectedReviewId)?.applicantName
-              }
+              applicantName={selectedApplicantName}
               editableFields={editableFields}
               reviewerNote={reviewerNote}
               finalizeBusy={finalizeBusy}
@@ -795,7 +793,7 @@ function ReviewDetail({
                 <p className="text-xs text-slate-500">All fields reviewed</p>
               )}
             </div>
-            {applicantName ? (
+            {applicantName && applicantName !== '(unknown)' ? (
               <button
                 type="button"
                 onClick={() => onOpenCaseView(applicantName)}
