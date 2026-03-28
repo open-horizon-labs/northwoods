@@ -124,8 +124,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
   const [reviewerNote, setReviewerNote] = useState('')
   const [reviewLoading, setReviewLoading] = useState(false)
   const [reviewLoadError, setReviewLoadError] = useState<string | null>(null)
-  const [similarCases, setSimilarCases] = useState<SimilarCase[]>([])
-  const [similarCasesLoading, setSimilarCasesLoading] = useState(false)
   const [finalizeBusy, setFinalizeBusy] = useState(false)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
   const [finalizeSuccess, setFinalizeSuccess] = useState(false)
@@ -217,8 +215,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
       setReviewLoadError(null)
       setFinalizeSuccess(false)
       setFinalizeError(null)
-      setSimilarCases([])
-      setSimilarCasesLoading(false)
       try {
         const detail = await api.getReview(auth.accessToken, reviewId)
         if (seq !== reviewReqSeq.current) return
@@ -232,16 +228,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
           })).sort((a, b) => a.confidence - b.confidence),
         )
         setReviewerNote('')
-        // Fire secondary fetch for similar cases without blocking the main review render
-        setSimilarCasesLoading(true)
-        api.getSimilarCases(auth.accessToken, reviewId).then((cases) => {
-          if (seq !== reviewReqSeq.current) return
-          setSimilarCases(cases)
-        }).catch(() => {
-          // On error, leave similar cases empty -- don't block the main review
-        }).finally(() => {
-          if (seq === reviewReqSeq.current) setSimilarCasesLoading(false)
-        })
       } catch (err) {
         if (seq !== reviewReqSeq.current) return
         setReviewDetail(null)
@@ -790,8 +776,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
               uncertainCount={uncertainCount}
               retryBusy={retryBusy}
               retryError={retryError}
-              similarCases={similarCases}
-              similarCasesLoading={similarCasesLoading}
               onFieldChange={handleFieldChange}
               onNoteChange={setReviewerNote}
               onFinalize={handleFinalize}
@@ -819,8 +803,6 @@ type ReviewDetailProps = {
   uncertainCount: number
   retryBusy: boolean
   retryError: string | null
-  similarCases: SimilarCase[]
-  similarCasesLoading: boolean
   onFieldChange: (index: number, value: string) => void
   onNoteChange: (note: string) => void
   onFinalize: () => void
@@ -840,8 +822,6 @@ function ReviewDetail({
   uncertainCount,
   retryBusy,
   retryError,
-  similarCases,
-  similarCasesLoading,
   onFieldChange,
   onNoteChange,
   onFinalize,
@@ -1012,45 +992,39 @@ function ReviewDetail({
           </div>
 
           {/* Similar cases */}
-          {similarCasesLoading || similarCases.length > 0 ? (
+          {review.similarCases.length > 0 ? (
             <div className="border-t border-slate-100 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Similar cases</p>
-              {similarCasesLoading ? (
-                <p className="mt-2 text-xs text-slate-400" role="status" aria-live="polite">
-                  Loading…
-                </p>
-              ) : (
-                <ul className="mt-2 space-y-2" role="list">
-                  {similarCases.map((sc: SimilarCase) => (
-                    <li key={sc.intakeId}>
-                      <button
-                        type="button"
-                        onClick={() => onSelectReview(sc.reviewId)}
-                        className={`w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:border-slate-300 hover:bg-slate-100 ${FOCUS_RING}`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-slate-900">{sc.applicantName}</p>
-                          <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
-                            {(sc.matchScore * 100).toFixed(0)}% match
-                          </span>
+              <ul className="mt-2 space-y-2" role="list">
+                {review.similarCases.map((sc: SimilarCase) => (
+                  <li key={sc.intakeId}>
+                    <button
+                      type="button"
+                      onClick={() => onSelectReview(sc.reviewId)}
+                      className={`w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:border-slate-300 hover:bg-slate-100 ${FOCUS_RING}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-slate-900">{sc.applicantName}</p>
+                        <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                          {(sc.matchScore * 100).toFixed(0)}% match
+                        </span>
+                      </div>
+                      {sc.signals?.length > 0 ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {sc.signals.map((sig) => (
+                            <span key={sig} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
+                              {sig}
+                            </span>
+                          ))}
                         </div>
-                        {sc.signals?.length > 0 ? (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {sc.signals.map((sig) => (
-                              <span key={sig} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
-                                {sig}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                        {sc.summary ? (
-                          <p className="mt-1 text-xs text-slate-500 line-clamp-2">{sc.summary}</p>
-                        ) : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                      ) : null}
+                      {sc.summary ? (
+                        <p className="mt-1 text-xs text-slate-500 line-clamp-2">{sc.summary}</p>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
