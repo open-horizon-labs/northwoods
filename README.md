@@ -102,7 +102,7 @@ The database initializes with:
 
 - **2 tenants:** `tenant-a` (Sunrise Agency) and `tenant-b` (Lakewood Services)
 - **6 users:** worker + reviewer + admin per tenant (password: `password`)
-- **4 templates per tenant:** General Assistance, Housing Stability, Financial Assistance, Clinical SOAP Note
+- **4 templates per tenant:** General Assistance, Housing Stability, Behavioral Health, SOAP Progress Note
 - **4 synthetic case profiles** with embeddings for similar-case retrieval
 
 All data is tenant-isolated via RLS policies.
