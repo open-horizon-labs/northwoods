@@ -83,6 +83,9 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    environment:
+      - PORT=80
+      - API_URL=http://api:8080
     ports:
       - "5173:80"
     depends_on:
