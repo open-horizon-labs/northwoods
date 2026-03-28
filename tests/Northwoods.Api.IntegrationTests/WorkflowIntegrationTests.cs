@@ -190,13 +190,13 @@ public sealed class WorkflowIntegrationTests
         Assert.NotNull(finalized);
 
         // Verify audit trail contains field_corrected between extraction events and finalized
-        Assert.Contains("field_corrected", finalized.AuditEvents);
-        Assert.Contains("finalized", finalized.AuditEvents);
+        Assert.Contains(finalized.AuditEvents, e => e.EventType == "field_corrected");
+        Assert.Contains(finalized.AuditEvents, e => e.EventType == "finalized");
 
         // field_corrected must appear before finalized in the audit trail
         var auditList = finalized.AuditEvents.ToList();
-        var correctedIndex = auditList.IndexOf("field_corrected");
-        var finalizedIndex = auditList.IndexOf("finalized");
+        var correctedIndex = auditList.FindIndex(e => e.EventType == "field_corrected");
+        var finalizedIndex = auditList.FindIndex(e => e.EventType == "finalized");
         Assert.True(correctedIndex < finalizedIndex,
             $"field_corrected (at {correctedIndex}) should appear before finalized (at {finalizedIndex}) in audit trail.");
     }

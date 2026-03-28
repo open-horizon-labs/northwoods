@@ -23,6 +23,7 @@ SRC_DIR = REPO_ROOT / "src"
 # Files allowed to use NpgsqlConnection directly (superuser / infrastructure code).
 EXEMPT_CS_PATTERNS = [
     "BuildingBlocks/Northwoods.Tenancy/DbConnectionFactory.cs",
+    "BuildingBlocks/Northwoods.Tenancy/DatabaseInitializer.cs",
     "BuildingBlocks/Northwoods.Tenancy/PostgresHealthCheck.cs",
     "Workers/Extraction.Worker/",
 ]
