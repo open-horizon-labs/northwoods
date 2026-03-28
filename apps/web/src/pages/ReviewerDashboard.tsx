@@ -446,7 +446,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                     type="search"
                     value={queueSearch}
                     onChange={(e) => setQueueSearch(e.target.value)}
-                    placeholder="Filter applicant or template…"
+                    placeholder="Filter current queue…"
                     className={`${inputInteractive} text-xs`}
                   />
                 </label>
@@ -564,9 +564,9 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
                         <li key={item.intakeId}>
                           <button
                             type="button"
-                            onClick={() => void openCaseView(item.applicantName)}
+                            onClick={() => { closeCaseView(); setSelectedReviewId(item.intakeId) }}
                             className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${FOCUS_RING}`}
-                            aria-label={`View case for ${item.applicantName}`}
+                            aria-label={`Open review for ${item.applicantName}`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -648,7 +648,10 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
             <ReviewDetail
               accessToken={auth.accessToken}
               review={reviewDetail}
-              applicantName={queue.find((i) => i.reviewId === selectedReviewId)?.applicantName}
+              applicantName={
+                queue.find((i) => i.reviewId === selectedReviewId)?.applicantName ??
+                searchResults.find((i) => i.intakeId === selectedReviewId)?.applicantName
+              }
               editableFields={editableFields}
               reviewerNote={reviewerNote}
               finalizeBusy={finalizeBusy}
@@ -664,6 +667,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId }:
               onFinalize={handleFinalize}
               onRetry={handleRetry}
               onSelectReview={setSelectedReviewId}
+              onOpenCaseView={openCaseView}
             />
           ) : null}
         </main>
@@ -693,6 +697,7 @@ type ReviewDetailProps = {
   onFinalize: () => void
   onRetry: () => void
   onSelectReview: (id: string) => void
+  onOpenCaseView: (personKey: string) => void
 }
 
 function ReviewDetail({
@@ -714,6 +719,7 @@ function ReviewDetail({
   onFinalize,
   onRetry,
   onSelectReview,
+  onOpenCaseView,
 }: ReviewDetailProps) {
   const isFinalized = statusLabel(review.status) === 'Finalized'
   const isFailed = statusLabel(review.status) === 'Failed'
@@ -789,6 +795,16 @@ function ReviewDetail({
                 <p className="text-xs text-slate-500">All fields reviewed</p>
               )}
             </div>
+            {applicantName ? (
+              <button
+                type="button"
+                onClick={() => onOpenCaseView(applicantName)}
+                className={`${btnSecondary} shrink-0 px-2.5 py-1 text-xs`}
+                title="View all documents for this applicant"
+              >
+                All cases
+              </button>
+            ) : null}
           </div>
         </div>
 
