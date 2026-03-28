@@ -679,9 +679,12 @@ type ReviewDetailProps = {
   finalizeError: string | null
   finalizeSuccess: boolean
   uncertainCount: number
+  retryBusy: boolean
+  retryError: string | null
   onFieldChange: (index: number, value: string) => void
   onNoteChange: (note: string) => void
   onFinalize: () => void
+  onRetry: () => void
   onSelectReview: (id: string) => void
 }
 
@@ -695,12 +698,16 @@ function ReviewDetail({
   finalizeError,
   finalizeSuccess,
   uncertainCount,
+  retryBusy,
+  retryError,
   onFieldChange,
   onNoteChange,
   onFinalize,
+  onRetry,
   onSelectReview,
 }: ReviewDetailProps) {
   const isFinalized = statusLabel(review.status) === 'Finalized'
+  const isFailed = statusLabel(review.status) === 'Failed'
 
   const reviewFieldMap = useMemo(() => {
     const map = new Map<string, ReviewField>()
@@ -891,8 +898,17 @@ function ReviewDetail({
                           {(sc.matchScore * 100).toFixed(0)}% match
                         </span>
                       </div>
+                      {sc.signals?.length > 0 ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {sc.signals.map((sig) => (
+                            <span key={sig} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500">
+                              {sig}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       {sc.summary ? (
-                        <p className="mt-1 text-xs text-slate-600 line-clamp-2">{sc.summary}</p>
+                        <p className="mt-1 text-xs text-slate-500 line-clamp-2">{sc.summary}</p>
                       ) : null}
                     </button>
                   </li>
@@ -906,20 +922,46 @@ function ReviewDetail({
             <div className="border-t border-slate-100 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Audit trail</p>
               <ul className="mt-2 space-y-1" aria-live="polite">
-                {review.auditEvents.map((ev, i) => (
+                {review.auditEvents.map((ev: AuditEventItem, i) => (
                   <li
-                    key={`${ev}-${i}`}
-                    className="rounded border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs text-slate-700"
+                    key={`${ev.eventType}-${i}`}
+                    className="rounded border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
                   >
-                    {formatAuditEvent(ev)}
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-slate-700">{formatAuditEventType(ev.eventType)}</span>
+                      <span className="shrink-0 tabular-nums text-slate-400">{formatAuditTimestamp(ev.createdAt)}</span>
+                    </div>
+                    <span className="text-slate-500">{ev.actorEmail ?? 'system'}</span>
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
 
-          {/* Finalize */}
-          {!isFinalized ? (
+          {/* Failed state: show error and retry */}
+          {isFailed ? (
+            <div className="border-t border-slate-100 p-4">
+              <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2">
+                <p className="text-xs font-medium text-rose-700">Extraction failed</p>
+                {review.failureReason ? (
+                  <p className="mt-1 text-xs text-rose-600">{review.failureReason}</p>
+                ) : null}
+              </div>
+              {retryError ? (
+                <p role="alert" aria-live="assertive" className="mt-2 text-xs text-rose-700">
+                  {retryError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={retryBusy}
+                className={`${btnSecondary} mt-3 w-full`}
+              >
+                {retryBusy ? 'Retrying\u2026' : 'Retry extraction'}
+              </button>
+            </div>
+          ) : !isFinalized ? (
             <div className="border-t border-slate-100 p-4">
               <label htmlFor="reviewer-note" className="block text-xs font-medium text-slate-700">
                 Reviewer note

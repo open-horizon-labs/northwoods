@@ -458,17 +458,19 @@ internal static class ReviewEndpoints
                   AND cp.date_of_birth = t.date_of_birth
             ),
             fused AS (
-                SELECT document_id, SUM(1.0 / (60.0 + rank)) AS match_score
+                SELECT document_id,
+                       SUM(1.0 / (60.0 + rank)) AS match_score,
+                       array_agg(DISTINCT source) AS match_sources
                 FROM (
-                    SELECT document_id, rank FROM fts
+                    SELECT document_id, rank, 'fts'     AS source FROM fts
                     UNION ALL
-                    SELECT document_id, rank FROM vector
+                    SELECT document_id, rank, 'vector'  AS source FROM vector
                     UNION ALL
-                    SELECT document_id, rank FROM name_fuzzy
+                    SELECT document_id, rank, 'name'    AS source FROM name_fuzzy
                     UNION ALL
-                    SELECT document_id, rank FROM address_fuzzy
+                    SELECT document_id, rank, 'address' AS source FROM address_fuzzy
                     UNION ALL
-                    SELECT document_id, rank FROM dob_exact
+                    SELECT document_id, rank, 'dob'     AS source FROM dob_exact
                 ) x
                 GROUP BY document_id
             )
@@ -478,7 +480,8 @@ internal static class ReviewEndpoints
                 cp.applicant_name AS ApplicantName,
                 cp.date_of_birth AS DateOfBirth,
                 cp.address AS Address,
-                ROUND(f.match_score::numeric, 4) AS MatchScore
+                ROUND(f.match_score::numeric, 4) AS MatchScore,
+                f.match_sources AS MatchSources
             FROM fused f
             JOIN case_profiles cp ON cp.document_id = f.document_id
             ORDER BY f.match_score DESC, cp.applicant_name NULLS LAST
@@ -526,7 +529,7 @@ internal static class ReviewEndpoints
                 }
             }
 
-            result.Add(new SimilarCaseItem(caseItem.IntakeId, caseItem.IntakeId, caseItem.ApplicantName ?? "Unknown applicant", caseItem.TemplateId, caseItem.MatchScore, summary));
+            result.Add(new SimilarCaseItem(caseItem.IntakeId, caseItem.IntakeId, caseItem.ApplicantName ?? "Unknown applicant", caseItem.TemplateId, caseItem.MatchScore, summary, signals));
         }
 
         return result;
@@ -541,35 +544,38 @@ internal static class ReviewEndpoints
         IReadOnlyDictionary<string, string> candidateFields)
     {
         var signals = new List<string>();
+        var sources = candidate.MatchSources ?? [];
 
+        // Field-level exact/fuzzy matches
         var candidateApplicant = candidate.ApplicantName;
         if (!string.IsNullOrWhiteSpace(candidateApplicant) && string.Equals(candidateApplicant, sourceApplicant, StringComparison.OrdinalIgnoreCase))
-        {
             signals.Add("same applicant");
-        }
+        else if (sources.Contains("name"))
+            signals.Add("similar name");
 
         var candidateDob = candidate.DateOfBirth;
         if (!string.IsNullOrWhiteSpace(candidateDob) && !string.IsNullOrWhiteSpace(sourceDob) && candidateDob == sourceDob)
-        {
             signals.Add("matching DOB");
-        }
 
         var candidateAddress = candidate.Address;
         if (!string.IsNullOrWhiteSpace(candidateAddress) && !string.IsNullOrWhiteSpace(sourceAddress) &&
             string.Equals(candidateAddress, sourceAddress, StringComparison.OrdinalIgnoreCase))
-        {
             signals.Add("matching address");
-        }
+        else if (sources.Contains("address"))
+            signals.Add("similar address");
 
         if (string.Equals(candidate.TemplateId, sourceTemplateId, StringComparison.OrdinalIgnoreCase))
-        {
             signals.Add("same template");
-        }
+
+        // Query-level signals not captured by field comparison
+        if (sources.Contains("fts"))
+            signals.Add("text match");
+
+        if (sources.Contains("vector"))
+            signals.Add("semantic match");
 
         if (signals.Count == 0)
-        {
             signals.Add("cross-field lexical overlap");
-        }
 
         var requestedServices = candidateFields.TryGetValue("requestedServices", out var services) && !string.IsNullOrWhiteSpace(services)
             ? services

@@ -13,7 +13,8 @@ internal sealed record SimilarCaseCandidate(
     string? ApplicantName,
     string? DateOfBirth,
     string? Address,
-    decimal MatchScore);
+    decimal MatchScore,
+    string[] MatchSources);
 
 internal sealed record CaseFieldValue(
     Guid IntakeId,
