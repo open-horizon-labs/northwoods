@@ -719,6 +719,10 @@ function ReviewDetail({
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
   const [sourceAvailable, setSourceAvailable] = useState<boolean | null>(null)
 
+  const handleAvailabilityChange = useCallback((available: boolean) => {
+    setSourceAvailable(available)
+  }, [])
+
   const toggleReason = (fieldKey: string) =>
     setOpenReasons((prev) => {
       const next = new Set(prev)
@@ -752,7 +756,7 @@ function ReviewDetail({
         <PdfViewer
           accessToken={accessToken}
           documentId={review.reviewId}
-          onAvailabilityChange={(available) => setSourceAvailable(available)}
+          onAvailabilityChange={handleAvailabilityChange}
         />
         {sourceAvailable === false ? (
           <div className="flex flex-1 items-center justify-center bg-slate-50 p-8">
