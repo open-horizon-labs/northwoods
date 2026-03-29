@@ -4,7 +4,7 @@
 
 This document explains **how Northwoods is designed today** and **why those decisions were made** so a reviewer who has never seen the codebase can evaluate capability boundaries, trust boundaries, and intentional trade-offs.
 
-It summarizes the current system after ADRs 001-005 and issues #1/#3/#4/#5/#6.
+It summarizes the current system as built, referencing ADRs 001-005 for the key decisions.
 
 ## System architecture diagram
 
@@ -22,7 +22,7 @@ flowchart TB
     subgraph Platform
       API[Northwoods.Api]
       WK[Extraction.Worker]
-      OCR[Paddle OCR + extraction providers]
+      OCR[OpenAI Vision + optional providers]
     end
 
     subgraph Data
@@ -69,14 +69,15 @@ This split keeps trust boundaries clear: API owns request/identity boundaries, w
 ### Extraction model
 
 - Extraction runs in the worker, not in request/response paths.
-- Worker runs ALL registered providers on ALL fields:
-  - **OpenAI Vision provider** (required for extraction; requires `OPENAI_API_KEY`) -- sends document images to gpt-5.4-nano via the Responses API for structured field extraction with per-field confidence.
+- Worker runs all registered providers on each document in pipeline order. Providers registered by default:
+  - **OpenAI Vision provider** (on by default; requires `OPENAI_API_KEY`) — sends document pages to `gpt-5.4-nano` via the OpenAI Responses API for structured field extraction with per-field confidence. Escalates to `gpt-5.4-mini` on capability failure or low aggregate confidence.
+  - **PaddleOCR** (optional; `Extraction:UsePaddleOcr=true`) — local Python OCR stage for baseline text extraction.
+  - **OpenAI Normalizer** (optional; `Extraction:UseOpenAiNormalizer=true`) — LLM normalization pass using `gpt-5.4-mini`.
 - Each provider's results are stored as separate extraction attempts with run-level metadata; attempts are append-only.
 - The pipeline selects the best candidate per field based on confidence score.
-- Confidence is explicit and centralized into operational tiers (`High`, `ReviewRequired`, `Escalate`).
+- Confidence is explicit and centralized into operational tiers (`High` >= 0.90, `ReviewRequired` 0.75–0.90, `Escalate` < 0.75 per field with aggregate < 0.82 triggering model escalation).
 - Reviewer-facing payloads are generated from extracted candidates plus confidence so uncertain fields are prioritized.
-- If nano fails, the system escalates to gpt-5.4-mini with a logged escalation reason.
-- Token usage (prompt, completion, total) is recorded for OpenAI extraction attempts.
+- Token usage (prompt, completion, total) is recorded in `extraction_attempts.details` for OpenAI extraction attempts.
 
 Why this matters:
 

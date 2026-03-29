@@ -10,7 +10,7 @@ Northwoods delivers a complete intake-processing platform with a coherent vertic
 
 ### Core workflow (upload, extract, review, finalize)
 
-- **Template-guided upload**: 4 intake templates per tenant (General Assistance, Housing Stability, Financial Assistance, Clinical SOAP Note). Intake workers upload scanned PDFs associated with a template.
+- **Template-guided upload**: 4 intake templates per tenant (General Assistance Intake, Housing Stability Intake, Behavioral Health Intake, SOAP Progress Note). Intake workers upload scanned PDFs associated with a template.
 - **Background extraction**: Worker polls for queued documents and runs the configured extraction providers (OpenAI Vision plus optional stages). Each provider produces per-field extraction attempts with confidence scores. Attempts are append-only.
 - **Confidence-tiered review**: Extracted fields are routed to review when confidence falls below threshold. Reviewers see fields, confidence indicators, the source document, and similar historical cases.
 - **Finalize with corrections**: Reviewers correct low-confidence fields and finalize with an audit trail. Corrections are stored alongside original extraction.
@@ -100,7 +100,7 @@ Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1-4):
 ## Known gaps
 
 - **Production auth hardening**: bcrypt hashing is in place, but token refresh, rate limiting, and account lockout are not implemented.
-- **OpenAI Vision in Docker**: the worker container requires `OPENAI_API_KEY` in the worker environment when `Extraction:UseOpenAiVision` is true.
+- **API key requirement**: the worker defaults `UseOpenAiVision=true` and also uses `text-embedding-3-small` for case profile embeddings. Both require `OPENAI_API_KEY` at startup. Without it the worker throws a startup exception and no documents are processed. See README for setup instructions.
 - **UI smoke tests**: Playwright e2e test scaffold exists; full automation in CI is a follow-on item.
 
 ## AI-assisted development

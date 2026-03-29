@@ -1,8 +1,9 @@
 # API Fuzz Report — Northwoods API
 
-**Date:** 2026-03-27  
-**Target:** `http://localhost:5100`  
-**Stack:** Docker Compose — `northwoods-api-1` (ASP.NET Core / .NET 10-preview), Postgres 18 with pgvector, MinIO  
+**Date:** 2026-03-27
+**Status:** Historical — all findings below were resolved before final submission. This report documents the adversarial testing session that produced each finding; the findings were tracked as GitHub issues and merged fixes are in `main`.
+**Target:** `http://localhost:5100`
+**Stack:** Docker Compose — `northwoods-api-1` (ASP.NET Core / .NET 10-preview), Postgres 18 with pgvector, MinIO
 **Method:** Black-box boundary and injection testing using `curl` and crafted HTTP requests, supplemented by white-box source analysis
 
 ---
