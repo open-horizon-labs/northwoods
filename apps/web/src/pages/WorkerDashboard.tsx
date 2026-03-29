@@ -58,20 +58,6 @@ type UploadRecord = {
   status: IntakeStatusResponse['status']
 }
 
-function useIsTouchDevice() {
-  const [isTouch, setIsTouch] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
-  )
-
-  useEffect(() => {
-    const mql = window.matchMedia('(pointer: coarse)')
-    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches)
-    mql.addEventListener('change', handler)
-    return () => mql.removeEventListener('change', handler)
-  }, [])
-
-  return isTouch
-}
 
 type Props = {
   auth: LoginResponse
@@ -92,8 +78,6 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
   const [activePolling, setActivePolling] = useState<Set<string>>(new Set())
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
-  const isTouch = useIsTouchDevice()
 
   const loadTemplates = useCallback(async () => {
     setIsLoadingTemplates(true)
@@ -183,7 +167,6 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
       // Reset file inputs
       setSelectedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
-      if (cameraInputRef.current) cameraInputRef.current.value = ''
     } catch (err) {
       setUploadError(userMessage(err, 'Upload failed. Please try again.'))
     } finally {
@@ -301,66 +284,19 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
                 <span className="sr-only"> (required)</span>
               </p>
 
-              {isTouch ? (
-                <>
-                  <div className="flex flex-col gap-2.5" role="group" aria-labelledby="file-label">
-                    <button
-                      type="button"
-                      onClick={() => cameraInputRef.current?.click()}
-                      disabled={uploadBusy}
-                      aria-describedby="file-help"
-                      className={`${btnPrimary} w-full`}
-                    >
-                      Take photo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadBusy}
-                      aria-describedby="file-help"
-                      className={`${btnSecondary} w-full`}
-                    >
-                      Upload file
-                    </button>
-                  </div>
-                  <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="sr-only"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedFile(e.target.files?.[0] ?? null)}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,image/*"
-                    className="sr-only"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedFile(e.target.files?.[0] ?? null)}
-                  />
-                  {selectedFile ? (
-                    <p className="mt-1 truncate text-sm text-slate-700">{selectedFile.name}</p>
-                  ) : null}
-                </>
-              ) : (
-                <input
-                  ref={fileInputRef}
-                  id="file-upload"
-                  type="file"
-                  accept=".pdf,image/*"
-                  required
-                  aria-required="true"
-                  aria-describedby="file-help"
-                  aria-labelledby="file-label"
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedFile(e.target.files?.[0] ?? null)}
-                  disabled={uploadBusy}
-                  className={`${inputInteractive} border-dashed py-2 file:mr-3 file:rounded file:border-0 file:bg-sky-700 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-sky-800`}
-                />
-              )}
+              <input
+                ref={fileInputRef}
+                id="file-upload"
+                type="file"
+                accept=".pdf,image/*"
+                required
+                aria-required="true"
+                aria-describedby="file-help"
+                aria-labelledby="file-label"
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedFile(e.target.files?.[0] ?? null)}
+                disabled={uploadBusy}
+                className={`${inputInteractive} border-dashed py-2 file:mr-3 file:rounded file:border-0 file:bg-sky-700 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-sky-800`}
+              />
 
               <p id="file-help" className="text-xs text-slate-500">
                 PDF or image (JPG, PNG). Max one file per submission.
