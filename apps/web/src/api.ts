@@ -22,6 +22,15 @@ type RetryIntakeResponse = {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+// Global 401 handler — set once at app startup. Decouples api.ts from the
+// React component tree so any fetch can trigger redirect-to-login without
+// importing App or Router.
+let _onUnauthorized: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: () => void): void {
+  _onUnauthorized = handler
+}
+
 const jsonHeaders = (accessToken?: string) => ({
   'Content-Type': 'application/json',
   ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -69,10 +78,16 @@ export function userMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+async function handleResponse<T>(response: Response, skipUnauthorizedHandler = false): Promise<T> {
   if (!response.ok) {
     const body = await response.text()
-    throw new ApiError(response.status, response.statusText, body)
+    const err = new ApiError(response.status, response.statusText, body)
+    // Only trigger the global 401 handler for authenticated requests. The
+    // login endpoint's own 401 ("wrong password") must not clear session state.
+    if (response.status === 401 && !skipUnauthorizedHandler && _onUnauthorized) {
+      _onUnauthorized()
+    }
+    throw err
   }
 
   return (await response.json()) as T
@@ -85,7 +100,9 @@ export const api = {
       headers: jsonHeaders(),
       body: JSON.stringify(payload),
     })
-    return handleResponse<LoginResponse>(response)
+    // skipUnauthorizedHandler=true: a 401 here means "wrong password", not
+    // "session expired". The caller shows its own error message.
+    return handleResponse<LoginResponse>(response, true)
   },
 
   getTemplates: async (accessToken: string) => {

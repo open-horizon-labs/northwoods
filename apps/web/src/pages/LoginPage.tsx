@@ -15,9 +15,10 @@ const inputInteractive = `${inputStyle} ${FOCUS_RING}`
 
 type Props = {
   onLogin: (auth: LoginResponse) => void
+  sessionExpiredMessage?: string | null
 }
 
-export default function LoginPage({ onLogin }: Props) {
+export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -75,10 +76,16 @@ export default function LoginPage({ onLogin }: Props) {
 
       <main id="main" className="w-full max-w-sm">
         <header className="mb-8 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Northwoods</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">TraverseLite</p>
           <h1 className="mt-2 text-2xl font-semibold text-slate-900">Sign in</h1>
           <p className="mt-1 text-sm text-slate-600">Use your work email and password.</p>
         </header>
+
+        {sessionExpiredMessage ? (
+          <p role="alert" aria-live="assertive" className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {sessionExpiredMessage}
+          </p>
+        ) : null}
 
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <form onSubmit={handleSubmit} noValidate className="space-y-5">

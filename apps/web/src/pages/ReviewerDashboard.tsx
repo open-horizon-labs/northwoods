@@ -154,6 +154,8 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
   const [caseError, setCaseError] = useState<string | null>(null)
 
   const detailPaneRef = useRef<HTMLDivElement>(null)
+  // Ref to the global search input — used for "/" keyboard shortcut focus
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const filteredQueue = useMemo(() => {
     const q = queueSearch.trim().toLowerCase()
@@ -256,6 +258,92 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     }
   }, [sidebarMode, docsLoaded, docsBusy, loadDocuments])
 
+  // Auto-refresh queue and documents every 12 s while the page is visible.
+  // Polling stops when every document is in a terminal state (nothing left to
+  // transition) so we don't hammer the API when there's nothing to update.
+  // If the currently-open review's status changed server-side, reload it too.
+  const selectedReviewIdRef = useRef(selectedReviewId)
+  const reviewDetailRef = useRef(reviewDetail)
+  const docsLoadedRef = useRef(docsLoaded)
+
+  // Keep refs current without adding them to any effect's dependency array
+  useEffect(() => { selectedReviewIdRef.current = selectedReviewId }, [selectedReviewId])
+  useEffect(() => { reviewDetailRef.current = reviewDetail }, [reviewDetail])
+  useEffect(() => { docsLoadedRef.current = docsLoaded }, [docsLoaded])
+
+  useEffect(() => {
+    const POLL_INTERVAL_MS = 12_000
+
+    const isNonTerminal = (status: string | number): boolean => {
+      const s = typeof status === 'number' ? status : status.toLowerCase().replace(/_/g, '')
+      return s === 0 || s === 1 || s === 'uploaded' || s === 'extracting'
+    }
+
+    const tick = async () => {
+      if (document.visibilityState !== 'visible') return
+
+      // Silent queue refresh — refreshQueue guards its own busy flag so the
+      // "Refreshing…" label won't flash when we already have data in the list.
+      const freshQueueResult = await api.getReviewQueue(auth.accessToken).catch(() => null)
+      if (!freshQueueResult) return
+      const freshQueue = freshQueueResult
+      setQueue(freshQueue)
+
+      // Refresh documents list if it has been loaded at least once
+      let freshDocs: DocumentListItem[] = []
+      if (docsLoadedRef.current) {
+        try {
+          freshDocs = await api.getDocuments(auth.accessToken)
+          setDocuments(freshDocs)
+        } catch {
+          // best-effort; stale list is acceptable
+        }
+      }
+
+      // Check if all known documents are terminal — if the queue is empty and
+      // every doc has a terminal status, skip further polls for this interval.
+      if (docsLoadedRef.current && freshQueue.length === 0 && freshDocs.length > 0) {
+        const allTerminal = freshDocs.every((d) => !isNonTerminal(d.status))
+        if (allTerminal) return
+      }
+
+      // If the currently-open review is in the queue and its status changed,
+      // silently reload the detail so the reviewer sees updated fields.
+      const openId = selectedReviewIdRef.current
+      const openDetail = reviewDetailRef.current
+      if (openId && openDetail) {
+        const inQueue = freshQueue.some((q) => q.reviewId === openId)
+        // The queue item doesn't carry status directly, but if the review was
+        // previously non-terminal, re-fetch to pick up any status change.
+        const wasNonTerminal = isNonTerminal(openDetail.status)
+        if (wasNonTerminal || inQueue) {
+          try {
+            const fresh = await api.getReview(auth.accessToken, openId)
+            if (fresh.status !== openDetail.status) {
+              setReviewDetail(fresh)
+            }
+          } catch {
+            // best-effort
+          }
+        }
+      }
+    }
+
+    const id = window.setInterval(() => { void tick() }, POLL_INTERVAL_MS)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void tick()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [auth.accessToken])
+
   // Load review when selection changes
   useEffect(() => {
     if (!selectedReviewId) {
@@ -288,6 +376,23 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     detailPaneRef.current?.scrollTo({ top: 0, behavior: prefersReduced ? 'instant' : 'smooth' })
   }, [selectedReviewId])
+
+  // Keyboard shortcut: "/" focuses the global search input (Gmail-style).
+  // Does nothing when focus is already inside an input/textarea/select.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== '/') return
+      const tag = (e.target as HTMLElement).tagName.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+      if ((e.target as HTMLElement).isContentEditable) return
+      e.preventDefault()
+      setSidebarMode('search')
+      // Defer focus until after the sidebar re-renders with the search tab active
+      requestAnimationFrame(() => searchInputRef.current?.focus())
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const handleFieldChange = (index: number, value: string) => {
     setEditableFields((prev) =>
@@ -340,6 +445,36 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     e.preventDefault()
     const q = searchQuery.trim()
     if (!q) return
+
+    // UUID direct-nav: if the query looks like a full UUID or an 8-char hex prefix,
+    // navigate straight to that document without hitting the search API.
+    const fullUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const prefixRe = /^[0-9a-f]{8}$/i
+    if (fullUuidRe.test(q)) {
+      closeCaseView()
+      setSelectedReviewId(q.toLowerCase())
+      setSelectedApplicantName(undefined)
+      return
+    }
+    if (prefixRe.test(q)) {
+      // Try to find an exact prefix match in the already-loaded documents list first
+      const match = documents.find((d) => d.documentId.startsWith(q.toLowerCase()))
+      if (match) {
+        closeCaseView()
+        setSelectedReviewId(match.documentId)
+        setSelectedApplicantName(match.applicantName)
+        return
+      }
+      // Also check the queue
+      const queueMatch = queue.find((i) => i.reviewId.startsWith(q.toLowerCase()))
+      if (queueMatch) {
+        closeCaseView()
+        setSelectedReviewId(queueMatch.reviewId)
+        setSelectedApplicantName(queueMatch.applicantName)
+        return
+      }
+    }
+
     setSearchBusy(true)
     setSearchError(null)
     setSearchPerformed(true)
@@ -658,11 +793,13 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                   <label htmlFor="global-search" className="sr-only">Search intakes</label>
                   <div className="flex gap-2">
                     <input
+                      ref={searchInputRef}
                       id="global-search"
                       type="search"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by name, address, field…"
+                      onKeyDown={(e) => { if (e.key === 'Escape') { e.currentTarget.blur() } }}
+                      placeholder="Search by name, UUID, or field… (/)"
                       className={`${inputInteractive} flex-1 text-xs`}
                       required
                       aria-required="true"
@@ -870,6 +1007,14 @@ function ReviewDetail({
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
   const [discoveredOpen, setDiscoveredOpen] = useState(false)
   const [sourceAvailable, setSourceAvailable] = useState<boolean | null>(null)
+  const [uuidCopied, setUuidCopied] = useState(false)
+
+  const handleCopyUuid = useCallback(() => {
+    void navigator.clipboard.writeText(review.reviewId).then(() => {
+      setUuidCopied(true)
+      setTimeout(() => setUuidCopied(false), 1500)
+    })
+  }, [review.reviewId])
 
   const handleAvailabilityChange = useCallback((available: boolean) => {
     setSourceAvailable(available)
@@ -923,7 +1068,7 @@ function ReviewDetail({
       <section className="flex flex-col overflow-y-auto bg-white" aria-label="Extracted fields">
         <div className="shrink-0 border-b border-slate-200 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-sm font-semibold text-slate-900">{applicantName ?? 'Extracted fields'}</h2>
               {uncertainCount > 0 ? (
                 <p className="text-xs text-amber-700">
@@ -934,6 +1079,22 @@ function ReviewDetail({
               ) : (
                 <p className="text-xs text-slate-500">All fields reviewed</p>
               )}
+              {/* Document UUID — 8-char prefix shown, full UUID in tooltip; click to copy */}
+              <button
+                type="button"
+                onClick={handleCopyUuid}
+                title={`Document ID: ${review.reviewId}\nClick to copy`}
+                aria-label={uuidCopied ? 'Copied to clipboard' : `Copy document ID ${review.reviewId}`}
+                className={`mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] transition ${FOCUS_RING} ${uuidCopied ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
+              >
+                {uuidCopied ? 'Copied!' : review.reviewId.slice(0, 8)}
+                {!uuidCopied ? (
+                  <svg className="h-2.5 w-2.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M4 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H4zm0 1h6a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
+                    <path d="M10 1H3a1 1 0 0 0-1 1v1h1V2h7v1h1V2a1 1 0 0 0-1-1z"/>
+                  </svg>
+                ) : null}
+              </button>
             </div>
             {applicantName && applicantName !== '(unknown)' ? (
               <button
