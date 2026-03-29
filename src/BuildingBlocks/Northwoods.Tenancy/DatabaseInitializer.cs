@@ -94,6 +94,63 @@ public static class DatabaseInitializer
         }
     }
 
+    /// <summary>
+    /// Uploads blank PDF forms to MinIO for every template that has no blank_pdf_key set.
+    /// Maps sample PDFs from the samples/intakes directory by template ID.
+    /// Safe to call on every startup — skips templates that already have a blank PDF.
+    /// </summary>
+    public static async Task SeedBlankPdfsAsync(string connectionString, ObjectStore objectStore, string samplesDir, ILogger logger)
+    {
+        var templatePdfMap = new Dictionary<string, string>
+        {
+            ["general-assistance"] = "chatgpt-sample-general-intake.pdf",
+            ["housing-stability"] = "chatgpt-sample-housing-stability-intake.pdf",
+            ["behavioral-health"] = "chatgpt-sample-financial-assistance-intake.pdf",
+            ["soap-note"] = "chatgpt-sample-soap-note.pdf",
+        };
+
+        try
+        {
+            await using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            var rows = await conn.QueryAsync<(string id, string tenant_id, string? blank_pdf_key)>(
+                "SELECT id, tenant_id, blank_pdf_key FROM templates WHERE blank_pdf_key IS NULL");
+
+            var seeded = 0;
+            foreach (var row in rows)
+            {
+                if (!templatePdfMap.TryGetValue(row.id, out var pdfFileName))
+                    continue;
+
+                var samplePath = Path.Combine(samplesDir, pdfFileName);
+                if (!File.Exists(samplePath))
+                {
+                    logger.LogWarning("DatabaseInitializer: blank PDF sample not found at {Path}, skipping {TemplateId}/{TenantId}",
+                        samplePath, row.id, row.tenant_id);
+                    continue;
+                }
+
+                var pdfKey = $"{row.tenant_id}/templates/{row.id}/blank.pdf";
+                await using var stream = File.OpenRead(samplePath);
+                await objectStore.UploadAsync(pdfKey, stream, "application/pdf");
+
+                await conn.ExecuteAsync(
+                    "UPDATE templates SET blank_pdf_key = @PdfKey, updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
+                    new { PdfKey = pdfKey, Id = row.id, TenantId = row.tenant_id });
+
+                seeded++;
+            }
+
+            if (seeded > 0)
+                logger.LogInformation("DatabaseInitializer: seeded {Count} blank template PDF(s)", seeded);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "DatabaseInitializer: blank PDF seed failed, skipping");
+        }
+    }
+
     private static async Task ExecuteSqlAsync(NpgsqlConnection conn, string sql, ILogger logger, string label)
     {
         await using var cmd = new NpgsqlCommand(sql, conn);

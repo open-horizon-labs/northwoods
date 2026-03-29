@@ -162,6 +162,12 @@ else
 // Ensure the MinIO bucket exists on startup
 await store.EnsureBucketAsync();
 
+// Seed blank template PDFs into MinIO (idempotent — skips templates that already have one)
+var samplesDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "samples", "intakes");
+if (!Directory.Exists(samplesDir))
+    samplesDir = Path.Combine(Directory.GetCurrentDirectory(), "samples", "intakes");
+await DatabaseInitializer.SeedBlankPdfsAsync(connectionString, store, samplesDir, app.Logger);
+
 app.UseAuthentication();
 app.UseAuthorization();
 
