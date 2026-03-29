@@ -23,8 +23,6 @@ public sealed class LoginValidationTests
     [InlineData("", "password", "tenant-a", "Email is required.")]
     [InlineData("worker@sunrise.example", null, "tenant-a", "Password is required.")]
     [InlineData("worker@sunrise.example", "", "tenant-a", "Password is required.")]
-    [InlineData("worker@sunrise.example", "password", null, "TenantId is required.")]
-    [InlineData("worker@sunrise.example", "password", "", "TenantId is required.")]
     public async Task Login_MissingRequiredField_Returns400(
         string? email, string? password, string? tenantId, string expectedError)
     {
@@ -42,6 +40,26 @@ public sealed class LoginValidationTests
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains(expectedError, body);
+    }
+
+    [Trait("Category", "runtime")]
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Login_MissingTenantId_AutoResolvesAndReturns200(string? tenantId)
+    {
+        using var client = CreateClient();
+        if (!await IsRuntimeAvailableAsync(client))
+        {
+            _output.WriteLine("API runtime is not available; skipping.");
+            return;
+        }
+
+        using var response = await client.PostAsJsonAsync("/auth/login",
+            new { email = "worker@sunrise.example", password = "password", tenantId });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Trait("Category", "runtime")]
@@ -63,7 +81,6 @@ public sealed class LoginValidationTests
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("Email is required.", body);
         Assert.Contains("Password is required.", body);
-        Assert.Contains("TenantId is required.", body);
     }
 
     [Trait("Category", "runtime")]
@@ -102,7 +119,7 @@ public sealed class LoginValidationTests
         }
 
         using var response = await client.PostAsJsonAsync("/auth/login",
-            new LoginRequest("worker@sunrise.example", "dev", "tenant-a"));
+            new LoginRequest("worker@sunrise.example", "password", "tenant-a"));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
