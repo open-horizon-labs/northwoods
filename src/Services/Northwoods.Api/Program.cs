@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Northwoods.Api;
 using Northwoods.Contracts;
 using Northwoods.Tenancy;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -174,6 +175,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapOpenApi();
+app.MapScalarApiReference();
 app.MapHealthChecks("/healthz");
 
 // --- Metrics ---
