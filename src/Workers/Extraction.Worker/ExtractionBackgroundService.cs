@@ -275,6 +275,11 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                             Confidence = result.SystemConfidence
                         },
                         tx);
+
+                    if (canPersistAttempts)
+                    {
+                        await ExtractionPipelineService.PersistExtractionAttempts(conn, tx, docId, tenantId, extractionRunId, result, ct);
+                    }
                 }
 
                 if (canPersistCaseProfiles)

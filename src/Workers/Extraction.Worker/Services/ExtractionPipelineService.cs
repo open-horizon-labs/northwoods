@@ -65,6 +65,7 @@ internal static class ExtractionPipelineService
             discoveredResults.Add(FieldConsensus.Resolve(key, attempts));
         }
 
+        discoveredResults.Sort((a, b) => string.Compare(a.FieldKey, b.FieldKey, StringComparison.OrdinalIgnoreCase));
         return (schemaResults, discoveredResults);
     }
 

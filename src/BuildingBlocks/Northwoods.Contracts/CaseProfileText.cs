@@ -10,14 +10,15 @@ namespace Northwoods.Contracts;
 public static class CaseProfileText
 {
     /// <summary>
-    /// Builds search text incorporating finalized field values, OCR segments, and reviewer note.
-    /// Used when a reviewer finalizes a document so the case profile reflects corrections.
+    /// Builds search text incorporating finalized field values, OCR segments, reviewer note,
+    /// and any discovered (non-schema) fields so they remain searchable after finalization.
     /// </summary>
     public static string BuildFinalized(
         string templateId,
         IReadOnlyList<ConfidenceField> fields,
         IEnumerable<(string FieldKey, string RawValue)> ocrSegments,
-        string? reviewerNote)
+        string? reviewerNote,
+        IEnumerable<(string FieldKey, string Value)>? discoveredFields = null)
     {
         var fieldPairs = fields
             .Select(f => $"{f.FieldKey}: {f.Value}")
@@ -37,6 +38,17 @@ public static class CaseProfileText
 
         if (!string.IsNullOrWhiteSpace(reviewerNote))
             result += $"; reviewer_note={reviewerNote}";
+
+        if (discoveredFields is not null)
+        {
+            var discoveredPairs = discoveredFields
+                .Select(d => $"{d.FieldKey}: {d.Value}")
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .ToArray();
+
+            if (discoveredPairs.Length > 0)
+                result += $"; discovered={string.Join(" | ", discoveredPairs)}";
+        }
 
         return result;
     }

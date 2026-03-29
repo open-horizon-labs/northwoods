@@ -297,11 +297,21 @@ internal static class ReviewEndpoints
                     new { DocId = id, TenantId = authContext.TenantId },
                     session.Transaction)).ToList();
 
+                var discoveredFieldRows = (await session.Connection.QueryAsync<(string field_key, string extracted_value)>(
+                    """
+                    SELECT field_key, COALESCE(corrected_value, extracted_value) AS extracted_value
+                    FROM extracted_fields
+                    WHERE document_id = @DocId AND tenant_id = @TenantId AND COALESCE(is_discovered, false) = true
+                    """,
+                    new { DocId = id, TenantId = authContext.TenantId },
+                    session.Transaction)).ToList();
+
                 var searchText = CaseProfileText.BuildFinalized(
                     doc.template_id,
                     request.Fields,
                     ocrSegments.Select(o => (o.field_key, o.raw_value)),
-                    request.ReviewerNote);
+                    request.ReviewerNote,
+                    discoveredFieldRows.Select(d => (d.field_key, d.extracted_value)));
 
                 string? embeddingLiteral = null;
                 var apiKey = openAiApiKey;

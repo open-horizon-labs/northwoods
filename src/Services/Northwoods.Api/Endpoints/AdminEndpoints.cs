@@ -72,26 +72,33 @@ internal static class AdminEndpoints
 
             var queued = await session.Connection.ExecuteScalarAsync<int>(
                 """
-                WITH clear_attempts AS (
+                WITH target_docs AS (
+                    SELECT id FROM documents
+                    WHERE tenant_id = @TenantId
+                      AND status IN ('finalized', 'completed', 'review_ready', 'failed')
+                ),
+                clear_attempts AS (
                     DELETE FROM extraction_attempts
                     WHERE tenant_id = @TenantId
+                      AND document_id IN (SELECT id FROM target_docs)
                     RETURNING 1
                 ),
                 clear_fields AS (
                     DELETE FROM extracted_fields
                     WHERE tenant_id = @TenantId
+                      AND document_id IN (SELECT id FROM target_docs)
                     RETURNING 1
                 ),
                 clear_profiles AS (
                     DELETE FROM case_profiles
                     WHERE tenant_id = @TenantId
+                      AND document_id IN (SELECT id FROM target_docs)
                     RETURNING 1
                 ),
                 reset_docs AS (
                     UPDATE documents
                     SET status = 'uploaded', updated_at = now()
-                    WHERE tenant_id = @TenantId
-                      AND status IN ('finalized', 'completed', 'review_ready', 'failed')
+                    WHERE id IN (SELECT id FROM target_docs)
                     RETURNING 1
                 )
                 SELECT COUNT(*)::int FROM reset_docs

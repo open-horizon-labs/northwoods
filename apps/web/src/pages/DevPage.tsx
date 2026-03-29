@@ -1341,6 +1341,12 @@ export default function DevPage() {
                   try {
                     const result = await api.reprocessDocuments(auth.accessToken)
                     setReprocessResult(`Queued ${result.queued} document(s) for reprocessing (tenant: ${result.tenantId}).`)
+                    // Clear stale state and refresh so the UI reflects the backend reset
+                    setSelectedReviewId(null)
+                    setReviewDetail(null)
+                    setIntakeStatus(null)
+                    setActiveIntakeId(null)
+                    await refreshQueue(auth.accessToken)
                   } catch (err) {
                     setReprocessError(userMessage(err, 'Reprocess failed.'))
                   } finally {
