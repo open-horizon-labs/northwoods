@@ -190,7 +190,7 @@ This project was built through an AI-assisted workflow where AI increased speed 
 
 [RNA](https://github.com/open-horizon-labs/repo-native-alignment) is an MCP server I built that makes a repository queryable by AI agents. It provides semantic code search, dependency graph traversal, and a `repo_map` call that returns top symbols, subsystem boundaries, and entry points -- giving an agent immediate orientation in an unfamiliar codebase. RNA indexes code, markdown, business artifacts, and git history in a single searchable store.
 
-#### Impeccable -- design quality skills (my project)
+#### Impeccable -- design quality skills
 
 A suite of 17+ design-focused Claude Code skills (`.claude/skills/`) providing systematic UI quality control: `audit`, `normalize`, `harden`, `polish`, `frontend-design`, and others.
 
@@ -364,4 +364,4 @@ CREATE POLICY documents_tenant_isolation ON documents
 
 ---
 
-*Full documentation index: [README.md](../README.md) | [Architecture](architecture.md) | [AI Tooling](ai-tooling.md) | [ADRs](ADRs/)*
+*Full documentation index: [README.md](../README.md) | [User Guide](user-guide.md) | [ADRs](ADRs/) | [Exercise Spec](exercise.md)*
