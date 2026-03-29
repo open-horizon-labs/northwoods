@@ -40,6 +40,7 @@ internal static class ReviewEndpoints
                        d.created_at AS UploadDate
                 FROM documents d
                 WHERE d.tenant_id = @TenantId
+                  AND d.status IN ('review_ready', 'completed')
                 ORDER BY d.created_at
                 """,
                 new { TenantId = authContext.TenantId },
