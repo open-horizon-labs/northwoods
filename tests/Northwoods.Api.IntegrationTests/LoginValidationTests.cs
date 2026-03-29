@@ -46,6 +46,7 @@ public sealed class LoginValidationTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
+    [InlineData("   ")]
     public async Task Login_MissingTenantId_AutoResolvesAndReturns200(string? tenantId)
     {
         using var client = CreateClient();
