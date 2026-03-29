@@ -22,7 +22,10 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
         var schemaFieldsJson = JsonSerializer.Serialize(fieldKeys);
         var prompt = $"Extract ALL fields you find on this scanned intake form. Also specifically return these fields: {schemaFieldsJson}. " +
             "Return ONLY a JSON object where keys are field names and values are objects with \"value\" (string or null) and \"confidence\" (number 0-1). " +
-            "If a required field is not present in the form, use null value with 0 confidence. Do not include markdown fences.";
+            "If a required field is not present in the form, use null value with 0 confidence. " +
+            "A date appearing without a label, or labeled as form date / today's date / date of interview / date of service, " +
+            "should be returned as \"interviewDate\". " +
+            "Do not include markdown fences.";
 
         var (model, body, escalated, escalationReason) = await CallWithFallback(context, prompt, fieldKeys, ct);
         var outputText = TryGetResponseText(body);
