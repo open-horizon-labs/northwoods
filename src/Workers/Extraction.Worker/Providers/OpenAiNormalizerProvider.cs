@@ -9,9 +9,9 @@ internal sealed class OpenAiNormalizerProvider(string apiKey, string modelMini) 
 {
     private static readonly HttpClient Http = new();
 
-    public string Name => "openai";
+    public string Name => "openai-normalizer";
     public string Stage => "normalize";
-    public int Order => 1;
+    public int Order => 2;
 
     public async Task<IReadOnlyList<ExtractionCandidate>> ExtractAsync(
         ExtractionContext context,
