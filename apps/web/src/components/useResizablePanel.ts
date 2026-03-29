@@ -125,11 +125,13 @@ export function useResizablePanel(
     [storageKey],
   )
 
-  // Reset styles on unmount to prevent stuck cursor/user-select
+  // Reset styles on unmount only if this hook is actively dragging
   useEffect(() => {
     return () => {
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
+      if (dragStart.current) {
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
     }
   }, [])
 
