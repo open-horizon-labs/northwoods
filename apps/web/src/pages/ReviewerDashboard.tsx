@@ -445,15 +445,6 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                 {queue.length} pending
               </span>
             ) : null}
-            <nav className="flex gap-0.5 border-l border-slate-200 pl-3" aria-label="Reviewer navigation">
-              <a
-                href="#rag-report"
-                onClick={(e) => { e.preventDefault(); window.location.hash = '#rag-report'; }}
-                className={`rounded px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 ${FOCUS_RING}`}
-              >
-                RAG Report
-              </a>
-            </nav>
           </div>
           <div className="flex items-center gap-4">
             <span className="hidden text-xs text-slate-500 sm:block">{auth.tenantId}</span>
