@@ -123,28 +123,37 @@ public static class DatabaseInitializer
             var seeded = 0;
             foreach (var row in rows)
             {
-                if (!templatePdfMap.TryGetValue(row.id, out var pdfFileName))
-                    continue;
-
-                var samplePath = Path.Combine(samplesDir, pdfFileName);
-                if (!File.Exists(samplePath))
+                try
                 {
-                    logger.LogWarning("DatabaseInitializer: blank PDF sample not found at {Path}, skipping {TemplateId}/{TenantId}",
-                        samplePath, row.id, row.tenant_id);
-                    continue;
+                    if (!templatePdfMap.TryGetValue(row.id, out var pdfFileName))
+                        continue;
+
+                    var samplePath = Path.Combine(samplesDir, pdfFileName);
+                    if (!File.Exists(samplePath))
+                    {
+                        logger.LogWarning("DatabaseInitializer: blank PDF sample not found at {Path}, skipping {TemplateId}/{TenantId}",
+                            samplePath, row.id, row.tenant_id);
+                        continue;
+                    }
+
+                    // Concurrent instances may race here, but it is benign:
+                    // MinIO PutObject silently overwrites, and the UPDATE only
+                    // touches rows where blank_pdf_key is still NULL.
+                    var pdfKey = $"{row.tenant_id}/templates/{row.id}/blank.pdf";
+                    await using var stream = File.OpenRead(samplePath);
+                    await objectStore.UploadAsync(pdfKey, stream, "application/pdf");
+
+                    await conn.ExecuteAsync(
+                        "UPDATE templates SET blank_pdf_key = @PdfKey, updated_at = now() WHERE id = @Id AND tenant_id = @TenantId AND blank_pdf_key IS NULL",
+                        new { PdfKey = pdfKey, Id = row.id, TenantId = row.tenant_id });
+
+                    seeded++;
                 }
-
-                // Concurrent instances may race here, but it is benign:
-                // MinIO PutObject silently overwrites, and the UPDATE is idempotent.
-                var pdfKey = $"{row.tenant_id}/templates/{row.id}/blank.pdf";
-                await using var stream = File.OpenRead(samplePath);
-                await objectStore.UploadAsync(pdfKey, stream, "application/pdf");
-
-                await conn.ExecuteAsync(
-                    "UPDATE templates SET blank_pdf_key = @PdfKey, updated_at = now() WHERE id = @Id AND tenant_id = @TenantId",
-                    new { PdfKey = pdfKey, Id = row.id, TenantId = row.tenant_id });
-
-                seeded++;
+                catch (Exception rowEx)
+                {
+                    logger.LogWarning(rowEx, "DatabaseInitializer: failed blank PDF seed for {TemplateId}/{TenantId}, continuing",
+                        row.id, row.tenant_id);
+                }
             }
 
             if (seeded > 0)
