@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 
 import { api, ApiError, userMessage } from '../api'
 import { storeAuth } from '../lib/auth'
@@ -52,6 +52,15 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (!showReviewerHint) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowReviewerHint(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showReviewerHint])
 
   const useDemoCredentials = (demoEmail: string) => {
     setEmail(demoEmail)
@@ -151,10 +160,15 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
 
       {showReviewerHint ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
-          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reviewer-hint-title"
+            className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          >
             <header className="mb-3 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">Are you reviewing Muness's Submission?</h2>
+                <h2 id="reviewer-hint-title" className="text-base font-semibold text-slate-900">Are you reviewing Muness&apos;s Submission?</h2>
                 <p className="mt-1 text-sm text-slate-600">Pick a user below to pre-fill credentials (password is always <span className="font-semibold">password</span>).</p>
               </div>
               <button
@@ -188,7 +202,7 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
               >
                 Open RAG Report
               </a>
-              <button type="button" onClick={() => setShowReviewerHint(false)} className="rounded border border-slate-300 px-3 py-1.5 text-sm">
+              <button type="button" onClick={() => setShowReviewerHint(false)} className={`rounded border border-slate-300 px-3 py-1.5 text-sm ${FOCUS_RING}`}>
                 Not now
               </button>
             </div>
