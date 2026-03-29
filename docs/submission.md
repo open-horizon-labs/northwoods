@@ -43,9 +43,8 @@
 **Suggested evaluation path:**
 
 1. Log in as **reviewer@sunrise.example** to see the review queue with confidence-flagged fields and similar case panels.
-2. Open the **RAG Report** tab (or navigate to `/#rag-report`) to see the automated retrieval evaluation.
+2. Open the **RAG Report** link in the header (or navigate to `/#rag-report`) to see the automated retrieval evaluation.
 3. Switch to **worker@lakewood.example** to verify tenant isolation -- you should see only Lakewood data.
-4. Visit `/#dev` for the developer scaffold with preset login buttons and raw API access.
 
 **Run locally:**
 
