@@ -4,193 +4,143 @@ title: Northwoods Architecture {
   near: top-center
   shape: text
   style: {
-    font-size: 28
+    font-size: 32
     bold: true
   }
 }
 
-# Users
-users: Users {
+# --- Users (horizontal row) ---
+users: {
   style: {
-    fill: "#f8fafc"
-    stroke: "#94a3b8"
-    border-radius: 8
+    fill: transparent
+    stroke: transparent
   }
   iw: Intake Worker {
     shape: person
     style.fill: "#dbeafe"
+    style.font-size: 16
   }
   rv: Reviewer {
     shape: person
     style.fill: "#dcfce7"
+    style.font-size: 16
   }
   admin: Admin {
     shape: person
     style.fill: "#fef3c7"
+    style.font-size: 16
   }
 }
 
-# Frontend
-browser: Browser {
+# --- Frontend ---
+web: React + Vite + Tailwind + PDF.js {
+  shape: rectangle
   style: {
-    fill: "#f0f9ff"
+    fill: "#e0f2fe"
     stroke: "#0ea5e9"
     border-radius: 8
-  }
-  react: React + Vite + Tailwind {
-    shape: rectangle
-    style.fill: "#e0f2fe"
-  }
-  pdfjs: PDF.js Viewer {
-    shape: rectangle
-    style.fill: "#e0f2fe"
+    font-size: 16
   }
 }
 
-# API Layer
+# --- API ---
 api: Northwoods.Api (.NET 10) {
   style: {
     fill: "#faf5ff"
     stroke: "#a855f7"
     border-radius: 8
+    font-size: 16
   }
-  auth: JWT Auth + RLS scope {
-    shape: rectangle
+  auth: JWT Auth\n+ tenant scoping {
     style.fill: "#f3e8ff"
+    style.font-size: 14
   }
-  endpoints: Endpoints {
-    shape: rectangle
+  endpoints: REST Endpoints {
     style.fill: "#f3e8ff"
-    tooltip: |md
-      - /auth/login
-      - /intakes (upload)
-      - /reviews (queue, detail, finalize)
-      - /search, /cases
-      - /templates (CRUD, blank PDF)
-      - /admin (wipe, reprocess)
-      - /scalar/v1 (API docs)
-    |
+    style.font-size: 14
   }
-  rag: Hybrid RAG (5-signal RRF) {
-    shape: rectangle
+  rag: Hybrid RAG\n5-signal RRF fusion {
     style.fill: "#ede9fe"
-  }
-  metrics: Health + Metrics {
-    shape: rectangle
-    style.fill: "#f3e8ff"
+    style.font-size: 14
+    style.bold: true
   }
 }
 
-# Worker
-worker: Extraction.Worker {
+# --- Worker ---
+worker: Extraction Worker (.NET 10) {
   style: {
     fill: "#fffbeb"
     stroke: "#f59e0b"
     border-radius: 8
+    font-size: 16
   }
-  poll: Poll loop (5s) {
-    shape: rectangle
+  pipeline: OpenAI Vision extraction\nnano → mini escalation {
     style.fill: "#fef3c7"
+    style.font-size: 14
   }
-  pipeline: Extraction Pipeline {
-    shape: rectangle
+  embed: Embedding generation\ntext-embedding-3-small {
     style.fill: "#fef3c7"
-  }
-  providers: Providers {
-    style: {
-      fill: "#fefce8"
-      border-radius: 4
-    }
-    vision: OpenAI Vision\n(gpt-5.4-nano → mini) {
-      shape: rectangle
-      style.fill: "#fde68a"
-    }
-    paddle: PaddleOCR\n(optional) {
-      shape: rectangle
-      style.fill: "#fde68a"
-      style.stroke-dash: 3
-    }
-    normalizer: OpenAI Normalizer\n(optional) {
-      shape: rectangle
-      style.fill: "#fde68a"
-      style.stroke-dash: 3
-    }
-  }
-  consensus: Field Consensus\n+ Confidence Gating {
-    shape: rectangle
-    style.fill: "#fef3c7"
-  }
-  embed: Embedding Generation\n(text-embedding-3-small) {
-    shape: rectangle
-    style.fill: "#fef3c7"
+    style.font-size: 14
   }
 }
 
-# Data
-data: Data Layer {
+# --- Data ---
+pg: Postgres 18 + pgvector {
+  shape: cylinder
   style: {
-    fill: "#f0fdf4"
+    fill: "#bbf7d0"
     stroke: "#22c55e"
-    border-radius: 8
-  }
-  pg: Postgres 18 {
-    shape: cylinder
-    style.fill: "#bbf7d0"
-    tooltip: |md
-      - RLS on all 7 tables
-      - pgvector (HNSW index)
-      - pg_trgm (GIN indexes)
-      - FTS (tsvector)
-      - Append-only extraction_attempts
-      - Audit events with correlation IDs
-    |
-  }
-  minio: MinIO (S3) {
-    shape: cylinder
-    style.fill: "#bbf7d0"
+    font-size: 16
+    bold: true
   }
 }
 
-# External
+minio: MinIO (S3) {
+  shape: cylinder
+  style: {
+    fill: "#bbf7d0"
+    stroke: "#22c55e"
+    font-size: 16
+  }
+}
+
+# --- External ---
 openai: OpenAI API {
   shape: cloud
   style: {
     fill: "#fecaca"
     stroke: "#ef4444"
+    font-size: 16
   }
 }
 
-# Connections
-users.iw -> browser.react: Upload forms
-users.rv -> browser.react: Review + finalize
-users.admin -> browser.react: Manage templates
-
-browser.react -> api.auth: JWT bearer
-browser.pdfjs -> api.endpoints: Fetch PDF blob
-
-api.auth -> api.endpoints: Scoped session
-api.endpoints -> data.pg: Metadata + fields + audit
-api.endpoints -> data.minio: Document blobs
-api.rag -> data.pg: FTS + vector + trgm + DOB + RRF
-
-worker.poll -> data.pg: SELECT uploaded docs
-worker.pipeline -> worker.providers
-worker.providers.vision -> openai: Vision API
-worker.consensus -> data.pg: Persist fields + attempts
-worker.embed -> openai: Embeddings API
-worker.embed -> data.pg: Update case_profiles
-
-# Tenant isolation
-tenant: Tenant Isolation {
+# --- Tenant isolation callout ---
+rls: |md
+  ## Row-Level Security on all 7 tables
+  JWT carries tenant claim → `SET LOCAL app.tenant_id` per session
+  Every query, every signal, every CTE is tenant-scoped
+| {
   near: bottom-center
   shape: text
   style: {
-    font-size: 14
-    italic: true
-    font-color: "#64748b"
+    font-size: 18
+    font-color: "#b91c1c"
+    bold: true
   }
-  label: |md
-    Row-Level Security on all tables · JWT carries tenant claim
-    app.tenant_id set per DB session · Startup assertion verifies isolation
-  |
 }
+
+# --- Connections ---
+users.iw -> web: upload
+users.rv -> web: review
+users.admin -> web: manage
+
+web -> api.auth: JWT bearer {style.stroke: "#6366f1"}
+api.auth -> api.endpoints
+api.endpoints -> pg: queries + audit
+api.endpoints -> minio: document blobs
+api.rag -> pg: FTS + vector +\ntrigram + DOB
+
+worker.pipeline -> openai: Vision API
+worker.embed -> openai: Embeddings API
+worker.pipeline -> pg: persist fields
+worker.embed -> pg: update embeddings
