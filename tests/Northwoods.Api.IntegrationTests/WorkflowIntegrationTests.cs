@@ -372,7 +372,7 @@ public sealed class WorkflowIntegrationTests
 
         for (var i = 0; i < 8 && current is not null; i++)
         {
-            var candidate = Path.Combine(current.FullName, "samples", "intakes", "chatgpt-sample-general-intake.pdf");
+            var candidate = Path.Combine(current.FullName, "samples", "intakes", "blank-general-assistance.pdf");
             if (File.Exists(candidate))
             {
                 return candidate;
@@ -381,7 +381,7 @@ public sealed class WorkflowIntegrationTests
             current = current.Parent;
         }
 
-        var fallback = Path.Combine("samples", "intakes", "chatgpt-sample-general-intake.pdf");
+        var fallback = Path.Combine("samples", "intakes", "blank-general-assistance.pdf");
         return Path.GetFullPath(fallback);
     }
 

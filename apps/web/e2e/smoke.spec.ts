@@ -98,7 +98,7 @@ test.describe('Worker upload', () => {
     await expect(templateSelect).toBeEnabled({ timeout: 10_000 })
 
     // Attach the sample PDF via the file input.
-    const samplePdf = path.resolve(__dirname, '../../../samples/intakes/chatgpt-sample-general-intake.pdf')
+    const samplePdf = path.resolve(__dirname, '../../../samples/intakes/blank-general-assistance.pdf')
     const fileInput = page.locator('input[type="file"]').first()
     await fileInput.setInputFiles(samplePdf)
 
@@ -148,7 +148,7 @@ test.describe('Cross-tenant isolation', () => {
     const templateSelect = page.locator('#template-select')
     await expect(templateSelect).toBeEnabled({ timeout: 10_000 })
 
-    const samplePdf = path.resolve(__dirname, '../../../samples/intakes/chatgpt-sample-general-intake.pdf')
+    const samplePdf = path.resolve(__dirname, '../../../samples/intakes/blank-general-assistance.pdf')
     const fileInput = page.locator('input[type="file"]').first()
     await fileInput.setInputFiles(samplePdf)
     await page.getByRole('button', { name: /submit|upload/i }).click()
