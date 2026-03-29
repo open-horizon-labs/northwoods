@@ -78,11 +78,13 @@ export function userMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+async function handleResponse<T>(response: Response, skipUnauthorizedHandler = false): Promise<T> {
   if (!response.ok) {
     const body = await response.text()
     const err = new ApiError(response.status, response.statusText, body)
-    if (response.status === 401 && _onUnauthorized) {
+    // Only trigger the global 401 handler for authenticated requests. The
+    // login endpoint's own 401 ("wrong password") must not clear session state.
+    if (response.status === 401 && !skipUnauthorizedHandler && _onUnauthorized) {
       _onUnauthorized()
     }
     throw err
@@ -98,7 +100,9 @@ export const api = {
       headers: jsonHeaders(),
       body: JSON.stringify(payload),
     })
-    return handleResponse<LoginResponse>(response)
+    // skipUnauthorizedHandler=true: a 401 here means "wrong password", not
+    // "session expired". The caller shows its own error message.
+    return handleResponse<LoginResponse>(response, true)
   },
 
   getTemplates: async (accessToken: string) => {
