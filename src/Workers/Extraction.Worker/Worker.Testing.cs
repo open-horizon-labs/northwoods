@@ -9,11 +9,7 @@ public sealed partial class Worker
 
     internal static decimal GetReviewRequiredThreshold() => ReviewRequiredThreshold;
 
-    internal static decimal GetEscalateThreshold() => EscalateThreshold;
-
     internal static bool RequiresReview(decimal confidence) => confidence < ReviewRequiredThreshold;
-
-    internal static bool IsEscalatable(decimal confidence) => confidence < EscalateThreshold;
 
     internal static bool IsAutoAccept(decimal confidence) => confidence >= HighConfidenceThreshold;
 

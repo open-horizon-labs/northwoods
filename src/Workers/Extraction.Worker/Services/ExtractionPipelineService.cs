@@ -69,22 +69,6 @@ internal static class ExtractionPipelineService
         return (schemaResults, discoveredResults);
     }
 
-    public static async Task<bool> SupportsExtractionAttempts(NpgsqlConnection conn, NpgsqlTransaction tx)
-    {
-        var exists = await conn.ExecuteScalarAsync<int>(
-            """
-            SELECT EXISTS(
-                SELECT 1
-                FROM pg_class
-                WHERE relname = 'extraction_attempts'
-                  AND relkind = 'r'
-            )::int
-            """,
-            transaction: tx);
-
-        return exists == 1;
-    }
-
     public static async Task PersistExtractionAttempts(
         NpgsqlConnection conn,
         NpgsqlTransaction tx,

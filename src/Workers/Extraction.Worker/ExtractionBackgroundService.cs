@@ -9,7 +9,6 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
 {
     internal const decimal HighConfidenceThreshold = 0.90m;
     internal const decimal ReviewRequiredThreshold = 0.75m;
-    internal const decimal EscalateThreshold = 0.82m;
     private const int DefaultMaxRetryAttempts = 3;
     private const int DefaultRetryDelayMilliseconds = 1_000;
 
@@ -47,9 +46,8 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
         var accessKey = configuration["Minio:AccessKey"] ?? "northwoods";
         var secretKey = configuration["Minio:SecretKey"] ?? "northwoods";
         var bucketName = configuration["Minio:BucketName"] ?? "intakes";
-        var publicEndpoint = configuration["Minio:PublicEndpoint"];
 
-        return new ObjectStore(endpoint, accessKey, secretKey, bucketName, publicEndpoint);
+        return new ObjectStore(endpoint, accessKey, secretKey, bucketName);
     }
 
     private static IReadOnlyList<IExtractionProvider> BuildProviders(IConfiguration configuration)
@@ -214,9 +212,6 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                     "Provider comparison for {DocId}: providers={Providers} fields={FieldCount} attempts={AttemptCount} discovered={DiscoveredCount}",
                     docId, string.Join(",", providerNames), results.Count,
                     results.Sum(r => r.AllAttempts.Count), discoveredResults.Count);
-                var canPersistAttempts = await ExtractionPipelineService.SupportsExtractionAttempts(conn, tx);
-                var canPersistCaseProfiles = await CaseProfileService.SupportsCaseProfiles(conn, tx);
-
                 // Persist schema fields with normal confidence/review logic
                 foreach (var result in results)
                 {
@@ -244,10 +239,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                         },
                         tx);
 
-                    if (canPersistAttempts)
-                    {
-                        await ExtractionPipelineService.PersistExtractionAttempts(conn, tx, docId, tenantId, extractionRunId, result, ct);
-                    }
+                    await ExtractionPipelineService.PersistExtractionAttempts(conn, tx, docId, tenantId, extractionRunId, result, ct);
                 }
 
                 // Persist discovered fields — don't affect document status or require review
@@ -276,28 +268,22 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                         },
                         tx);
 
-                    if (canPersistAttempts)
-                    {
-                        await ExtractionPipelineService.PersistExtractionAttempts(conn, tx, docId, tenantId, extractionRunId, result, ct);
-                    }
+                    await ExtractionPipelineService.PersistExtractionAttempts(conn, tx, docId, tenantId, extractionRunId, result, ct);
                 }
 
-                if (canPersistCaseProfiles)
-                {
-                    var profileText = CaseProfileService.BuildCaseProfileText(templateId, results, discoveredResults);
-                    var apiKey = config["OPENAI_API_KEY"] ?? config["Extraction:OpenAi:ApiKey"];
-                    await CaseProfileService.PersistCaseProfile(
-                        conn,
-                        tx,
-                        docId,
-                        tenantId,
-                        templateId,
-                        profileText,
-                        results,
-                        apiKey,
-                        logger,
-                        ct);
-                }
+                var profileText = CaseProfileService.BuildCaseProfileText(templateId, results, discoveredResults);
+                var caseApiKey = config["OPENAI_API_KEY"] ?? config["Extraction:OpenAi:ApiKey"];
+                await CaseProfileService.PersistCaseProfile(
+                    conn,
+                    tx,
+                    docId,
+                    tenantId,
+                    templateId,
+                    profileText,
+                    results,
+                    caseApiKey,
+                    logger,
+                    ct);
 
                 // ADR 005 confidence tiers: compute document-level confidence (min of field confidences)
                 // Only schema fields contribute to document status

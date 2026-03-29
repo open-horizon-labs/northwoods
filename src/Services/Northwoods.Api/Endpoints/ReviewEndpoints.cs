@@ -291,82 +291,79 @@ internal static class ReviewEndpoints
                 },
                 session.Transaction);
 
-            if (await SupportsCaseProfiles(session.Connection, session.Transaction))
+            var ocrSegments = (await session.Connection.QueryAsync<(string field_key, string raw_value)>(
+                "SELECT field_key, raw_value FROM extraction_attempts WHERE document_id = @DocId AND tenant_id = @TenantId AND stage = 'ocr'",
+                new { DocId = id, TenantId = authContext.TenantId },
+                session.Transaction)).ToList();
+
+            var discoveredFieldRows = (await session.Connection.QueryAsync<(string field_key, string extracted_value)>(
+                """
+                SELECT field_key, COALESCE(corrected_value, extracted_value) AS extracted_value
+                FROM extracted_fields
+                WHERE document_id = @DocId AND tenant_id = @TenantId AND COALESCE(is_discovered, false) = true
+                """,
+                new { DocId = id, TenantId = authContext.TenantId },
+                session.Transaction)).ToList();
+
+            var searchText = CaseProfileText.BuildFinalized(
+                doc.template_id,
+                request.Fields,
+                ocrSegments.Select(o => (o.field_key, o.raw_value)),
+                request.ReviewerNote,
+                discoveredFieldRows.Select(d => (d.field_key, d.extracted_value)));
+
+            string? embeddingLiteral = null;
+            var apiKey = openAiApiKey;
+            if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(searchText))
             {
-                var ocrSegments = (await session.Connection.QueryAsync<(string field_key, string raw_value)>(
-                    "SELECT field_key, raw_value FROM extraction_attempts WHERE document_id = @DocId AND tenant_id = @TenantId AND stage = 'ocr'",
-                    new { DocId = id, TenantId = authContext.TenantId },
-                    session.Transaction)).ToList();
-
-                var discoveredFieldRows = (await session.Connection.QueryAsync<(string field_key, string extracted_value)>(
-                    """
-                    SELECT field_key, COALESCE(corrected_value, extracted_value) AS extracted_value
-                    FROM extracted_fields
-                    WHERE document_id = @DocId AND tenant_id = @TenantId AND COALESCE(is_discovered, false) = true
-                    """,
-                    new { DocId = id, TenantId = authContext.TenantId },
-                    session.Transaction)).ToList();
-
-                var searchText = CaseProfileText.BuildFinalized(
-                    doc.template_id,
-                    request.Fields,
-                    ocrSegments.Select(o => (o.field_key, o.raw_value)),
-                    request.ReviewerNote,
-                    discoveredFieldRows.Select(d => (d.field_key, d.extracted_value)));
-
-                string? embeddingLiteral = null;
-                var apiKey = openAiApiKey;
-                if (!string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(searchText))
+                try
                 {
-                    try
-                    {
-                        var (embedding, promptTokens, totalTokens) = await GenerateCaseEmbeddingAsync(embeddingHttpClient, searchText, apiKey, httpContext.RequestAborted);
-                        embeddingLiteral = ToPgVectorLiteral(embedding);
+                    var (embedding, promptTokens, totalTokens) = await GenerateCaseEmbeddingAsync(embeddingHttpClient, searchText, apiKey, httpContext.RequestAborted);
+                    embeddingLiteral = ToPgVectorLiteral(embedding);
 
-                        await session.Connection.ExecuteAsync(
-                            """
-                            INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
-                            VALUES (@DocId, @TenantId, 'embedding_regenerated', @ActorId, @Details::jsonb)
-                            """,
-                            new
+                    await session.Connection.ExecuteAsync(
+                        """
+                        INSERT INTO audit_events (document_id, tenant_id, event_type, actor_id, details)
+                        VALUES (@DocId, @TenantId, 'embedding_regenerated', @ActorId, @Details::jsonb)
+                        """,
+                        new
+                        {
+                            DocId = id,
+                            TenantId = authContext.TenantId,
+                            ActorId = authContext.UserId,
+                            Details = JsonSerializer.Serialize(new
                             {
-                                DocId = id,
-                                TenantId = authContext.TenantId,
-                                ActorId = authContext.UserId,
-                                Details = JsonSerializer.Serialize(new
-                                {
-                                    model = "text-embedding-3-small",
-                                    dimensions = CaseEmbeddingDimensions,
-                                    prompt_tokens = promptTokens,
-                                    total_tokens = totalTokens,
-                                    trigger = "finalization"
-                                })
-                            },
-                            session.Transaction);
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        app.Logger.LogWarning(ex, "Failed to regenerate embedding for {DocId} during finalization; updating search_text only", id);
-                    }
+                                model = "text-embedding-3-small",
+                                dimensions = CaseEmbeddingDimensions,
+                                prompt_tokens = promptTokens,
+                                total_tokens = totalTokens,
+                                trigger = "finalization"
+                            })
+                        },
+                        session.Transaction);
                 }
-
-                await session.Connection.ExecuteAsync(
-                    $"""
-                    UPDATE case_profiles
-                    SET search_text = @SearchText,
-                        embedding = CASE WHEN @Embedding IS NULL THEN embedding ELSE CAST(@Embedding AS vector({CaseEmbeddingDimensions})) END,
-                        updated_at = now()
-                    WHERE document_id = @DocId AND tenant_id = @TenantId
-                    """,
-                    new
-                    {
-                        DocId = id,
-                        TenantId = authContext.TenantId,
-                        SearchText = searchText,
-                        Embedding = embeddingLiteral
-                    },
-                    session.Transaction);
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    app.Logger.LogWarning(ex, "Failed to regenerate embedding for {DocId} during finalization; updating search_text only", id);
+                }
             }
+
+            await session.Connection.ExecuteAsync(
+                $"""
+                UPDATE case_profiles
+                SET search_text = @SearchText,
+                    embedding = CASE WHEN @Embedding IS NULL THEN embedding ELSE CAST(@Embedding AS vector({CaseEmbeddingDimensions})) END,
+                    updated_at = now()
+                WHERE document_id = @DocId AND tenant_id = @TenantId
+                """,
+                new
+                {
+                    DocId = id,
+                    TenantId = authContext.TenantId,
+                    SearchText = searchText,
+                    Embedding = embeddingLiteral
+                },
+                session.Transaction);
 
             await session.CommitAsync();
             observability.IncrementReviewFinalizationCount();
@@ -406,11 +403,6 @@ internal static class ReviewEndpoints
         ILogger logger,
         CancellationToken ct)
     {
-        if (!await SupportsCaseProfiles(connection, transaction))
-        {
-            return [];
-        }
-
         var targetApplicant = sourceFields.FirstOrDefault(f => string.Equals(f.FieldKey, "applicantName", StringComparison.OrdinalIgnoreCase))?.Value;
         var targetDob = sourceFields.FirstOrDefault(f => string.Equals(f.FieldKey, "dateOfBirth", StringComparison.OrdinalIgnoreCase))?.Value;
         var targetAddress = sourceFields.FirstOrDefault(f => string.Equals(f.FieldKey, "address", StringComparison.OrdinalIgnoreCase))?.Value;
@@ -710,22 +702,6 @@ internal static class ReviewEndpoints
             throw new InvalidOperationException("OpenAI returned empty summary content");
 
         return content;
-    }
-
-    private static async Task<bool> SupportsCaseProfiles(NpgsqlConnection connection, NpgsqlTransaction transaction)
-    {
-        var exists = await connection.ExecuteScalarAsync<int>(
-            @"
-            SELECT EXISTS(
-                SELECT 1
-                FROM pg_class
-                WHERE relname = 'case_profiles'
-                  AND relkind = 'r'
-            )::int
-            ",
-            transaction: transaction);
-
-        return exists == 1;
     }
 
     private static async Task<(double[] Embedding, long PromptTokens, long TotalTokens)> GenerateCaseEmbeddingAsync(
