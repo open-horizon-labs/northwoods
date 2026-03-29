@@ -151,7 +151,7 @@ export const statusBadge = (status: string): StatusBadgeConfig => {
   if (s === 'finalized' || s === '4')
     return { label: 'Finalized', badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
   if (s === 'completed' || s === '3')
-    return { label: 'Auto-Accepted', badgeClass: 'border-teal-200 bg-teal-50 text-teal-700' }
+    return { label: 'Auto-Accepted', badgeClass: 'border-sky-200 bg-sky-50 text-sky-700' }
   if (s === 'extracting' || s === '1')
     return { label: 'Processing', badgeClass: 'border-slate-200 bg-slate-100 text-slate-600' }
   if (s === 'failed' || s === '5')
