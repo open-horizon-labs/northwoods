@@ -221,12 +221,15 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
         if (seq !== reviewReqSeq.current) return
         setReviewDetail(detail)
         setEditableFields(
-          detail.fields.map((f): ConfidenceField => ({
-            fieldKey: f.fieldKey,
-            value: f.value,
-            confidence: f.confidence,
-            requiresReview: f.requiresReview,
-          })).sort((a, b) => a.confidence - b.confidence),
+          detail.fields
+            .filter((f) => !f.isDiscovered)
+            .map((f): ConfidenceField => ({
+              fieldKey: f.fieldKey,
+              value: f.value,
+              confidence: f.confidence,
+              requiresReview: f.requiresReview,
+            }))
+            .sort((a, b) => a.confidence - b.confidence),
         )
         setReviewerNote('')
       } catch (err) {
@@ -858,7 +861,13 @@ function ReviewDetail({
     return map
   }, [review.fields])
 
+  const discoveredFields = useMemo(
+    () => review.fields.filter((f) => f.isDiscovered),
+    [review.fields],
+  )
+
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
+  const [discoveredOpen, setDiscoveredOpen] = useState(false)
   const [sourceAvailable, setSourceAvailable] = useState<boolean | null>(null)
 
   const handleAvailabilityChange = useCallback((available: boolean) => {
@@ -1021,6 +1030,42 @@ function ReviewDetail({
               )
             })}
           </div>
+
+          {/* Discovered fields (collapsible) */}
+          {discoveredFields.length > 0 ? (
+            <div className="border-t border-slate-100 p-4">
+              <button
+                type="button"
+                onClick={() => setDiscoveredOpen((o) => !o)}
+                className={`flex w-full items-center justify-between gap-2 text-left ${FOCUS_RING} rounded px-1 py-0.5 -ml-1`}
+                aria-expanded={discoveredOpen}
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Additional fields ({discoveredFields.length})
+                </p>
+                <svg
+                  className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${discoveredOpen ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              {discoveredOpen ? (
+                <dl className="mt-2 space-y-1.5">
+                  {discoveredFields.map((f) => (
+                    <div key={f.fieldKey} className="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                      <dt className="text-xs font-medium text-slate-600">{f.fieldKey}</dt>
+                      <dd className="mt-0.5 text-xs text-slate-800 break-words">{f.value || '—'}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* Similar cases */}
           {review.similarCases.length > 0 ? (

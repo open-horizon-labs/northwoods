@@ -20,12 +20,15 @@ public sealed partial class Worker
     internal static FieldExtractionResult ResolveConsensusForTests(string key, IReadOnlyList<ExtractionCandidate> attempts)
         => FieldConsensus.Resolve(key, attempts);
 
-    internal static Task<IReadOnlyList<FieldExtractionResult>> RunExtractionPipelineForTests(
+    internal static async Task<IReadOnlyList<FieldExtractionResult>> RunExtractionPipelineForTests(
         ExtractionContext context,
         IReadOnlyList<string> fieldKeys,
         IReadOnlyList<IExtractionProvider> providers,
         CancellationToken cancellationToken)
-        => ExtractionPipelineService.RunExtractionPipeline(context, fieldKeys, providers, cancellationToken);
+    {
+        var (schemaFields, _) = await ExtractionPipelineService.RunExtractionPipeline(context, fieldKeys, providers, cancellationToken);
+        return schemaFields;
+    }
 
     /// <summary>
     /// Determines the document status based on ADR 005 confidence tiers.

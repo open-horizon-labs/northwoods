@@ -33,6 +33,7 @@ export type ReviewField = {
   requiresReview: boolean
   attempts: FieldAttempt[]
   consensusNote: string
+  isDiscovered?: boolean
 }
 
 export type CreateIntakeResponse = {

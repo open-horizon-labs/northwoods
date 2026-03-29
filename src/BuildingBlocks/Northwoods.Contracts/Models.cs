@@ -35,7 +35,8 @@ public sealed record ReviewField(
     decimal Confidence,
     bool RequiresReview,
     IReadOnlyList<FieldAttempt> Attempts,
-    string ConsensusNote);
+    string ConsensusNote,
+    bool IsDiscovered = false);
 
 public sealed record IntakeStatusResponse(
     Guid IntakeId,
