@@ -320,32 +320,25 @@ CREATE POLICY documents_tenant_isolation ON documents
 
 ### Complete and functioning
 
-| Capability | Evidence |
-|------------|----------|
-| JWT auth with two roles (Worker, Reviewer) + Admin | `src/Services/Northwoods.Api/Endpoints/AuthEndpoints.cs` |
-| 4 form templates per tenant with blank PDF download | `AdminTemplates.tsx`, template CRUD endpoints |
-| Document upload with template association | `POST /intakes`, Worker dashboard |
-| Background extraction with OpenAI Vision (nano -> mini escalation) | `ExtractionBackgroundService.cs`, `OpenAiVisionProvider.cs` |
-| Per-field confidence scoring with review routing | Fields below 0.75 flagged `requires_review` |
-| Human-in-the-loop review with corrections and finalization | `ReviewEndpoints.cs`, `ReviewDetail.tsx` |
-| Append-only audit trail with correlation IDs | `audit_events` table, every state transition logged |
-| Full-text + fuzzy search across intakes | `SearchEndpoints.cs` |
-| Case aggregate view by person | `GET /cases/{personKey}` |
-| 5-signal hybrid RAG with RRF fusion | Vector + FTS + name + address + DOB signals |
-| AI-generated similar-case summaries | `gpt-5.4-nano` contextual summaries with algorithmic fallback |
-| Multi-tenancy with RLS on all tables | 7 tables, automated compliance checks |
-| 184-document synthetic corpus with narrative arcs | 40 people, 2 tenants, 2 form eras |
-| RAG pipeline self-assessment page | `RagReportPage.tsx` |
-| Structured logging, correlation IDs, health checks, metrics | `/healthz`, `/metrics`, `X-Correlation-Id` |
-| Retry with backoff on transient extraction failures | Configurable max attempts and delay |
-| Docker Compose for local development | `docker-compose.yml` |
-| Render deployment for live demo | `render.yaml`, live at northwoods.muness.com |
-| OpenAPI documentation | Scalar UI at `/scalar/v1` |
-| 5 ADRs documenting key decisions | `docs/ADRs/` |
-| Unit tests (17+), integration tests, CI compliance checks | `tests/` directory |
-| CI/CD pipeline with 5 PR checks + tag-triggered deploy | `.github/workflows/ci.yml`, `deploy.yml` |
-| CodeQL static analysis + CodeRabbit AI PR review | GitHub-managed workflows |
-| Production smoke tests post-deploy | `scripts/production-smoke.sh` |
+**Auth & access control** -- JWT auth with Worker, Reviewer, and Admin roles. Bcrypt password hashing. Tenant context propagated via JWT claims across all endpoints.
+
+**Intake workflow** -- 4 form templates per tenant with downloadable blank PDFs. Workers upload scanned documents, system extracts fields via OpenAI Vision (nano, escalates to mini on low confidence), routes by confidence tier: auto-accept at 90%+, review at 75-90%, forced review below 75%.
+
+**Review workflow** -- Reviewers see extracted fields color-coded by confidence alongside the original PDF. Correct values, add notes, finalize. Similar cases surfaced via 5-signal hybrid RAG. Append-only audit trail tracks every state transition with correlation IDs.
+
+**Search & case visibility** -- Full-text + trigram fuzzy search across all intakes. Case aggregate view groups all documents by person on a timeline.
+
+**RAG & similar cases** -- 5-signal hybrid retrieval (vector + FTS + name + address + DOB) fused with RRF. AI-generated contextual summaries explain why cases matched. RAG Report page runs live retrieval tests including a tenant isolation check.
+
+**Multi-tenancy** -- Row-level security on all 7 tables, enforced at the database layer. Automated CI compliance checks verify RLS policies. The RAG Report includes an explicit cross-tenant isolation test.
+
+**Corpus** -- 184 synthetic documents across 40 people, 2 tenants, 2 form eras. Hand-designed narrative arcs (longitudinal care, facility transfers, frequent flyers) that produce meaningful retrieval patterns.
+
+**Observability** -- Structured JSON logging, `X-Correlation-Id` propagation, `/healthz` health check, `/metrics` endpoint, retry with backoff on transient extraction failures.
+
+**Testing** -- Unit tests (tenancy, worker extraction pipeline), integration tests (login validation, workflow E2E, tenant scoping), Playwright browser smoke tests, ADR compliance checks, secret scanning.
+
+**Deployment** -- Docker Compose for local dev. CI pipeline with 5 checks per PR. Tag-triggered deploy to Render via ghcr.io. Production smoke tests post-deploy. CodeQL static analysis and CodeRabbit AI review on every PR. OpenAPI docs at `/scalar/v1`. 5 ADRs documenting key decisions.
 
 ### Known gaps
 
