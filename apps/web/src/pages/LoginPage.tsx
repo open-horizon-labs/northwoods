@@ -84,9 +84,9 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
           setShowReviewerHint(true)
         }}
         className="fixed right-3 top-3 z-40 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-700 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-        aria-label="Are you a reviewer"
+        aria-label="Reviewing Muness's submission?"
       >
-        Are you a reviewer, click here…
+        Reviewing Muness&apos;s submission? Click here…
       </a>
 
       <main id="main" className="w-full max-w-sm">
