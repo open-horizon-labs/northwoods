@@ -15,6 +15,13 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    // Detect stale chunk errors after a deploy — auto-reload once
+    if (ErrorBoundary.isChunkLoadError(error) && !sessionStorage.getItem('chunk_reload')) {
+      sessionStorage.setItem('chunk_reload', '1')
+      window.location.reload()
+      return { hasError: true, message: 'Updating…' }
+    }
+
     return {
       hasError: true,
       message: (error.message && !error.message.includes('<') && error.message.length < 200)
@@ -23,11 +30,19 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     }
   }
 
+  private static isChunkLoadError(error: Error): boolean {
+    const msg = error.message?.toLowerCase() ?? ''
+    return msg.includes('failed to fetch dynamically imported module')
+      || msg.includes('importing a module script failed')
+      || msg.includes('loading chunk')
+  }
+
   override componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('Northwoods UI error boundary caught:', error, info)
   }
 
   reset = () => {
+    sessionStorage.removeItem('chunk_reload')
     this.setState({ hasError: false, message: undefined })
   }
 
@@ -49,7 +64,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
             </p>
             <button
               type="button"
-              onClick={this.reset}
+              onClick={() => { sessionStorage.removeItem('chunk_reload'); window.location.reload() }}
               className="mt-4 inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-700 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50"
             >
               Reload app
