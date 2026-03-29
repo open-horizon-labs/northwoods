@@ -163,9 +163,11 @@ else
 await store.EnsureBucketAsync();
 
 // Seed blank template PDFs into MinIO (idempotent — skips templates that already have one)
-var samplesDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "samples", "intakes");
+var samplesDir = Path.Combine(AppContext.BaseDirectory, "samples", "intakes");            // Docker: /app/samples/intakes
 if (!Directory.Exists(samplesDir))
-    samplesDir = Path.Combine(Directory.GetCurrentDirectory(), "samples", "intakes");
+    samplesDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "samples", "intakes"); // dotnet run from src/Services/Northwoods.Api
+if (!Directory.Exists(samplesDir))
+    samplesDir = Path.Combine(Directory.GetCurrentDirectory(), "samples", "intakes");     // repo root CWD
 await DatabaseInitializer.SeedBlankPdfsAsync(connectionString, store, samplesDir, app.Logger);
 
 app.UseAuthentication();

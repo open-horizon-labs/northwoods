@@ -101,6 +101,9 @@ public static class DatabaseInitializer
     /// </summary>
     public static async Task SeedBlankPdfsAsync(string connectionString, ObjectStore objectStore, string samplesDir, ILogger logger)
     {
+        // Maps template IDs to sample PDFs in the samples/intakes directory.
+        // behavioral-health reuses the financial-assistance PDF as a placeholder
+        // until a dedicated behavioral-health sample is created.
         var templatePdfMap = new Dictionary<string, string>
         {
             ["general-assistance"] = "chatgpt-sample-general-intake.pdf",
@@ -131,6 +134,8 @@ public static class DatabaseInitializer
                     continue;
                 }
 
+                // Concurrent instances may race here, but it is benign:
+                // MinIO PutObject silently overwrites, and the UPDATE is idempotent.
                 var pdfKey = $"{row.tenant_id}/templates/{row.id}/blank.pdf";
                 await using var stream = File.OpenRead(samplePath);
                 await objectStore.UploadAsync(pdfKey, stream, "application/pdf");
