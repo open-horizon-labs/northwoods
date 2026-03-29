@@ -77,7 +77,7 @@ This is the second rubric review pass (issue #10), run after round 1 (#9) fixes 
 
 - Token refresh/rate limiting not implemented
 - OpenAI Vision and `text-embedding-3-small` both require `OPENAI_API_KEY` in the worker environment; extraction and embedding will fail at startup if the key is absent
-- UI smoke tests (Playwright) run in CI (`.github/workflows/ci.yml`) against the frontend
+- UI smoke tests (Playwright) run in CI (`.github/workflows/ci.yml`) against the frontend (frontend-only subset, no backend services)
 
 Note: "Web frontend not in Docker Compose" was resolved — the `web` service is present in `docker-compose.yml` and starts with `docker compose up -d`. "Hash-based embeddings" was also resolved — `text-embedding-3-small` via the OpenAI Embeddings API is used for all case profile vectors.
 

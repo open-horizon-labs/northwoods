@@ -190,7 +190,7 @@ Blueprint: `render.yaml`. Custom domain via Cloudflare CNAME.
 | DELETE | `/templates/{id}` | JWT (Admin) | Archive a template |
 | POST | `/templates/{id}/blank-pdf` | JWT (Admin) | Upload blank PDF for a template |
 | POST | `/intakes` | JWT (Worker) | Upload intake document |
-| POST | `/intakes/{id}/retry` | JWT | Retry a failed intake |
+| POST | `/intakes/{id}/retry` | JWT (Reviewer) | Retry a failed intake |
 | GET | `/intakes/{id}` | JWT | Check processing status |
 | GET | `/documents` | JWT | List tenant-scoped documents |
 | GET/HEAD | `/documents/{id}/source` | JWT | Retrieve or check source document |

@@ -101,7 +101,7 @@ Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1-4):
 
 - **Production auth hardening**: bcrypt hashing is in place, but token refresh, rate limiting, and account lockout are not implemented.
 - **API key requirement**: the worker defaults `UseOpenAiVision=true` and also uses `text-embedding-3-small` for case profile embeddings. Both require `OPENAI_API_KEY` at startup. Without it the worker throws a startup exception and no documents are processed. See README for setup instructions.
-- **UI smoke tests**: Playwright e2e smoke tests run in CI (`.github/workflows/ci.yml`) against the frontend.
+- **UI smoke tests**: Playwright e2e smoke tests run in CI (`.github/workflows/ci.yml`) against the frontend (frontend-only subset, no backend services).
 
 ## AI-assisted development
 
