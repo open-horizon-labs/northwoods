@@ -3,6 +3,8 @@
 **Handwritten Intake Document Processor**
 .NET 10 / React + TypeScript / Postgres 18 with pgvector
 
+> **TL;DR** -- Live at [northwoods.muness.com](https://northwoods.muness.com). Login popup pre-fills credentials. Upload scanned forms, AI extracts fields with confidence scores, reviewers correct and finalize with similar-case RAG assistance. 184-document synthetic corpus, 5-signal hybrid retrieval (vector + FTS + trigram + structured), row-level security on all tables. Built with Claude Code + Open Horizons workflow orchestration + CodeRabbit automated review.
+
 ---
 
 ## Table of Contents
@@ -142,6 +144,9 @@ if (!string.IsNullOrWhiteSpace(reviewerNote))
 - Index: HNSW with cosine distance operators (`vector_cosine_ops`) for approximate nearest neighbor search
 - Tenant-scoped: `case_profiles.tenant_id` + RLS policy ensures embeddings never cross tenant boundaries
 
+**OCR/extraction strategy -- OpenAI Vision:**
+The extraction pipeline uses OpenAI's vision-capable models (gpt-5.4-nano, escalating to mini on low confidence) rather than a traditional OCR library. This choice was based on prior successful experience with vision models for document extraction and the advantage of combined OCR + field extraction in a single pass -- the model reads the handwritten form *and* maps values to template fields simultaneously, eliminating a separate OCR-then-parse pipeline. The trade-off is API dependency, mitigated by the append-only extraction attempts design that preserves all provider outputs for auditability.
+
 **Retrieval pipeline -- 5-signal hybrid with Reciprocal Rank Fusion:**
 
 The similar-case query (`FindSimilarCasesAsync` in `ReviewEndpoints.cs`) does not rely on vector similarity alone. It fuses five retrieval signals:
@@ -159,94 +164,16 @@ When an OpenAI key is available and AI summaries are enabled, each similar case 
 
 ### 4b. Similarity Matching Query Overview
 
-The core retrieval query is a single SQL statement with CTEs for each signal, fused into a final ranked result. Here is the actual query from `src/Services/Northwoods.Api/Endpoints/ReviewEndpoints.cs`:
+The similar-case query (`FindSimilarCasesAsync` in `ReviewEndpoints.cs`) is a single SQL statement built from six CTEs following a **retrieve-then-fuse** pattern:
 
-```sql
-WITH target AS (
-    SELECT tenant_id, template_id, search_tsv, search_text,
-           embedding, applicant_name, date_of_birth, address
-    FROM case_profiles
-    WHERE document_id = @Id AND tenant_id = @TenantId
-    LIMIT 1
-),
-fts AS (
-    SELECT cp.document_id, row_number() OVER (
-        ORDER BY ts_rank_cd(cp.search_tsv,
-            websearch_to_tsquery('simple', COALESCE(t.search_text, ''))) DESC,
-            cp.document_id
-    ) AS rank
-    FROM case_profiles cp CROSS JOIN target t
-    WHERE cp.tenant_id = t.tenant_id
-      AND cp.document_id <> @Id
-      AND cp.search_tsv @@ websearch_to_tsquery('simple', COALESCE(t.search_text, ''))
-),
-vector AS (
-    SELECT cp.document_id, row_number() OVER (
-        ORDER BY (cp.embedding <=> t.embedding) ASC, cp.document_id
-    ) AS rank
-    FROM case_profiles cp CROSS JOIN target t
-    WHERE cp.tenant_id = t.tenant_id
-      AND cp.document_id <> @Id
-      AND cp.embedding IS NOT NULL AND t.embedding IS NOT NULL
-),
-name_fuzzy AS (
-    SELECT cp.document_id, row_number() OVER (
-        ORDER BY similarity(lower(cp.applicant_name),
-                            lower(t.applicant_name)) DESC, cp.document_id
-    ) AS rank
-    FROM case_profiles cp CROSS JOIN target t
-    WHERE cp.tenant_id = t.tenant_id
-      AND cp.document_id <> @Id
-      AND similarity(lower(cp.applicant_name), lower(t.applicant_name)) > 0.25
-),
-address_fuzzy AS ( /* similar structure, threshold > 0.2 */ ),
-dob_exact AS (
-    SELECT cp.document_id, 1 AS rank
-    FROM case_profiles cp CROSS JOIN target t
-    WHERE cp.tenant_id = t.tenant_id
-      AND cp.document_id <> @Id
-      AND cp.date_of_birth = t.date_of_birth
-),
-fused AS (
-    SELECT document_id,
-           SUM(1.0 / (60.0 + rank)) AS match_score,
-           array_agg(DISTINCT source) AS match_sources
-    FROM (
-        SELECT document_id, rank, 'fts'     AS source FROM fts     UNION ALL
-        SELECT document_id, rank, 'vector'  AS source FROM vector  UNION ALL
-        SELECT document_id, rank, 'name'    AS source FROM name_fuzzy UNION ALL
-        SELECT document_id, rank, 'address' AS source FROM address_fuzzy UNION ALL
-        SELECT document_id, rank, 'dob'     AS source FROM dob_exact
-    ) x
-    GROUP BY document_id
-)
-SELECT cp.document_id, cp.template_id, cp.applicant_name,
-       cp.date_of_birth, cp.address,
-       ROUND(f.match_score::numeric, 4) AS MatchScore,
-       array_to_string(f.match_sources, ',') AS MatchSourcesCsv
-FROM fused f
-JOIN case_profiles cp ON cp.document_id = f.document_id
-ORDER BY f.match_score DESC
-LIMIT @Limit;
-```
+1. **Target CTE** -- Loads the current document's profile (embedding, search text, name, DOB, address) as the anchor for all comparisons.
+2. **Five signal CTEs** -- Each independently ranks candidate documents by one retrieval method (FTS, vector cosine, name trigram, address trigram, DOB exact). Each CTE filters on `tenant_id` so isolation is enforced per-signal, not as a post-filter.
+3. **Fusion CTE** -- Unions all five ranked lists and applies Reciprocal Rank Fusion: `score = SUM(1.0 / (60.0 + rank))`. Documents appearing in multiple signals score higher. The output includes a `match_sources` array so the UI can explain *why* a case matched (e.g., "same applicant + semantic match + matching DOB").
+The query returns the top N fused results with match scores, which the API enriches with field values and AI-generated or algorithmic summaries.
 
-**Key design points:**
+**Index strategy:** Each signal is backed by a purpose-built index -- GIN for full-text and trigram, HNSW for vector cosine, B-tree for DOB. All indexes are defined in `DatabaseInitializer.cs` and created idempotently on startup.
 
-- Every CTE filters on `cp.tenant_id = t.tenant_id` -- tenant isolation is in every signal, not just the final filter.
-- RRF fusion means a document that appears in multiple signals (e.g., same name AND semantic match AND matching DOB) scores much higher than one that appears in only one.
-- The `match_sources` array lets the UI explain *why* a case matched (e.g., "same applicant, matching DOB, semantic match").
-- After retrieval, the API fetches field values for each matched case and builds a structured summary with signals like "same applicant", "similar address", "text match", "semantic match".
-
-**Indexes supporting this query:**
-
-```sql
--- From DatabaseInitializer.cs
-CREATE INDEX idx_case_profiles_search_tsv ON case_profiles USING GIN(search_tsv);
-CREATE INDEX idx_case_profiles_applicant_trgm ON case_profiles USING GIN(applicant_name gin_trgm_ops);
-CREATE INDEX idx_case_profiles_address_trgm ON case_profiles USING GIN(address gin_trgm_ops);
-CREATE INDEX idx_case_profiles_dob ON case_profiles(date_of_birth);
-CREATE INDEX idx_case_profiles_embedding_hnsw ON case_profiles USING hnsw (embedding vector_cosine_ops);
-```
+> Full query source: `src/Services/Northwoods.Api/Endpoints/ReviewEndpoints.cs`
 
 ### 4c. AI Tooling Overview
 
@@ -333,208 +260,9 @@ The system follows a capability-sliced topology with three deployable services s
 - **Postgres 18** with pgvector, pg_trgm, and full-text search extensions -- stores all relational data, extracted fields, audit events, case profiles, and embeddings
 - **MinIO** (S3-compatible) -- stores original uploaded document blobs
 
-**Architecture diagram (d2 format):**
+![Northwoods Architecture](architecture-overview.svg)
 
-```d2
-direction: down
-
-title: Northwoods Architecture {
-  near: top-center
-  shape: text
-  style: {
-    font-size: 28
-    bold: true
-  }
-}
-
-# Users
-users: Users {
-  style: {
-    fill: "#f8fafc"
-    stroke: "#94a3b8"
-    border-radius: 8
-  }
-  iw: Intake Worker {
-    shape: person
-    style.fill: "#dbeafe"
-  }
-  rv: Reviewer {
-    shape: person
-    style.fill: "#dcfce7"
-  }
-  admin: Admin {
-    shape: person
-    style.fill: "#fef3c7"
-  }
-}
-
-# Frontend
-browser: Browser {
-  style: {
-    fill: "#f0f9ff"
-    stroke: "#0ea5e9"
-    border-radius: 8
-  }
-  react: React + Vite + Tailwind {
-    shape: rectangle
-    style.fill: "#e0f2fe"
-  }
-  pdfjs: PDF.js Viewer {
-    shape: rectangle
-    style.fill: "#e0f2fe"
-  }
-}
-
-# API Layer
-api: Northwoods.Api (.NET 10) {
-  style: {
-    fill: "#faf5ff"
-    stroke: "#a855f7"
-    border-radius: 8
-  }
-  auth: JWT Auth + RLS scope {
-    shape: rectangle
-    style.fill: "#f3e8ff"
-  }
-  endpoints: Endpoints {
-    shape: rectangle
-    style.fill: "#f3e8ff"
-    tooltip: |md
-      - /auth/login
-      - /intakes (upload)
-      - /reviews (queue, detail, finalize)
-      - /search, /cases
-      - /templates (CRUD, blank PDF)
-      - /admin (wipe, reprocess)
-      - /scalar/v1 (API docs)
-    |
-  }
-  rag: Hybrid RAG (5-signal RRF) {
-    shape: rectangle
-    style.fill: "#ede9fe"
-  }
-  metrics: Health + Metrics {
-    shape: rectangle
-    style.fill: "#f3e8ff"
-  }
-}
-
-# Worker
-worker: Extraction.Worker {
-  style: {
-    fill: "#fffbeb"
-    stroke: "#f59e0b"
-    border-radius: 8
-  }
-  poll: Poll loop (5s) {
-    shape: rectangle
-    style.fill: "#fef3c7"
-  }
-  pipeline: Extraction Pipeline {
-    shape: rectangle
-    style.fill: "#fef3c7"
-  }
-  providers: Providers {
-    style: {
-      fill: "#fefce8"
-      border-radius: 4
-    }
-    vision: OpenAI Vision\n(gpt-5.4-nano -> mini) {
-      shape: rectangle
-      style.fill: "#fde68a"
-    }
-    paddle: PaddleOCR\n(optional) {
-      shape: rectangle
-      style.fill: "#fde68a"
-      style.stroke-dash: 3
-    }
-    normalizer: OpenAI Normalizer\n(optional) {
-      shape: rectangle
-      style.fill: "#fde68a"
-      style.stroke-dash: 3
-    }
-  }
-  consensus: Field Consensus\n+ Confidence Gating {
-    shape: rectangle
-    style.fill: "#fef3c7"
-  }
-  embed: Embedding Generation\n(text-embedding-3-small) {
-    shape: rectangle
-    style.fill: "#fef3c7"
-  }
-}
-
-# Data
-data: Data Layer {
-  style: {
-    fill: "#f0fdf4"
-    stroke: "#22c55e"
-    border-radius: 8
-  }
-  pg: Postgres 18 {
-    shape: cylinder
-    style.fill: "#bbf7d0"
-    tooltip: |md
-      - RLS on all 7 tables
-      - pgvector (HNSW index)
-      - pg_trgm (GIN indexes)
-      - FTS (tsvector)
-      - Append-only extraction_attempts
-      - Audit events with correlation IDs
-    |
-  }
-  minio: MinIO (S3) {
-    shape: cylinder
-    style.fill: "#bbf7d0"
-  }
-}
-
-# External
-openai: OpenAI API {
-  shape: cloud
-  style: {
-    fill: "#fecaca"
-    stroke: "#ef4444"
-  }
-}
-
-# Connections
-users.iw -> browser.react: Upload forms
-users.rv -> browser.react: Review + finalize
-users.admin -> browser.react: Manage templates
-
-browser.react -> api.auth: JWT bearer
-browser.pdfjs -> api.endpoints: Fetch PDF blob
-
-api.auth -> api.endpoints: Scoped session
-api.endpoints -> data.pg: Metadata + fields + audit
-api.endpoints -> data.minio: Document blobs
-api.rag -> data.pg: FTS + vector + trgm + DOB + RRF
-
-worker.poll -> data.pg: SELECT uploaded docs
-worker.pipeline -> worker.providers
-worker.providers.vision -> openai: Vision API
-worker.consensus -> data.pg: Persist fields + attempts
-worker.embed -> openai: Embeddings API
-worker.embed -> data.pg: Update case_profiles
-
-# Tenant isolation
-tenant: Tenant Isolation {
-  near: bottom-center
-  shape: text
-  style: {
-    font-size: 14
-    italic: true
-    font-color: "#64748b"
-  }
-  label: |md
-    Row-Level Security on all tables -- JWT carries tenant claim
-    app.tenant_id set per DB session -- Startup assertion verifies isolation
-  |
-}
-```
-
-To render: install [d2](https://d2lang.com/) and run `d2 docs/architecture-overview.d2 docs/architecture-overview.svg`. A pre-rendered SVG is already at `docs/architecture-overview.svg`.
+> d2 source: [`docs/architecture-overview.d2`](architecture-overview.d2) -- render with `d2 docs/architecture-overview.d2 docs/architecture-overview.svg`
 
 **Key flows:**
 
@@ -678,4 +406,4 @@ CREATE POLICY documents_tenant_isolation ON documents
 
 ---
 
-*Full documentation index: [README.md](../README.md) | [Architecture](architecture.md) | [Self-Assessment](self-assessment.md) | [AI Tooling](ai-tooling.md) | [ADRs](ADRs/)*
+*Full documentation index: [README.md](../README.md) | [Architecture](architecture.md) | [AI Tooling](ai-tooling.md) | [ADRs](ADRs/)*
