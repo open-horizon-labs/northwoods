@@ -44,6 +44,11 @@ export default function App() {
   const handleLogin = (nextAuth: LoginResponse) => {
     storeAuth(nextAuth)
     setSessionExpiredMsg(null)
+    // Clear any stale hash so the user lands on their role's default view
+    // (e.g. review queue for Reviewers, not #rag-report from a pre-login link).
+    if (window.location.hash && window.location.hash !== '#dev') {
+      window.location.hash = ''
+    }
     setAuth(nextAuth)
   }
 
