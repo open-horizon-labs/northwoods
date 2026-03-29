@@ -77,6 +77,12 @@ export function useResizablePanel(
   const [isDragging, setIsDragging] = useState(false)
   const handleRef = useRef<HTMLDivElement | null>(null)
 
+  // Reload ratio when storage key or bounds change (defensive — callers currently
+  // pass static props, but this prevents stale ratios if they ever become dynamic).
+  useEffect(() => {
+    setRatio(loadRatio(storageKey, clampedDefault, minRatio, maxRatio))
+  }, [storageKey, clampedDefault, minRatio, maxRatio])
+
   // Track starting position for drag
   const dragStart = useRef<{ startPos: number; startRatio: number } | null>(null)
 
