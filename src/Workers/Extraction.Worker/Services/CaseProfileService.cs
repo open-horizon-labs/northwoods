@@ -1,17 +1,13 @@
-using System.Globalization;
-using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using Dapper;
+using Northwoods.Contracts;
 using Npgsql;
 
 namespace Extraction.Worker;
 
 internal static class CaseProfileService
 {
-    private const int CaseEmbeddingDimensions = 1536;
-    private static readonly HttpClient EmbeddingHttp = new();
+    private static readonly HttpClient EmbeddingHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public static string BuildCaseProfileText(
         string templateId,
@@ -76,8 +72,8 @@ internal static class CaseProfileService
         {
             try
             {
-                var (embedding, promptTokens, totalTokens) = await GenerateCaseEmbeddingAsync(caseProfileText, apiKey, ct);
-                embeddingLiteral = ToPgVectorLiteral(embedding);
+                var (embedding, promptTokens, totalTokens) = await EmbeddingService.GenerateCaseEmbeddingAsync(EmbeddingHttp, caseProfileText, apiKey, ct);
+                embeddingLiteral = EmbeddingService.ToPgVectorLiteral(embedding);
 
                 await conn.ExecuteAsync(
                     """
@@ -91,7 +87,7 @@ internal static class CaseProfileService
                         Details = JsonSerializer.Serialize(new
                         {
                             model = "text-embedding-3-small",
-                            dimensions = CaseEmbeddingDimensions,
+                            dimensions = EmbeddingService.CaseEmbeddingDimensions,
                             prompt_tokens = promptTokens,
                             total_tokens = totalTokens
                         })
@@ -142,58 +138,4 @@ internal static class CaseProfileService
         ct.ThrowIfCancellationRequested();
     }
 
-    public static async Task<(double[] Embedding, long PromptTokens, long TotalTokens)> GenerateCaseEmbeddingAsync(
-        string text, string apiKey, CancellationToken ct)
-    {
-        var requestPayload = new
-        {
-            model = "text-embedding-3-small",
-            input = text
-        };
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/embeddings")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(requestPayload), Encoding.UTF8, "application/json")
-        };
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-        using var res = await EmbeddingHttp.SendAsync(req, ct);
-        var body = await res.Content.ReadAsStringAsync(ct);
-        if (!res.IsSuccessStatusCode)
-        {
-            var isTransient = (int)res.StatusCode >= 500
-                              || res.StatusCode == HttpStatusCode.TooManyRequests
-                              || res.StatusCode == HttpStatusCode.RequestTimeout;
-            if (isTransient)
-                throw new TransientExtractionException($"OpenAI embedding failed ({(int)res.StatusCode}).");
-            throw new InvalidOperationException($"OpenAI embedding failed ({(int)res.StatusCode}): {body}");
-        }
-
-        using var doc = JsonDocument.Parse(body);
-        var dataArray = doc.RootElement.GetProperty("data");
-        var embeddingElement = dataArray[0].GetProperty("embedding");
-        var values = new double[CaseEmbeddingDimensions];
-        var idx = 0;
-        foreach (var el in embeddingElement.EnumerateArray())
-        {
-            if (idx < values.Length)
-                values[idx++] = el.GetDouble();
-        }
-
-        long promptTokens = 0, totalTokens = 0;
-        if (doc.RootElement.TryGetProperty("usage", out var usage))
-        {
-            if (usage.TryGetProperty("prompt_tokens", out var pt) && pt.ValueKind == JsonValueKind.Number)
-                promptTokens = pt.GetInt64();
-            if (usage.TryGetProperty("total_tokens", out var tt) && tt.ValueKind == JsonValueKind.Number)
-                totalTokens = tt.GetInt64();
-        }
-
-        return (values, promptTokens, totalTokens);
-    }
-
-    public static string ToPgVectorLiteral(double[] values)
-    {
-        return $"[{string.Join(',', values.Select(v => v.ToString(CultureInfo.InvariantCulture)))}]";
-    }
 }

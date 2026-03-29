@@ -7,7 +7,7 @@ namespace Extraction.Worker;
 
 internal sealed class OpenAiNormalizerProvider(string apiKey, string modelMini) : IExtractionProvider
 {
-    private static readonly HttpClient Http = new();
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public string Name => "openai-normalizer";
     public string Stage => "normalize";
@@ -73,7 +73,7 @@ internal sealed class OpenAiNormalizerProvider(string apiKey, string modelMini) 
             throw new InvalidOperationException($"OpenAI normalization failed ({(int)res.StatusCode}).");
         }
 
-        var outputText = TryGetOutputText(body);
+        var outputText = OpenAiResponseParser.ExtractOutputText(body);
         if (string.IsNullOrWhiteSpace(outputText))
             return [];
 
@@ -107,41 +107,6 @@ internal sealed class OpenAiNormalizerProvider(string apiKey, string modelMini) 
         }
 
         return results;
-    }
-
-    private static string TryGetOutputText(string rawResponse)
-    {
-        using var doc = JsonDocument.Parse(rawResponse);
-
-        if (doc.RootElement.TryGetProperty("output_text", out var outputText) && outputText.ValueKind == JsonValueKind.String)
-        {
-            var text = outputText.GetString();
-            if (!string.IsNullOrWhiteSpace(text))
-                return text;
-        }
-
-        // Fallback: parse output[] -> content[] -> output_text items
-        if (doc.RootElement.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in output.EnumerateArray())
-            {
-                if (item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var part in content.EnumerateArray())
-                    {
-                        if (part.TryGetProperty("type", out var t) && t.GetString() == "output_text"
-                            && part.TryGetProperty("text", out var txt) && txt.ValueKind == JsonValueKind.String)
-                        {
-                            var text = txt.GetString();
-                            if (!string.IsNullOrWhiteSpace(text))
-                                return text;
-                        }
-                    }
-                }
-            }
-        }
-
-        return string.Empty;
     }
 
     private static Dictionary<string, (string Value, decimal Confidence)> ParseNormalizedFields(string jsonText)
