@@ -19,11 +19,25 @@ async function login(page: import('@playwright/test').Page, email: string, passw
 }
 
 // ---------------------------------------------------------------------------
+// 0. Login page renders (no backend needed)
+// ---------------------------------------------------------------------------
+
+test.describe('Login page', () => {
+  test('renders the sign-in form', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+    await expect(page.getByLabel('Email')).toBeVisible()
+    await expect(page.getByLabel('Password')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // 1. Worker login -> dashboard loads
 // ---------------------------------------------------------------------------
 
 test.describe('Worker login', () => {
-  test('shows the intake submission dashboard after sign-in', async ({ page }) => {
+  test('shows the intake submission dashboard after sign-in @backend', async ({ page }) => {
     await login(page, 'worker@sunrise.example', 'password')
     await expect(page.getByRole('heading', { name: 'Submit an intake' })).toBeVisible()
     // Verify the sign-out button is present (proves we're authenticated)
@@ -36,7 +50,7 @@ test.describe('Worker login', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Reviewer login', () => {
-  test('shows the review queue after sign-in', async ({ page }) => {
+  test('shows the review queue after sign-in @backend', async ({ page }) => {
     await login(page, 'reviewer@sunrise.example', 'password')
     // The reviewer dashboard has a "Skip to review queue" skip-link and
     // a header with "Northwoods" branding. The queue section is always
@@ -55,14 +69,14 @@ test.describe('Reviewer login', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Bad credentials', () => {
-  test('shows an error message for wrong password', async ({ page }) => {
+  test('shows an error message for wrong password @backend', async ({ page }) => {
     await login(page, 'worker@sunrise.example', 'wrongpassword')
     const alert = page.getByRole('alert')
     await expect(alert).toBeVisible()
     await expect(alert).toContainText(/incorrect|failed|unauthorized/i)
   })
 
-  test('shows an error message for unknown email', async ({ page }) => {
+  test('shows an error message for unknown email @backend', async ({ page }) => {
     await login(page, 'nobody@nowhere.example', 'password')
     const alert = page.getByRole('alert')
     await expect(alert).toBeVisible()
@@ -75,7 +89,7 @@ test.describe('Bad credentials', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Worker upload', () => {
-  test('uploads a PDF and shows a status indicator', async ({ page }) => {
+  test('uploads a PDF and shows a status indicator @backend', async ({ page }) => {
     await login(page, 'worker@sunrise.example', 'password')
     await expect(page.getByRole('heading', { name: 'Submit an intake' })).toBeVisible()
 
@@ -105,7 +119,7 @@ test.describe('Worker upload', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Reviewer queue', () => {
-  test('displays the review queue list or empty state', async ({ page }) => {
+  test('displays the review queue list or empty state @backend', async ({ page }) => {
     await login(page, 'reviewer@sunrise.example', 'password')
 
     // Wait for the queue to load. Either we see queue items or an empty state.
@@ -126,7 +140,7 @@ test.describe('Reviewer queue', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Cross-tenant isolation', () => {
-  test('tenant-b reviewer cannot see tenant-a review items', async ({ page }) => {
+  test('tenant-b reviewer cannot see tenant-a review items @backend', async ({ page }) => {
     // First: login as tenant-a worker and upload a document to ensure tenant-a has data.
     await login(page, 'worker@sunrise.example', 'password')
     await expect(page.getByRole('heading', { name: 'Submit an intake' })).toBeVisible()
