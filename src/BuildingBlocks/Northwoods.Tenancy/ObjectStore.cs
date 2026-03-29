@@ -9,15 +9,13 @@ namespace Northwoods.Tenancy;
 public sealed class ObjectStore
 {
     private readonly AmazonS3Client _s3Client;
-    private readonly AmazonS3Client _publicS3Client;
     private readonly string _bucketName;
 
-    public ObjectStore(string endpoint, string accessKey, string secretKey, string bucketName, string? publicEndpoint = null)
+    public ObjectStore(string endpoint, string accessKey, string secretKey, string bucketName)
     {
         _bucketName = bucketName;
 
         _s3Client = new AmazonS3Client(accessKey, secretKey, CreateConfig(endpoint));
-        _publicS3Client = new AmazonS3Client(accessKey, secretKey, CreateConfig(publicEndpoint ?? endpoint));
     }
 
     private static AmazonS3Config CreateConfig(string endpoint) => new()
@@ -41,21 +39,6 @@ public sealed class ObjectStore
         await _s3Client.PutObjectAsync(request);
     }
 
-    public string GetPresignedUrl(string key, TimeSpan expiry)
-    {
-        var request = new GetPreSignedUrlRequest
-        {
-            BucketName = _bucketName,
-            Key = key,
-            Expires = DateTime.UtcNow.Add(expiry),
-            Verb = HttpVerb.GET,
-        };
-
-        var url = _publicS3Client.GetPreSignedURL(request);
-        // Only downgrade to HTTP for local MinIO endpoints, keep HTTPS for production
-        return url;
-    }
-
     public async Task<byte[]> DownloadAsync(string key)
     {
         var response = await _s3Client.GetObjectAsync(_bucketName, key);
@@ -68,19 +51,6 @@ public sealed class ObjectStore
     public async Task<GetObjectResponse> GetObjectStreamAsync(string key)
     {
         return await _s3Client.GetObjectAsync(_bucketName, key);
-    }
-
-    public async Task<bool> ExistsAsync(string key)
-    {
-        try
-        {
-            await _s3Client.GetObjectMetadataAsync(_bucketName, key);
-            return true;
-        }
-        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return false;
-        }
     }
 
     public async Task EnsureBucketAsync()

@@ -51,22 +51,6 @@ internal static class CaseProfileService
         return result;
     }
 
-    public static async Task<bool> SupportsCaseProfiles(NpgsqlConnection conn, NpgsqlTransaction tx)
-    {
-        var exists = await conn.ExecuteScalarAsync<int>(
-            """
-            SELECT EXISTS(
-                SELECT 1
-                FROM pg_class
-                WHERE relname = 'case_profiles'
-                  AND relkind = 'r'
-            )::int
-            """,
-            transaction: tx);
-
-        return exists == 1;
-    }
-
     public static async Task PersistCaseProfile(
         NpgsqlConnection conn,
         NpgsqlTransaction tx,

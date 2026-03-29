@@ -40,8 +40,7 @@ var store = new ObjectStore(
     builder.Configuration["Minio:Endpoint"] ?? "localhost:9000",
     builder.Configuration["Minio:AccessKey"] ?? "northwoods",
     builder.Configuration["Minio:SecretKey"] ?? "northwoods",
-    builder.Configuration["Minio:BucketName"] ?? "intakes",
-    builder.Configuration["Minio:PublicEndpoint"]);
+    builder.Configuration["Minio:BucketName"] ?? "intakes");
 
 builder.Services.AddSingleton(db);
 builder.Services.AddSingleton(store);
