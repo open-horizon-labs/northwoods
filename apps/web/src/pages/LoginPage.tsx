@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 
 import { api, ApiError, userMessage } from '../api'
 import { storeAuth } from '../lib/auth'
@@ -12,6 +12,12 @@ const inputStyle =
 
 const inputInteractive = `${inputStyle} ${FOCUS_RING}`
 
+const DEMO_CREDENTIALS = [
+  { label: 'Sunrise Reviewer', email: 'reviewer@sunrise.example', tenant: 'tenant-a' },
+  { label: 'Sunrise Worker', email: 'worker@sunrise.example', tenant: 'tenant-a' },
+  { label: 'Lakewood Reviewer', email: 'reviewer@lakewood.example', tenant: 'tenant-b' },
+  { label: 'Lakewood Worker', email: 'worker@lakewood.example', tenant: 'tenant-b' },
+] as const
 
 type Props = {
   onLogin: (auth: LoginResponse) => void
@@ -47,8 +53,17 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
     }
   }
 
-  const useReviewerDemo = () => {
-    setEmail('reviewer@sunrise.example')
+  useEffect(() => {
+    if (!showReviewerHint) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowReviewerHint(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showReviewerHint])
+
+  const useDemoCredentials = (demoEmail: string) => {
+    setEmail(demoEmail)
     setPassword('password')
     setShowReviewerHint(false)
   }
@@ -145,39 +160,50 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
 
       {showReviewerHint ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
-          <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reviewer-hint-title"
+            className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          >
             <header className="mb-3 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">Reviewer path</h2>
-                <p className="mt-1 text-sm text-slate-600">Use these credentials to open the reviewer flow.</p>
+                <h2 id="reviewer-hint-title" className="text-base font-semibold text-slate-900">Are you reviewing Muness&apos;s Submission?</h2>
+                <p className="mt-1 text-sm text-slate-600">Pick a user below to pre-fill credentials (password is always <span className="font-semibold">password</span>).</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowReviewerHint(false)}
-                className={`rounded px-2 py-1 text-sm text-slate-700 hover:bg-slate-50 ${FOCUS_RING}`}
+                className={`shrink-0 rounded px-2 py-1 text-sm text-slate-700 hover:bg-slate-50 ${FOCUS_RING}`}
                 aria-label="Close reviewer hint"
               >
                 Close
               </button>
             </header>
-            <p className="text-sm text-slate-700">Example:
-              <br />
-              Email: <span className="font-semibold">reviewer@sunrise.example</span>
-              <br />
-              Password: <span className="font-semibold">password</span>
-              <br />
-              Tenant: <span className="font-semibold">tenant-a</span>
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setShowReviewerHint(false)} className="rounded border border-slate-300 px-3 py-1.5 text-sm">
-                Not now
-              </button>
-              <button
-                type="button"
-                onClick={useReviewerDemo}
-                className={`rounded bg-sky-700 px-3 py-1.5 text-sm text-white ${FOCUS_RING}`}
+
+            <div className="space-y-2">
+              {DEMO_CREDENTIALS.map((cred) => (
+                <button
+                  key={cred.email}
+                  type="button"
+                  onClick={() => useDemoCredentials(cred.email)}
+                  className={`flex w-full items-center justify-between rounded border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 ${FOCUS_RING}`}
+                >
+                  <span className="font-medium text-slate-900">{cred.label}</span>
+                  <span className="text-slate-500">{cred.email} / {cred.tenant}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <a
+                href="#rag-report"
+                className={`text-sm font-medium text-sky-700 hover:underline ${FOCUS_RING}`}
               >
-                Pre-fill reviewer demo
+                Open RAG Report
+              </a>
+              <button type="button" onClick={() => setShowReviewerHint(false)} className={`rounded border border-slate-300 px-3 py-1.5 text-sm ${FOCUS_RING}`}>
+                Not now
               </button>
             </div>
           </div>
