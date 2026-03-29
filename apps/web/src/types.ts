@@ -110,6 +110,23 @@ export type TemplateDescriptor = {
   blankPdfKey?: string | null
 }
 
+/** Returns true when the document has reached a terminal or reviewable state and no further polling is needed. */
+export const isTerminalOrReviewableStatus = (status: ProcessingStatus): boolean => {
+  switch (status) {
+    case 2:
+    case 'ReviewReady':
+    case 3:
+    case 'Completed':
+    case 4:
+    case 'Finalized':
+    case 5:
+    case 'Failed':
+      return true
+    default:
+      return false
+  }
+}
+
 export const statusLabel = (status: ProcessingStatus) => {
   switch (status) {
     case 0:

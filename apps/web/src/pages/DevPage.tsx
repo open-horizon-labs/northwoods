@@ -17,7 +17,7 @@ import type {
   TemplateDescriptor,
   UserRole,
 } from '../types'
-import { roleLabel, statusBadge, statusLabel } from '../types'
+import { isTerminalOrReviewableStatus, roleLabel, statusBadge, statusLabel } from '../types'
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-700 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50'
 
@@ -419,7 +419,7 @@ export default function DevPage() {
       return
     }
 
-    if (statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Ready for Review' || statusLabel(intakeStatus?.status ?? 'Uploaded') === 'Finalized') {
+    if (isTerminalOrReviewableStatus(intakeStatus?.status ?? 'Uploaded')) {
       return
     }
 
@@ -428,7 +428,7 @@ export default function DevPage() {
         const status = await api.getIntake(auth.accessToken, activeIntakeId)
         setIntakeStatus(status)
 
-        if (statusLabel(status.status) === 'Ready for Review' || statusLabel(status.status) === 'Finalized') {
+        if (isTerminalOrReviewableStatus(status.status)) {
           await refreshQueue(auth.accessToken)
           window.clearInterval(timer)
         }
