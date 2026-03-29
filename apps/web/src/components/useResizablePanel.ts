@@ -125,14 +125,26 @@ export function useResizablePanel(
     [storageKey],
   )
 
+  // Reset styles on unmount only if this hook is actively dragging
+  useEffect(() => {
+    return () => {
+      if (dragStart.current) {
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+  }, [])
+
   // Attach/detach document-level listeners during drag
   useEffect(() => {
     if (!isDragging) return
     document.addEventListener('pointermove', onPointerMove)
     document.addEventListener('pointerup', onPointerUp)
+    document.addEventListener('pointercancel', onPointerUp)
     return () => {
       document.removeEventListener('pointermove', onPointerMove)
       document.removeEventListener('pointerup', onPointerUp)
+      document.removeEventListener('pointercancel', onPointerUp)
     }
   }, [isDragging, onPointerMove, onPointerUp])
 
