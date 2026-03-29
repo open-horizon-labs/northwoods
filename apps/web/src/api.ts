@@ -263,10 +263,10 @@ export function documentSourceUrl(accessToken: string, documentId: string): stri
 }
 
 /**
- * Fetch a document PDF as an ArrayBuffer using the Authorization header.
+ * Fetch a document source as an ArrayBuffer with its content type.
  * Avoids embedding the token in the URL (which triggers Edge SmartScreen).
  */
-export async function fetchDocumentPdfBuffer(accessToken: string, documentId: string): Promise<ArrayBuffer> {
+export async function fetchDocumentSource(accessToken: string, documentId: string): Promise<{ buffer: ArrayBuffer; contentType: string }> {
   const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(documentId)}/source`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -274,5 +274,7 @@ export async function fetchDocumentPdfBuffer(accessToken: string, documentId: st
     const body = await res.text()
     throw new ApiError(res.status, res.statusText, body)
   }
-  return res.arrayBuffer()
+  const contentType = res.headers.get('Content-Type') ?? 'application/pdf'
+  const buffer = await res.arrayBuffer()
+  return { buffer, contentType }
 }

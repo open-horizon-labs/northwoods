@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 
-import { fetchDocumentPdfBuffer } from '../api'
+import { fetchDocumentSource } from '../api'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
@@ -21,14 +21,13 @@ const btnCtrl =
 
 export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: PdfViewerProps) {
   const [pdfData, setPdfData] = useState<{ data: ArrayBuffer } | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [numPages, setNumPages] = useState<number>(0)
   const [pageNum, setPageNum] = useState(1)
   const [scale, setScale] = useState(1.0)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
-  // Store callback in a ref so the fetch effect doesn't re-run when the caller
-  // re-renders with a new function reference (callers must still memoize via useCallback).
   const onAvailabilityChangeRef = useRef(onAvailabilityChange)
   useEffect(() => { onAvailabilityChangeRef.current = onAvailabilityChange }, [onAvailabilityChange])
 
@@ -44,19 +43,23 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
     return () => obs.disconnect()
   }, [])
 
-  // Fetch PDF buffer when documentId/accessToken changes.
-  // Uses a ref for onAvailabilityChange so this effect doesn't re-run on every render.
+  // Fetch document source when documentId/accessToken changes.
   useEffect(() => {
     let cancelled = false
     setPdfData(null)
+    setImageUrl(null)
     setLoadError(false)
     setPageNum(1)
 
-    fetchDocumentPdfBuffer(accessToken, documentId)
-      .then((buf) => {
-        if (!cancelled) {
-          setPdfData({ data: buf })
-          // availability is signalled true only once react-pdf parses successfully (onLoadSuccess)
+    fetchDocumentSource(accessToken, documentId)
+      .then(({ buffer, contentType }) => {
+        if (cancelled) return
+        if (contentType.startsWith('image/')) {
+          const blob = new Blob([buffer], { type: contentType })
+          setImageUrl(URL.createObjectURL(blob))
+          onAvailabilityChangeRef.current?.(true)
+        } else {
+          setPdfData({ data: buffer })
         }
       })
       .catch(() => {
@@ -71,8 +74,54 @@ export function PdfViewer({ accessToken, documentId, onAvailabilityChange }: Pdf
     }
   }, [accessToken, documentId])
 
+  // Clean up object URL on unmount or change
+  useEffect(() => {
+    return () => {
+      if (imageUrl) URL.revokeObjectURL(imageUrl)
+    }
+  }, [imageUrl])
+
   if (loadError) {
     return null
+  }
+
+  // Image viewer
+  if (imageUrl) {
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div ref={containerRef} className="flex-1 overflow-auto bg-slate-100 p-2">
+          <img
+            src={imageUrl}
+            alt="Uploaded intake document"
+            className="mx-auto max-w-full"
+            style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}
+          />
+        </div>
+        <div className="flex shrink-0 items-center justify-center gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5">
+          <button
+            type="button"
+            className={btnCtrl}
+            onClick={() => setScale((s) => Math.max(ZOOM_MIN, parseFloat((s - ZOOM_STEP).toFixed(2))))}
+            disabled={scale <= ZOOM_MIN}
+            aria-label="Zoom out"
+          >
+            &minus;
+          </button>
+          <span className="min-w-[3.5rem] text-center text-xs text-slate-600">
+            {Math.round(scale * 100)}%
+          </span>
+          <button
+            type="button"
+            className={btnCtrl}
+            onClick={() => setScale((s) => Math.min(ZOOM_MAX, parseFloat((s + ZOOM_STEP).toFixed(2))))}
+            disabled={scale >= ZOOM_MAX}
+            aria-label="Zoom in"
+          >
+            &#43;
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (!pdfData) {
