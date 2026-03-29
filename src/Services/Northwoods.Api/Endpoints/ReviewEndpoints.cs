@@ -342,7 +342,9 @@ internal static class ReviewEndpoints
                         },
                         session.Transaction);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (
+                    ex is not OperationCanceledException ||
+                    !httpContext.RequestAborted.IsCancellationRequested)
                 {
                     app.Logger.LogWarning(ex, "Failed to regenerate embedding for {DocId} during finalization; updating search_text only", id);
                 }
