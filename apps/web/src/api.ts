@@ -22,6 +22,15 @@ type RetryIntakeResponse = {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+// Global 401 handler — set once at app startup. Decouples api.ts from the
+// React component tree so any fetch can trigger redirect-to-login without
+// importing App or Router.
+let _onUnauthorized: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: () => void): void {
+  _onUnauthorized = handler
+}
+
 const jsonHeaders = (accessToken?: string) => ({
   'Content-Type': 'application/json',
   ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -72,7 +81,11 @@ export function userMessage(err: unknown, fallback: string): string {
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text()
-    throw new ApiError(response.status, response.statusText, body)
+    const err = new ApiError(response.status, response.statusText, body)
+    if (response.status === 401 && _onUnauthorized) {
+      _onUnauthorized()
+    }
+    throw err
   }
 
   return (await response.json()) as T

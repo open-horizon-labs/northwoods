@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { clearStoredAuth, readStoredAuth, storeAuth } from './lib/auth'
+import { setUnauthorizedHandler } from './api'
 import type { LoginResponse } from './types'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -34,9 +35,11 @@ function Spinner() {
 export default function App() {
   const hash = useHashRoute()
   const [auth, setAuth] = useState<LoginResponse | null>(readStoredAuth)
+  const [sessionExpiredMsg, setSessionExpiredMsg] = useState<string | null>(null)
 
   const handleLogin = (nextAuth: LoginResponse) => {
     storeAuth(nextAuth)
+    setSessionExpiredMsg(null)
     setAuth(nextAuth)
   }
 
@@ -44,6 +47,16 @@ export default function App() {
     clearStoredAuth()
     setAuth(null)
   }
+
+  // Register the global 401 handler once on mount. The handler is stable:
+  // it only calls React state setters which are guaranteed stable by React.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      clearStoredAuth()
+      setSessionExpiredMsg('Your session has expired. Please sign in again.')
+      setAuth(null)
+    })
+  }, [])
 
   if (hash === '#dev') {
     return (
@@ -56,7 +69,7 @@ export default function App() {
   if (!auth) {
     return (
       <Suspense fallback={<Spinner />}>
-        <LoginPage onLogin={handleLogin} />
+        <LoginPage onLogin={handleLogin} sessionExpiredMessage={sessionExpiredMsg} />
       </Suspense>
     )
   }
