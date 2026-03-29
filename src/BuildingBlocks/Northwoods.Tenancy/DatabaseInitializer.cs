@@ -114,6 +114,12 @@ public static class DatabaseInitializer
 
         try
         {
+            if (!Directory.Exists(samplesDir))
+            {
+                logger.LogWarning("DatabaseInitializer: blank PDF samples directory not found at {Path}, skipping seed", samplesDir);
+                return;
+            }
+
             await using var conn = new NpgsqlConnection(connectionString);
             await conn.OpenAsync();
 
