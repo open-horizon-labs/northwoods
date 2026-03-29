@@ -4,6 +4,7 @@ const STORAGE_KEY = 'nw:reviewPanelSplit'
 const DEFAULT_RATIO = 0.55
 const MIN_RATIO = 0.25
 const MAX_RATIO = 0.75
+const KEYBOARD_STEP = 0.05
 
 function clamp(value: number): number {
   return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value))
@@ -56,6 +57,10 @@ export function useResizablePanel(
   // Track starting position for drag
   const dragStart = useRef<{ startX: number; startRatio: number } | null>(null)
 
+  // Mirror ratio in a ref to avoid listener churn during drag
+  const ratioRef = useRef(ratio)
+  ratioRef.current = ratio
+
   const onPointerMove = useCallback(
     (e: PointerEvent) => {
       if (!dragStart.current || !containerRef.current) return
@@ -98,7 +103,7 @@ export function useResizablePanel(
     }
   }, [isDragging, onPointerMove, onPointerUp])
 
-  // Handle pointer-down on the drag handle
+  // Handle pointer-down and keyboard events on the drag handle
   useEffect(() => {
     if (!enabled) return
     const handle = handleRef.current
@@ -106,15 +111,42 @@ export function useResizablePanel(
 
     const onPointerDown = (e: PointerEvent) => {
       e.preventDefault()
-      dragStart.current = { startX: e.clientX, startRatio: ratio }
+      dragStart.current = { startX: e.clientX, startRatio: ratioRef.current }
       setIsDragging(true)
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
     }
 
+    const onKeyDown = (e: KeyboardEvent) => {
+      let newRatio: number | null = null
+      switch (e.key) {
+        case 'ArrowLeft':
+          newRatio = clamp(ratioRef.current - KEYBOARD_STEP)
+          break
+        case 'ArrowRight':
+          newRatio = clamp(ratioRef.current + KEYBOARD_STEP)
+          break
+        case 'Home':
+          newRatio = MIN_RATIO
+          break
+        case 'End':
+          newRatio = MAX_RATIO
+          break
+      }
+      if (newRatio !== null) {
+        e.preventDefault()
+        setRatio(newRatio)
+        saveRatio(newRatio)
+      }
+    }
+
     handle.addEventListener('pointerdown', onPointerDown)
-    return () => handle.removeEventListener('pointerdown', onPointerDown)
-  }, [enabled, ratio])
+    handle.addEventListener('keydown', onKeyDown)
+    return () => {
+      handle.removeEventListener('pointerdown', onPointerDown)
+      handle.removeEventListener('keydown', onKeyDown)
+    }
+  }, [enabled])
 
   return { ratio, handleRef, isDragging }
 }

@@ -176,7 +176,8 @@ export function ReviewDetail({
           aria-valuenow={Math.round(ratio * 100)}
           aria-valuemin={25}
           aria-valuemax={75}
-          className={`group relative z-10 w-2 shrink-0 cursor-col-resize touch-none select-none ${isDragging ? 'bg-sky-100' : 'bg-slate-100 hover:bg-slate-200'} transition-colors`}
+          tabIndex={0}
+          className={`group relative z-10 w-2 shrink-0 cursor-col-resize touch-none select-none ${isDragging ? 'bg-sky-100' : 'bg-slate-100 hover:bg-slate-200'} transition-colors motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-sky-500`}
         >
           {/* Visual grip dots */}
           <div className="absolute inset-y-0 left-1/2 flex -translate-x-1/2 flex-col items-center justify-center gap-1">
