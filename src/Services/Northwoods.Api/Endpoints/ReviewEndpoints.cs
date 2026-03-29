@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -11,7 +10,7 @@ namespace Northwoods.Api;
 
 internal static class ReviewEndpoints
 {
-    private const int CaseEmbeddingDimensions = 1536;
+    private const int CaseEmbeddingDimensions = Northwoods.Contracts.EmbeddingService.CaseEmbeddingDimensions;
 
     public static WebApplication MapReviewEndpoints(
         this WebApplication app,
@@ -322,8 +321,8 @@ internal static class ReviewEndpoints
             {
                 try
                 {
-                    var (embedding, promptTokens, totalTokens) = await GenerateCaseEmbeddingAsync(embeddingHttpClient, searchText, apiKey, httpContext.RequestAborted);
-                    embeddingLiteral = ToPgVectorLiteral(embedding);
+                    var (embedding, promptTokens, totalTokens) = await Northwoods.Contracts.EmbeddingService.GenerateCaseEmbeddingAsync(embeddingHttpClient, searchText, apiKey, httpContext.RequestAborted);
+                    embeddingLiteral = Northwoods.Contracts.EmbeddingService.ToPgVectorLiteral(embedding);
 
                     await session.Connection.ExecuteAsync(
                         """
@@ -710,45 +709,4 @@ internal static class ReviewEndpoints
         return content;
     }
 
-    private static async Task<(double[] Embedding, long PromptTokens, long TotalTokens)> GenerateCaseEmbeddingAsync(
-        HttpClient httpClient, string text, string apiKey, CancellationToken ct)
-    {
-        var requestPayload = new { model = "text-embedding-3-small", input = text };
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/embeddings")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(requestPayload), Encoding.UTF8, "application/json")
-        };
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-        using var res = await httpClient.SendAsync(req, ct);
-        var body = await res.Content.ReadAsStringAsync(ct);
-        if (!res.IsSuccessStatusCode)
-            throw new InvalidOperationException($"OpenAI embedding failed ({(int)res.StatusCode}): {body}");
-
-        using var doc = JsonDocument.Parse(body);
-        var dataArray = doc.RootElement.GetProperty("data");
-        var embeddingElement = dataArray[0].GetProperty("embedding");
-        var values = new double[CaseEmbeddingDimensions];
-        var idx = 0;
-        foreach (var el in embeddingElement.EnumerateArray())
-        {
-            if (idx < values.Length)
-                values[idx++] = el.GetDouble();
-        }
-
-        long promptTokens = 0, totalTokens = 0;
-        if (doc.RootElement.TryGetProperty("usage", out var usage))
-        {
-            if (usage.TryGetProperty("prompt_tokens", out var pt) && pt.ValueKind == JsonValueKind.Number)
-                promptTokens = pt.GetInt64();
-            if (usage.TryGetProperty("total_tokens", out var tt) && tt.ValueKind == JsonValueKind.Number)
-                totalTokens = tt.GetInt64();
-        }
-
-        return (values, promptTokens, totalTokens);
-    }
-
-    private static string ToPgVectorLiteral(double[] values)
-        => $"[{string.Join(',', values.Select(v => v.ToString(CultureInfo.InvariantCulture)))}]";
 }

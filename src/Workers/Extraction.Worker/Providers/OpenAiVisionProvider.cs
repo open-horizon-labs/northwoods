@@ -7,7 +7,7 @@ namespace Extraction.Worker;
 
 internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, string modelMini) : IExtractionProvider
 {
-    private static readonly HttpClient Http = new();
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public string Name => "openai-vision";
     public string Stage => "ocr";
@@ -28,7 +28,7 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
             "Do not include markdown fences.";
 
         var (model, body, escalated, escalationReason) = await CallWithFallback(context, prompt, fieldKeys, ct);
-        var outputText = TryGetResponseText(body);
+        var outputText = OpenAiResponseParser.ExtractOutputText(body);
         if (string.IsNullOrWhiteSpace(outputText))
             throw new InvalidOperationException($"OpenAI vision returned empty output_text. Model={model}. Response (first 500 chars): {body[..Math.Min(body.Length, 500)]}");
 
@@ -153,7 +153,7 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
         }
 
         // Phase 2: Check nano response quality -- escalate on low confidence or empty output
-        var outputText = TryGetResponseText(nanoBody);
+        var outputText = OpenAiResponseParser.ExtractOutputText(nanoBody);
         if (string.IsNullOrWhiteSpace(outputText))
         {
             var miniBody = await CallVisionApi(modelMini, context, prompt, ct);
@@ -255,42 +255,6 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
             ".pdf" => "application/pdf",
             _ => "application/octet-stream"
         };
-    }
-
-    private static string TryGetResponseText(string rawResponse)
-    {
-        using var doc = JsonDocument.Parse(rawResponse);
-
-        // Prefer top-level output_text (convenience field)
-        if (doc.RootElement.TryGetProperty("output_text", out var ot) && ot.ValueKind == JsonValueKind.String)
-        {
-            var text = ot.GetString();
-            if (!string.IsNullOrWhiteSpace(text))
-                return text;
-        }
-
-        // Fallback: parse output[] -> content[] -> output_text items
-        if (doc.RootElement.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in output.EnumerateArray())
-            {
-                if (item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var part in content.EnumerateArray())
-                    {
-                        if (part.TryGetProperty("type", out var t) && t.GetString() == "output_text"
-                            && part.TryGetProperty("text", out var txt) && txt.ValueKind == JsonValueKind.String)
-                        {
-                            var text = txt.GetString();
-                            if (!string.IsNullOrWhiteSpace(text))
-                                return text;
-                        }
-                    }
-                }
-            }
-        }
-
-        return string.Empty;
     }
 
     internal readonly record struct TokenUsage(long PromptTokens, long CompletionTokens, long TotalTokens);
