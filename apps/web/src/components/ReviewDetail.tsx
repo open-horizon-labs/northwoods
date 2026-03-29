@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { documentSourceUrl } from '../api'
 import { PdfViewer } from './PdfViewer'
+import { useResizablePanel } from './useResizablePanel'
 import type {
   AuditEventItem,
   ConfidenceField,
@@ -80,6 +81,20 @@ export function ReviewDetail({
     [review.fields],
   )
 
+  // --- Resizable panel split ---
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [isWide, setIsWide] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)')
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => setIsWide(e.matches)
+    handler(mq)
+    mq.addEventListener('change', handler as (e: MediaQueryListEvent) => void)
+    return () => mq.removeEventListener('change', handler as (e: MediaQueryListEvent) => void)
+  }, [])
+
+  const { ratio, handleRef, isDragging } = useResizablePanel(containerRef, isWide)
+
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
   const [discoveredOpen, setDiscoveredOpen] = useState(false)
   const [sourceAvailable, setSourceAvailable] = useState<boolean | null>(null)
@@ -104,10 +119,21 @@ export function ReviewDetail({
       return next
     })
 
+  const leftPercent = isWide ? `${(ratio * 100).toFixed(2)}%` : undefined
+  const rightPercent = isWide ? `${((1 - ratio) * 100).toFixed(2)}%` : undefined
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] xl:h-full">
+    <div
+      ref={containerRef}
+      className={`flex h-full ${isWide ? 'flex-row' : 'flex-col'}`}
+      style={isDragging ? { cursor: 'col-resize' } : undefined}
+    >
       {/* Document viewer */}
-      <section className="flex flex-col border-r border-slate-200 max-h-[60vh] xl:max-h-none" aria-label="Source document">
+      <section
+        className={`flex flex-col border-r border-slate-200 ${isWide ? '' : 'max-h-[60vh]'}`}
+        style={isWide ? { width: leftPercent, minWidth: 0 } : undefined}
+        aria-label="Source document"
+      >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 py-1">
           <p className="truncate text-xs text-slate-500">
             {review.templateId} &middot; {statusLabel(review.status)}
@@ -140,8 +166,34 @@ export function ReviewDetail({
         ) : null}
       </section>
 
+      {/* Drag handle -- only visible at xl+ */}
+      {isWide ? (
+        <div
+          ref={handleRef}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panels"
+          aria-valuenow={Math.round(ratio * 100)}
+          aria-valuemin={25}
+          aria-valuemax={75}
+          tabIndex={0}
+          className={`group relative z-10 w-2 shrink-0 cursor-col-resize touch-none select-none ${isDragging ? 'bg-sky-100' : 'bg-slate-100 hover:bg-slate-200'} transition-colors motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-sky-500`}
+        >
+          {/* Visual grip dots */}
+          <div className="absolute inset-y-0 left-1/2 flex -translate-x-1/2 flex-col items-center justify-center gap-1">
+            <span className={`block h-1 w-1 rounded-full ${isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+          </div>
+        </div>
+      ) : null}
+
       {/* Fields + actions */}
-      <section className="flex flex-col overflow-y-auto bg-white" aria-label="Extracted fields">
+      <section
+        className="flex flex-col overflow-y-auto bg-white"
+        style={isWide ? { width: rightPercent, minWidth: 0 } : undefined}
+        aria-label="Extracted fields"
+      >
         <div className="shrink-0 border-b border-slate-200 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -267,7 +319,7 @@ export function ReviewDetail({
                       aria-describedby={hintId}
                       className="mt-2 min-h-[2rem] whitespace-pre-wrap break-words text-sm text-slate-800"
                     >
-                      {field.value || <span className="text-slate-400 italic">\u2014</span>}
+                      {field.value || <span className="text-slate-400 italic">{'\u2014'}</span>}
                     </p>
                   ) : (
                     <textarea
