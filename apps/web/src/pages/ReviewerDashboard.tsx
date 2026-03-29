@@ -853,6 +853,7 @@ function ReviewDetail({
   onOpenCaseView,
 }: ReviewDetailProps) {
   const isFinalized = statusLabel(review.status) === 'Finalized'
+  const isAutoAccepted = review.status === 3 || review.status === 'Completed'
   const isFailed = statusLabel(review.status) === 'Failed'
 
   const reviewFieldMap = useMemo(() => {
@@ -928,6 +929,8 @@ function ReviewDetail({
                 <p className="text-xs text-amber-700">
                   {uncertainCount} field{uncertainCount === 1 ? '' : 's'} require attention
                 </p>
+              ) : isAutoAccepted ? (
+                <p className="text-xs text-emerald-700">Auto-accepted — all fields high confidence</p>
               ) : (
                 <p className="text-xs text-slate-500">All fields reviewed</p>
               )}
@@ -958,12 +961,16 @@ function ReviewDetail({
               return (
                 <div
                   key={field.fieldKey}
-                  className={`rounded border p-3 ${field.requiresReview ? tier.className : 'border-slate-200 bg-white'}`}
+                  className={`rounded border p-3 ${field.requiresReview ? tier.className : isFinalized ? 'border-slate-200 bg-slate-50' : 'border-slate-200 bg-white'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <label htmlFor={fieldId} className="text-xs font-medium text-slate-900">
-                      {field.fieldKey}
-                    </label>
+                    {isFinalized ? (
+                      <span className="text-xs font-medium text-slate-900">{field.fieldKey}</span>
+                    ) : (
+                      <label htmlFor={fieldId} className="text-xs font-medium text-slate-900">
+                        {field.fieldKey}
+                      </label>
+                    )}
                     <span
                       className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${tier.badgeClass}`}
                       aria-live="polite"
@@ -1017,15 +1024,24 @@ function ReviewDetail({
                       ) : null}
                     </div>
                   ) : null}
-                  <textarea
-                    id={fieldId}
-                    value={field.value}
-                    onChange={(e) => onFieldChange(index, e.target.value)}
-                    rows={Math.max(1, Math.ceil((field.value.length + 1) / 35))}
-                    aria-describedby={hintId}
-                    disabled={isFinalized}
-                    className={`${inputInteractive} mt-2 resize-none disabled:bg-slate-50 disabled:text-slate-500`}
-                  />
+                  {isFinalized ? (
+                    <p
+                      id={fieldId}
+                      aria-describedby={hintId}
+                      className="mt-2 min-h-[2rem] whitespace-pre-wrap break-words text-sm text-slate-800"
+                    >
+                      {field.value || <span className="text-slate-400 italic">—</span>}
+                    </p>
+                  ) : (
+                    <textarea
+                      id={fieldId}
+                      value={field.value}
+                      onChange={(e) => onFieldChange(index, e.target.value)}
+                      rows={Math.max(1, Math.ceil((field.value.length + 1) / 35))}
+                      aria-describedby={hintId}
+                      className={`${inputInteractive} mt-2 resize-none`}
+                    />
+                  )}
                 </div>
               )
             })}
@@ -1266,9 +1282,18 @@ function CaseTimeline({ caseData, caseBusy, caseError, onClose, onOpenReview }: 
           <ol className="relative border-l-2 border-slate-200 ml-2" aria-label="Document timeline">
             {caseData.documents.map((doc: CaseDocumentItem) => {
               const badge = statusBadge(doc.status)
-              const date = new Date(doc.createdAt)
-              const dateLabel = date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
-              const timeLabel = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              // Prefer interviewDate extracted field over uploadedAt; fall back to createdAt
+              const interviewDateValue = doc.fields.find(
+                (f) => f.fieldKey.toLowerCase() === 'interviewdate',
+              )?.value
+              const parsedInterviewDate = interviewDateValue ? new Date(interviewDateValue) : null
+              const usingInterviewDate = parsedInterviewDate !== null && !isNaN(parsedInterviewDate.getTime())
+              const displayDate = usingInterviewDate ? parsedInterviewDate! : new Date(doc.createdAt)
+              const dateLabel = displayDate.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+              // Only show time when falling back to uploadedAt (interviewDate has no meaningful time)
+              const timeLabel = usingInterviewDate
+                ? null
+                : displayDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               const keyFields = doc.fields.slice(0, 3)
               return (
                 <li key={doc.intakeId} className="relative mb-6 last:mb-0 pl-8">
@@ -1283,7 +1308,9 @@ function CaseTimeline({ caseData, caseBusy, caseError, onClose, onOpenReview }: 
                     aria-hidden="true"
                   />
                   {/* Date label */}
-                  <p className="text-xs font-medium text-slate-500">{dateLabel} &middot; {timeLabel}</p>
+                  <p className="text-xs font-medium text-slate-500">
+                    {dateLabel}{timeLabel ? <> &middot; {timeLabel}</> : null}
+                  </p>
                   {/* Card */}
                   <div className="mt-1.5 rounded border border-slate-200 bg-white p-3">
                     <div className="flex items-center justify-between gap-3">
