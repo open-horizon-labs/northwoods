@@ -1,0 +1,17 @@
+{
+  "name": "Northwoods Intake Review",
+  "short_name": "Northwoods",
+  "description": "Document intake and review powered by AI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0369a1",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
