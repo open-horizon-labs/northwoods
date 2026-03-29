@@ -65,8 +65,8 @@ internal static class DocumentEndpoints
                 SELECT d.id AS DocumentId,
                        d.template_id AS TemplateId,
                        COALESCE(
-                           (SELECT COALESCE(ef.corrected_value, ef.extracted_value) FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND LOWER(ef.field_key) = 'applicantname' ORDER BY ef.id LIMIT 1),
-                           t.name || ' (' || LEFT(d.id::text, 8) || ')'
+                           (SELECT NULLIF(BTRIM(COALESCE(ef.corrected_value, ef.extracted_value)), '') FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND LOWER(ef.field_key) = 'applicantname' ORDER BY ef.id LIMIT 1),
+                           COALESCE(t.name, d.template_id) || ' (' || LEFT(d.id::text, 8) || ')'
                        ) AS ApplicantName,
                        d.status AS Status,
                        d.created_at AS CreatedAt,

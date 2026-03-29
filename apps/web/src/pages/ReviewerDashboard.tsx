@@ -868,7 +868,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                 ) : searchPerformed ? (
                   <div className="p-6 text-center" role="status">
                     <p className="text-sm font-medium text-slate-600">No results found</p>
-                    <p className="mt-1 text-xs text-slate-400">Try different keywords or check the spelling.</p>
+                    <p className="mt-1 text-xs text-slate-500">Try different keywords or check the spelling.</p>
                   </div>
                 ) : (
                   <div className="p-4 text-center">
