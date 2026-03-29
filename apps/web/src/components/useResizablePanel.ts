@@ -66,12 +66,14 @@ export function useResizablePanel(
     orientation = 'horizontal',
   } = options ?? {}
 
+  const clampedDefault = clampValue(defaultRatio, minRatio, maxRatio)
+
   const clamp = useCallback(
     (v: number) => clampValue(v, minRatio, maxRatio),
     [minRatio, maxRatio],
   )
 
-  const [ratio, setRatio] = useState(() => loadRatio(storageKey, defaultRatio, minRatio, maxRatio))
+  const [ratio, setRatio] = useState(() => loadRatio(storageKey, clampedDefault, minRatio, maxRatio))
   const [isDragging, setIsDragging] = useState(false)
   const handleRef = useRef<HTMLDivElement | null>(null)
 
