@@ -12,41 +12,56 @@ internal static class OpenAiResponseParser
 {
     /// <summary>
     /// Extract the output text from an OpenAI Responses API JSON body.
-    /// Returns <see cref="string.Empty"/> when no text is found.
+    /// Returns <see cref="string.Empty"/> when no text is found or when the
+    /// input is null, empty, or not valid JSON.
     /// </summary>
     public static string ExtractOutputText(string rawResponse)
     {
-        using var doc = JsonDocument.Parse(rawResponse);
+        if (string.IsNullOrWhiteSpace(rawResponse))
+            return string.Empty;
 
-        // Prefer top-level output_text (convenience field)
-        if (doc.RootElement.TryGetProperty("output_text", out var ot) && ot.ValueKind == JsonValueKind.String)
+        JsonDocument doc;
+        try
         {
-            var text = ot.GetString();
-            if (!string.IsNullOrWhiteSpace(text))
-                return text;
+            doc = JsonDocument.Parse(rawResponse);
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
         }
 
-        // Fallback: parse output[] -> content[] -> output_text items
-        if (doc.RootElement.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
+        using (doc)
         {
-            foreach (var item in output.EnumerateArray())
+            // Prefer top-level output_text (convenience field)
+            if (doc.RootElement.TryGetProperty("output_text", out var ot) && ot.ValueKind == JsonValueKind.String)
             {
-                if (item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
+                var text = ot.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                    return text;
+            }
+
+            // Fallback: parse output[] -> content[] -> output_text items
+            if (doc.RootElement.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in output.EnumerateArray())
                 {
-                    foreach (var part in content.EnumerateArray())
+                    if (item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
                     {
-                        if (part.TryGetProperty("type", out var t) && t.GetString() == "output_text"
-                            && part.TryGetProperty("text", out var txt) && txt.ValueKind == JsonValueKind.String)
+                        foreach (var part in content.EnumerateArray())
                         {
-                            var text = txt.GetString();
-                            if (!string.IsNullOrWhiteSpace(text))
-                                return text;
+                            if (part.TryGetProperty("type", out var t) && t.GetString() == "output_text"
+                                && part.TryGetProperty("text", out var txt) && txt.ValueKind == JsonValueKind.String)
+                            {
+                                var text = txt.GetString();
+                                if (!string.IsNullOrWhiteSpace(text))
+                                    return text;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        return string.Empty;
+            return string.Empty;
+        }
     }
 }

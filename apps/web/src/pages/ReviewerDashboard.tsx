@@ -8,6 +8,7 @@ import type {
   CaseAggregateResponse,
   ConfidenceField,
   DocumentListItem,
+  FinalizeReviewRequest,
   LoginResponse,
   ReviewDetailResponse,
   ReviewQueueItem,
@@ -320,7 +321,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     setFinalizeError(null)
     setFinalizeSuccess(false)
 
-    const payload = {
+    const payload: FinalizeReviewRequest = {
       fields: editableFields,
       reviewerNote,
     }
