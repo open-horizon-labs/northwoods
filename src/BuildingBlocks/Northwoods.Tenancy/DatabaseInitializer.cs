@@ -143,11 +143,12 @@ public static class DatabaseInitializer
                     await using var stream = File.OpenRead(samplePath);
                     await objectStore.UploadAsync(pdfKey, stream, "application/pdf");
 
-                    await conn.ExecuteAsync(
+                    var rowsAffected = await conn.ExecuteAsync(
                         "UPDATE templates SET blank_pdf_key = @PdfKey, updated_at = now() WHERE id = @Id AND tenant_id = @TenantId AND blank_pdf_key IS NULL",
                         new { PdfKey = pdfKey, Id = row.id, TenantId = row.tenant_id });
 
-                    seeded++;
+                    if (rowsAffected > 0)
+                        seeded++;
                 }
                 catch (Exception rowEx)
                 {
