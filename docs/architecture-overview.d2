@@ -1,0 +1,196 @@
+direction: down
+
+title: TraverseLite (Northwoods) Architecture {
+  near: top-center
+  shape: text
+  style: {
+    font-size: 28
+    bold: true
+  }
+}
+
+# Users
+users: Users {
+  style: {
+    fill: "#f8fafc"
+    stroke: "#94a3b8"
+    border-radius: 8
+  }
+  iw: Intake Worker {
+    shape: person
+    style.fill: "#dbeafe"
+  }
+  rv: Reviewer {
+    shape: person
+    style.fill: "#dcfce7"
+  }
+  admin: Admin {
+    shape: person
+    style.fill: "#fef3c7"
+  }
+}
+
+# Frontend
+browser: Browser {
+  style: {
+    fill: "#f0f9ff"
+    stroke: "#0ea5e9"
+    border-radius: 8
+  }
+  react: React + Vite + Tailwind {
+    shape: rectangle
+    style.fill: "#e0f2fe"
+  }
+  pdfjs: PDF.js Viewer {
+    shape: rectangle
+    style.fill: "#e0f2fe"
+  }
+}
+
+# API Layer
+api: Northwoods.Api (.NET 9) {
+  style: {
+    fill: "#faf5ff"
+    stroke: "#a855f7"
+    border-radius: 8
+  }
+  auth: JWT Auth + RLS scope {
+    shape: rectangle
+    style.fill: "#f3e8ff"
+  }
+  endpoints: Endpoints {
+    shape: rectangle
+    style.fill: "#f3e8ff"
+    tooltip: |md
+      - /auth/login
+      - /intakes (upload)
+      - /reviews (queue, detail, finalize)
+      - /search, /cases
+      - /templates (CRUD, blank PDF)
+      - /admin (wipe, reprocess)
+      - /scalar/v1 (API docs)
+    |
+  }
+  rag: Hybrid RAG (5-signal RRF) {
+    shape: rectangle
+    style.fill: "#ede9fe"
+  }
+  metrics: Health + Metrics {
+    shape: rectangle
+    style.fill: "#f3e8ff"
+  }
+}
+
+# Worker
+worker: Extraction.Worker {
+  style: {
+    fill: "#fffbeb"
+    stroke: "#f59e0b"
+    border-radius: 8
+  }
+  poll: Poll loop (5s) {
+    shape: rectangle
+    style.fill: "#fef3c7"
+  }
+  pipeline: Extraction Pipeline {
+    shape: rectangle
+    style.fill: "#fef3c7"
+  }
+  providers: Providers {
+    style: {
+      fill: "#fefce8"
+      border-radius: 4
+    }
+    vision: OpenAI Vision\n(gpt-5.4-nano → mini) {
+      shape: rectangle
+      style.fill: "#fde68a"
+    }
+    paddle: PaddleOCR\n(optional) {
+      shape: rectangle
+      style.fill: "#fde68a"
+      style.stroke-dash: 3
+    }
+    normalizer: OpenAI Normalizer\n(optional) {
+      shape: rectangle
+      style.fill: "#fde68a"
+      style.stroke-dash: 3
+    }
+  }
+  consensus: Field Consensus\n+ Confidence Gating {
+    shape: rectangle
+    style.fill: "#fef3c7"
+  }
+  embed: Embedding Generation\n(text-embedding-3-small) {
+    shape: rectangle
+    style.fill: "#fef3c7"
+  }
+}
+
+# Data
+data: Data Layer {
+  style: {
+    fill: "#f0fdf4"
+    stroke: "#22c55e"
+    border-radius: 8
+  }
+  pg: Postgres 18 {
+    shape: cylinder
+    style.fill: "#bbf7d0"
+    tooltip: |md
+      - RLS on all 7 tables
+      - pgvector (HNSW index)
+      - pg_trgm (GIN indexes)
+      - FTS (tsvector)
+      - Append-only extraction_attempts
+      - Audit events with correlation IDs
+    |
+  }
+  minio: MinIO (S3) {
+    shape: cylinder
+    style.fill: "#bbf7d0"
+  }
+}
+
+# External
+openai: OpenAI API {
+  shape: cloud
+  style: {
+    fill: "#fecaca"
+    stroke: "#ef4444"
+  }
+}
+
+# Connections
+users.iw -> browser.react: Upload forms
+users.rv -> browser.react: Review + finalize
+users.admin -> browser.react: Manage templates
+
+browser.react -> api.auth: JWT bearer
+browser.pdfjs -> api.endpoints: Fetch PDF blob
+
+api.auth -> api.endpoints: Scoped session
+api.endpoints -> data.pg: Metadata + fields + audit
+api.endpoints -> data.minio: Document blobs
+api.rag -> data.pg: FTS + vector + trgm + DOB + RRF
+
+worker.poll -> data.pg: SELECT uploaded docs
+worker.pipeline -> worker.providers
+worker.providers.vision -> openai: Vision API
+worker.consensus -> data.pg: Persist fields + attempts
+worker.embed -> openai: Embeddings API
+worker.embed -> data.pg: Update case_profiles
+
+# Tenant isolation
+tenant: Tenant Isolation {
+  near: bottom-center
+  shape: text
+  style: {
+    font-size: 14
+    italic: true
+    font-color: "#64748b"
+  }
+  label: |md
+    Row-Level Security on all tables · JWT carries tenant claim
+    app.tenant_id set per DB session · Startup assertion verifies isolation
+  |
+}
