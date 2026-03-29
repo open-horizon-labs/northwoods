@@ -108,7 +108,7 @@ jobs:
         run: pnpm --dir apps/web exec playwright test --grep-invert "@backend"
 
       - name: Upload Playwright report
-        if: ${{ !cancelled() }}
+        if: ${{ failure() && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
