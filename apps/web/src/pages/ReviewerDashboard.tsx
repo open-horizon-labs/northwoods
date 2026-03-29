@@ -118,6 +118,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(initialDocumentId ?? null)
+  const [selectedApplicantName, setSelectedApplicantName] = useState<string | undefined>(undefined)
 
   const [reviewDetail, setReviewDetail] = useState<ReviewDetailResponse | null>(null)
   const [editableFields, setEditableFields] = useState<ConfidenceField[]>([])
@@ -261,6 +262,23 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     }
     void loadReview(selectedReviewId)
   }, [selectedReviewId, loadReview])
+
+  // Keep selectedApplicantName in sync with selectedReviewId.
+  // Queue then documents list are authoritative; click-time state is a fallback
+  // for docs not yet in either list (e.g. opened via search before documents
+  // list loads). When selectedReviewId clears, reset the name.
+  useEffect(() => {
+    if (!selectedReviewId) {
+      setSelectedApplicantName(undefined)
+      return
+    }
+    const fromQueue = queue.find((i) => i.reviewId === selectedReviewId)?.applicantName
+    if (fromQueue) { setSelectedApplicantName(fromQueue); return }
+    const fromDocs = documents.find((d) => d.documentId === selectedReviewId)?.applicantName
+    if (fromDocs) setSelectedApplicantName(fromDocs)
+    // If not in queue or documents (opened via search before documents load),
+    // the name was already set in the click handler -- don't override it.
+  }, [selectedReviewId, queue, documents])
 
   // Scroll detail pane to top when review changes
   useEffect(() => {
@@ -473,7 +491,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                     type="search"
                     value={queueSearch}
                     onChange={(e) => setQueueSearch(e.target.value)}
-                    placeholder="Filter applicant or template…"
+                    placeholder="Filter current queue…"
                     className={`${inputInteractive} text-xs`}
                   />
                 </label>
@@ -509,7 +527,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                         <li key={item.reviewId}>
                           <button
                             type="button"
-                            onClick={() => { closeCaseView(); setSelectedReviewId(item.reviewId) }}
+                            onClick={() => { closeCaseView(); setSelectedReviewId(item.reviewId); setSelectedApplicantName(item.applicantName) }}
                             aria-pressed={isSelected}
                             aria-current={isSelected ? 'true' : undefined}
                             aria-label={`Review ${item.applicantName}, ${item.uncertainFieldCount} uncertain field${item.uncertainFieldCount === 1 ? '' : 's'}`}
@@ -680,9 +698,9 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                         <li key={item.intakeId}>
                           <button
                             type="button"
-                            onClick={() => void openCaseView(item.applicantName)}
+                            onClick={() => { closeCaseView(); setSelectedReviewId(item.intakeId); setSelectedApplicantName(item.applicantName) }}
                             className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${FOCUS_RING}`}
-                            aria-label={`View case for ${item.applicantName}`}
+                            aria-label={`Open review for ${item.applicantName}`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
@@ -733,7 +751,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
               caseBusy={caseBusy}
               caseError={caseError}
               onClose={closeCaseView}
-              onOpenReview={(intakeId) => { closeCaseView(); setSelectedReviewId(intakeId) }}
+              onOpenReview={(intakeId) => { closeCaseView(); setSelectedReviewId(intakeId); setSelectedApplicantName(undefined) }}
             />
           ) : !selectedReviewId ? (
             <div className="flex flex-1 items-center justify-center p-8 text-center">
@@ -764,10 +782,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
             <ReviewDetail
               accessToken={auth.accessToken}
               review={reviewDetail}
-              applicantName={
-                queue.find((i) => i.reviewId === selectedReviewId)?.applicantName ??
-                documents.find((d) => d.documentId === selectedReviewId)?.applicantName
-              }
+              applicantName={selectedApplicantName}
               editableFields={editableFields}
               reviewerNote={reviewerNote}
               finalizeBusy={finalizeBusy}
@@ -781,6 +796,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
               onFinalize={handleFinalize}
               onRetry={handleRetry}
               onSelectReview={setSelectedReviewId}
+              onOpenCaseView={openCaseView}
             />
           ) : null}
         </main>
@@ -808,6 +824,10 @@ type ReviewDetailProps = {
   onFinalize: () => void
   onRetry: () => void
   onSelectReview: (id: string) => void
+  /** Called with the applicant's display name to open the case aggregate view.
+   *  The /cases/{personKey} endpoint uses fuzzy name matching, so this IS an
+   *  applicant name string -- there is no stable UUID-based case identifier. */
+  onOpenCaseView: (applicantName: string) => void
 }
 
 function ReviewDetail({
@@ -827,6 +847,7 @@ function ReviewDetail({
   onFinalize,
   onRetry,
   onSelectReview,
+  onOpenCaseView,
 }: ReviewDetailProps) {
   const isFinalized = statusLabel(review.status) === 'Finalized'
   const isFailed = statusLabel(review.status) === 'Failed'
@@ -902,6 +923,16 @@ function ReviewDetail({
                 <p className="text-xs text-slate-500">All fields reviewed</p>
               )}
             </div>
+            {applicantName && applicantName !== '(unknown)' ? (
+              <button
+                type="button"
+                onClick={() => onOpenCaseView(applicantName)}
+                className={`${btnSecondary} shrink-0 px-2.5 py-1 text-xs`}
+                title="View all documents for this applicant"
+              >
+                All cases
+              </button>
+            ) : null}
           </div>
         </div>
 
