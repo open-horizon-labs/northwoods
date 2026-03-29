@@ -465,13 +465,13 @@ public sealed class RetryAndAuditTrailTests
 
         for (var i = 0; i < 8 && current is not null; i++)
         {
-            var candidate = Path.Combine(current.FullName, "samples", "intakes", "chatgpt-sample-general-intake.pdf");
+            var candidate = Path.Combine(current.FullName, "samples", "intakes", "blank-general-assistance.pdf");
             if (File.Exists(candidate))
                 return candidate;
 
             current = current.Parent;
         }
 
-        return Path.GetFullPath(Path.Combine("samples", "intakes", "chatgpt-sample-general-intake.pdf"));
+        return Path.GetFullPath(Path.Combine("samples", "intakes", "blank-general-assistance.pdf"));
     }
 }
