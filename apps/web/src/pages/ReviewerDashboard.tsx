@@ -524,7 +524,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
             <span className="hidden text-xs text-slate-500 sm:block">{auth.tenantId}</span>
             <a
               href="#rag-report"
-              className={`hidden text-xs text-slate-400 hover:text-slate-600 sm:block ${FOCUS_RING}`}
+              className={`hidden text-xs text-slate-600 hover:text-slate-800 sm:block ${FOCUS_RING}`}
             >
               RAG Report
             </a>
