@@ -87,8 +87,10 @@ With shared tables plus RLS, we can write direct tests showing that:
 
 - JWTs carry `tenantId` and role claims
 - Services resolve tenant context from authenticated requests
-- Temporal workflows carry tenant context explicitly in workflow inputs and activity calls
+- The extraction worker receives tenant context from the document record it picks up from the poll queue; tenant context is passed explicitly through each extraction activity call
 - MinIO object metadata and object-key conventions remain tenant-aware
+
+Note: ADR 002 (Temporal) was deferred. The worker polling model used instead propagates tenant context through the `Document.TenantId` field read at poll time.
 
 ### Database model
 

@@ -1,8 +1,9 @@
 # Browser Fuzz Report — Northwoods Web App
 
-**Date:** 2026-03-27  
-**Target:** http://127.0.0.1:4173 (Vite dev server proxying to http://localhost:5100)  
-**Tool:** playwright-cli (headless Edge)  
+**Date:** 2026-03-27
+**Status:** Historical — all findings below were resolved before final submission. This report documents the adversarial testing session; findings were tracked as GitHub issues and fixes are merged to `main`.
+**Target:** http://127.0.0.1:4173 (Vite dev server proxying to http://localhost:5100)
+**Tool:** playwright-cli (headless Edge)
 **Scope:** All user-facing flows on the single-page intake review console  
 
 ---

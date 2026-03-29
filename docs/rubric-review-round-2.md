@@ -75,11 +75,11 @@ This is the second rubric review pass (issue #10), run after round 1 (#9) fixes 
 
 ## Known Gaps (Documented in Self-Assessment)
 
-- Web frontend not in Docker Compose (run separately)
 - Token refresh/rate limiting not implemented
-- OpenAI Vision requires API key in worker environment
-- Case profile embeddings use hash-based generator, not real embedding model
-- UI smoke tests not automated in CI
+- OpenAI Vision and `text-embedding-3-small` both require `OPENAI_API_KEY` in the worker environment; extraction and embedding will fail at startup if the key is absent
+- UI smoke tests (Playwright) scaffold exists but full automation in CI is a follow-on item
+
+Note: "Web frontend not in Docker Compose" was resolved — the `web` service is present in `docker-compose.yml` and starts with `docker compose up -d`. "Hash-based embeddings" was also resolved — `text-embedding-3-small` via the OpenAI Embeddings API is used for all case profile vectors.
 
 ## Conclusion
 

@@ -1,7 +1,8 @@
 # ADR 002: Use Temporal for document processing workflows
 
-- **Status:** Accepted
+- **Status:** Accepted — deferred; not yet implemented
 - **Date:** 2026-03-25
+- **Update:** 2026-03-27 — Temporal was deferred in favor of a simpler .NET `BackgroundService` worker polling loop. The rationale below still stands as the target design if orchestration is upgraded. The current implementation uses the polling model described in the "Rejected alternatives" section of this ADR, with retry behavior handled in-process.
 
 ## Context
 

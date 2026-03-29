@@ -94,13 +94,30 @@ dotnet test tests/Northwoods.Api.IntegrationTests/ --filter Category=RAG
 
 ### Enable OpenAI Vision extraction
 
+The extraction worker defaults to `UseOpenAiVision=true`. Without an API key the worker will throw a startup exception and documents will not be processed.
+
+Set `OPENAI_API_KEY` before starting:
+
 ```bash
-cp .env.example .env.local
-# Set OPENAI_API_KEY=sk-...
-# Set Extraction__UseOpenAiVision=true
+export OPENAI_API_KEY=sk-...
+docker compose up -d
 ```
 
-Without an API key, extraction is disabled until one provider is enabled in configuration.
+Or create a `.env` file at the repo root (docker compose picks this up automatically):
+
+```bash
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY=sk-...
+```
+
+To run without extraction (UI/API development only), disable the provider explicitly:
+
+```bash
+# Add to .env:
+Extraction__UseOpenAiVision=false
+```
+
+In this mode uploads and review UI work, but no documents will be extracted.
 
 ---
 
