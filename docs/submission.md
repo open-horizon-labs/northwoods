@@ -202,7 +202,7 @@ The tools formed a layered operating system for development:
 2. **RNA** provided codebase awareness (where things are and how they connect)
 3. **Dev-pipeline agents** executed the work (branch, implement, review, ship)
 4. **CodeRabbit + CodeQL + /review + /dissent** caught issues the agent missed
-5. **Dev-pipeline-oversight** verified nothing slipped through
+5. **Dev-pipeline-oversight** reduced what slipped through
 
 The human role was scoping issues, reviewing agent output, catching drift, and making architectural calls. AI increased leverage without replacing accountability.
 
