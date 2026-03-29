@@ -154,8 +154,17 @@ Intake Worker → [Upload PDF] → API → MinIO (store) + Postgres (metadata)
 - **2 tenants:** Sunrise (tenant-a) and Lakewood (tenant-b)
 - **6 users per system:** worker + reviewer + admin per tenant (password: `password`)
 - **4 templates per tenant:** General Assistance, Housing Stability, Behavioral Health, SOAP Progress Note
-- **184 seeded documents** across two visual form cohorts with narrative arc data
+- **8 seeded documents** for RAG demo (P017, P019, P037, P039 across both tenants) — loaded by `DatabaseInitializer.SeedCorpusAsync` on every API startup
 - **Corpus generators** in `scripts/corpus/` — regenerate with `python3 scripts/corpus/generate_seed_sql.py`
+
+### RAG cold-start
+
+Vector similarity search requires embeddings generated via the OpenAI API. On a fresh database:
+
+- **With `OPENAI_API_KEY` set:** The extraction worker generates embeddings for seeded case profiles automatically. All three retrieval strategies (FTS, trigram, vector cosine similarity) work.
+- **Without `OPENAI_API_KEY`:** FTS and trigram search still work, but vector similarity results will be absent. The similar-cases panel will show fewer or no results for queries that depend on semantic matching.
+
+To regenerate embeddings after resetting the database, run `scripts/reset_demo.py` which re-uploads seed documents and triggers the extraction/embedding pipeline.
 
 ---
 
