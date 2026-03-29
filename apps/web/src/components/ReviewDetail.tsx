@@ -93,7 +93,23 @@ export function ReviewDetail({
     return () => mq.removeEventListener('change', handler as (e: MediaQueryListEvent) => void)
   }, [])
 
-  const { ratio, handleRef, isDragging } = useResizablePanel(containerRef, isWide)
+  // Horizontal resize (wide / xl+ layout): PDF left, fields right
+  const hResize = useResizablePanel(containerRef, isWide, {
+    storageKey: 'nw:reviewPanelSplit',
+    defaultRatio: 0.55,
+    minRatio: 0.25,
+    maxRatio: 0.75,
+    orientation: 'horizontal',
+  })
+
+  // Vertical resize (stacked / narrow layout): PDF top, fields bottom
+  const vResize = useResizablePanel(containerRef, !isWide, {
+    storageKey: 'nw:reviewPanelSplitV',
+    defaultRatio: 0.45,
+    minRatio: 0.20,
+    maxRatio: 0.75,
+    orientation: 'vertical',
+  })
 
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set())
   const [discoveredOpen, setDiscoveredOpen] = useState(false)
@@ -119,19 +135,26 @@ export function ReviewDetail({
       return next
     })
 
-  const leftPercent = isWide ? `${(ratio * 100).toFixed(2)}%` : undefined
-  const rightPercent = isWide ? `${((1 - ratio) * 100).toFixed(2)}%` : undefined
+  const leftPercent = isWide ? `${(hResize.ratio * 100).toFixed(2)}%` : undefined
+  const rightPercent = isWide ? `${((1 - hResize.ratio) * 100).toFixed(2)}%` : undefined
+  const topPercent = !isWide ? `${(vResize.ratio * 100).toFixed(2)}%` : undefined
+  const bottomPercent = !isWide ? `${((1 - vResize.ratio) * 100).toFixed(2)}%` : undefined
+  const dragging = hResize.isDragging || vResize.isDragging
 
   return (
     <div
       ref={containerRef}
       className={`flex h-full ${isWide ? 'flex-row' : 'flex-col'}`}
-      style={isDragging ? { cursor: 'col-resize' } : undefined}
+      style={dragging ? { cursor: isWide ? 'col-resize' : 'row-resize' } : undefined}
     >
       {/* Document viewer */}
       <section
-        className={`flex flex-col border-r border-slate-200 ${isWide ? '' : 'max-h-[60vh]'}`}
-        style={isWide ? { width: leftPercent, minWidth: 0 } : undefined}
+        className={`flex flex-col ${isWide ? 'border-r border-slate-200' : ''}`}
+        style={
+          isWide
+            ? { width: leftPercent, minWidth: 0 }
+            : { height: topPercent, minHeight: 0 }
+        }
         aria-label="Source document"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 py-1">
@@ -166,32 +189,55 @@ export function ReviewDetail({
         ) : null}
       </section>
 
-      {/* Drag handle -- only visible at xl+ */}
+      {/* Drag handle — horizontal (xl+) or vertical (stacked) */}
       {isWide ? (
         <div
-          ref={handleRef}
+          ref={hResize.handleRef}
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize panels"
-          aria-valuenow={Math.round(ratio * 100)}
+          aria-label="Resize panels horizontally"
+          aria-valuenow={Math.round(hResize.ratio * 100)}
           aria-valuemin={25}
           aria-valuemax={75}
           tabIndex={0}
-          className={`group relative z-10 w-2 shrink-0 cursor-col-resize touch-none select-none ${isDragging ? 'bg-sky-100' : 'bg-slate-100 hover:bg-slate-200'} transition-colors motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-sky-500`}
+          className={`group relative z-10 w-2 shrink-0 cursor-col-resize touch-none select-none ${hResize.isDragging ? 'bg-sky-100' : 'bg-slate-100 hover:bg-slate-200'} transition-colors motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-sky-500`}
         >
-          {/* Visual grip dots */}
+          {/* Vertical grip dots */}
           <div className="absolute inset-y-0 left-1/2 flex -translate-x-1/2 flex-col items-center justify-center gap-1">
-            <span className={`block h-1 w-1 rounded-full ${isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
-            <span className={`block h-1 w-1 rounded-full ${isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
-            <span className={`block h-1 w-1 rounded-full ${isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${hResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${hResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${hResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div
+          ref={vResize.handleRef}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize PDF preview height"
+          aria-valuenow={Math.round(vResize.ratio * 100)}
+          aria-valuemin={20}
+          aria-valuemax={75}
+          tabIndex={0}
+          className={`group relative z-10 h-2 shrink-0 cursor-row-resize touch-none select-none ${vResize.isDragging ? 'bg-sky-100' : 'bg-slate-100 hover:bg-slate-200'} transition-colors motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-sky-500`}
+        >
+          {/* Horizontal grip dots */}
+          <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-row items-center justify-center gap-1">
+            <span className={`block h-1 w-1 rounded-full ${vResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${vResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${vResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+          </div>
+        </div>
+      )}
 
       {/* Fields + actions */}
       <section
         className="flex flex-col overflow-y-auto bg-white"
-        style={isWide ? { width: rightPercent, minWidth: 0 } : undefined}
+        style={
+          isWide
+            ? { width: rightPercent, minWidth: 0 }
+            : { height: bottomPercent, minHeight: 0 }
+        }
         aria-label="Extracted fields"
       >
         <div className="shrink-0 border-b border-slate-200 px-4 py-3">

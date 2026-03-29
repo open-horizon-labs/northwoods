@@ -4,6 +4,7 @@ import { api, userMessage } from '../api'
 import { CaseTimeline } from '../components/CaseTimeline'
 import { ReviewDetail } from '../components/ReviewDetail'
 import { btnSecondary, FOCUS_RING, inputInteractive } from '../components/reviewStyles'
+import { useResizablePanel } from '../components/useResizablePanel'
 import type { ReviewRoute, SidebarMode } from '../lib/hashRoute'
 import { buildReviewHash, pushHash, replaceHash } from '../lib/hashRoute'
 import type {
@@ -77,6 +78,16 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
   const detailPaneRef = useRef<HTMLDivElement>(null)
   // Ref to the global search input -- used for "/" keyboard shortcut focus
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Resizable sidebar
+  const sidebarContainerRef = useRef<HTMLDivElement>(null)
+  const sidebarResize = useResizablePanel(sidebarContainerRef, true, {
+    storageKey: 'nw:sidebarWidth',
+    defaultRatio: 0.22,
+    minRatio: 0.15,
+    maxRatio: 0.35,
+    orientation: 'horizontal',
+  })
 
   const filteredQueue = useMemo(() => {
     const q = queueSearch.trim().toLowerCase()
@@ -523,11 +534,12 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
       </header>
 
       {/* Two-pane layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div ref={sidebarContainerRef} className="flex flex-1 overflow-hidden" style={sidebarResize.isDragging ? { cursor: 'col-resize' } : undefined}>
         {/* Sidebar pane */}
         <aside
           id="queue"
-          className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white xl:w-80"
+          className="flex shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white"
+          style={{ width: `${(sidebarResize.ratio * 100).toFixed(2)}%`, minWidth: 0 }}
           aria-label="Document sidebar"
         >
           {/* Tab bar */}
@@ -847,10 +859,30 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
           )}
         </aside>
 
+        {/* Sidebar resize handle */}
+        <div
+          ref={sidebarResize.handleRef}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          aria-valuenow={Math.round(sidebarResize.ratio * 100)}
+          aria-valuemin={15}
+          aria-valuemax={35}
+          tabIndex={0}
+          className={`group relative z-10 w-1.5 shrink-0 cursor-col-resize touch-none select-none ${sidebarResize.isDragging ? 'bg-sky-100' : 'bg-slate-100 hover:bg-slate-200'} transition-colors motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-sky-500`}
+        >
+          <div className="absolute inset-y-0 left-1/2 flex -translate-x-1/2 flex-col items-center justify-center gap-1">
+            <span className={`block h-1 w-1 rounded-full ${sidebarResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${sidebarResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+            <span className={`block h-1 w-1 rounded-full ${sidebarResize.isDragging ? 'bg-sky-500' : 'bg-slate-400 group-hover:bg-slate-500'}`} />
+          </div>
+        </div>
+
         {/* Detail pane */}
         <main
           ref={detailPaneRef}
           className="flex flex-1 flex-col overflow-y-auto"
+          style={{ minWidth: 0 }}
           aria-label="Review detail"
         >
           {caseView ? (

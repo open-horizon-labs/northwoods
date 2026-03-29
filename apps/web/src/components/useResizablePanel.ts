@@ -1,38 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const STORAGE_KEY = 'nw:reviewPanelSplit'
-const DEFAULT_RATIO = 0.55
-const MIN_RATIO = 0.25
-const MAX_RATIO = 0.75
-const KEYBOARD_STEP = 0.05
+type Orientation = 'horizontal' | 'vertical'
 
-function clamp(value: number): number {
-  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, value))
+type Options = {
+  storageKey: string
+  defaultRatio?: number
+  minRatio?: number
+  maxRatio?: number
+  orientation?: Orientation
 }
 
-function loadRatio(): number {
+const KEYBOARD_STEP = 0.05
+
+function clampValue(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function loadRatio(key: string, defaultRatio: number, min: number, max: number): number {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(key)
     if (stored !== null) {
       const parsed = parseFloat(stored)
-      if (Number.isFinite(parsed)) return clamp(parsed)
+      if (Number.isFinite(parsed)) return clampValue(parsed, min, max)
     }
   } catch {
     // localStorage unavailable (e.g. private browsing)
   }
-  return DEFAULT_RATIO
+  return defaultRatio
 }
 
-function saveRatio(ratio: number): void {
+function saveRatio(key: string, ratio: number): void {
   try {
-    localStorage.setItem(STORAGE_KEY, ratio.toFixed(4))
+    localStorage.setItem(key, ratio.toFixed(4))
   } catch {
     // ignore write failures
   }
 }
 
 export type ResizablePanelState = {
-  /** Current left-panel ratio (0..1) */
+  /** Current first-panel ratio (0..1) */
   ratio: number
   /** Ref to attach to the drag handle element */
   handleRef: React.RefObject<HTMLDivElement | null>
@@ -43,37 +49,64 @@ export type ResizablePanelState = {
 /**
  * Hook that manages a resizable two-panel split.
  *
- * @param containerRef - ref to the container element whose width defines 100%
+ * @param containerRef - ref to the container element whose width/height defines 100%
  * @param enabled - set to false to disable resizing (e.g. on narrow viewports)
+ * @param options - configuration for storage key, default ratio, min/max, orientation
  */
 export function useResizablePanel(
   containerRef: React.RefObject<HTMLDivElement | null>,
   enabled: boolean,
+  options?: Options,
 ): ResizablePanelState {
-  const [ratio, setRatio] = useState(loadRatio)
+  const {
+    storageKey = 'nw:reviewPanelSplit',
+    defaultRatio = 0.55,
+    minRatio = 0.25,
+    maxRatio = 0.75,
+    orientation = 'horizontal',
+  } = options ?? {}
+
+  const clampedDefault = clampValue(defaultRatio, minRatio, maxRatio)
+
+  const clamp = useCallback(
+    (v: number) => clampValue(v, minRatio, maxRatio),
+    [minRatio, maxRatio],
+  )
+
+  const [ratio, setRatio] = useState(() => loadRatio(storageKey, clampedDefault, minRatio, maxRatio))
   const [isDragging, setIsDragging] = useState(false)
   const handleRef = useRef<HTMLDivElement | null>(null)
 
+  // Reload ratio when storage key or bounds change (defensive — callers currently
+  // pass static props, but this prevents stale ratios if they ever become dynamic).
+  useEffect(() => {
+    setRatio(loadRatio(storageKey, clampedDefault, minRatio, maxRatio))
+  }, [storageKey, clampedDefault, minRatio, maxRatio])
+
   // Track starting position for drag
-  const dragStart = useRef<{ startX: number; startRatio: number } | null>(null)
+  const dragStart = useRef<{ startPos: number; startRatio: number } | null>(null)
 
   // Mirror ratio in a ref to avoid listener churn during drag
   const ratioRef = useRef(ratio)
   ratioRef.current = ratio
 
+  const isVertical = orientation === 'vertical'
+  const cursorStyle = isVertical ? 'row-resize' : 'col-resize'
+
   const onPointerMove = useCallback(
     (e: PointerEvent) => {
       if (!dragStart.current || !containerRef.current) return
       const containerRect = containerRef.current.getBoundingClientRect()
-      const containerWidth = containerRect.width
-      if (containerWidth === 0) return
+      const containerSize = isVertical ? containerRect.height : containerRect.width
+      if (containerSize === 0) return
 
-      const deltaX = e.clientX - dragStart.current.startX
-      const deltaRatio = deltaX / containerWidth
+      const clientPos = isVertical ? e.clientY : e.clientX
+      const deltaPos = clientPos - dragStart.current.startPos
+      const deltaRatio = deltaPos / containerSize
       const newRatio = clamp(dragStart.current.startRatio + deltaRatio)
       setRatio(newRatio)
     },
-    [containerRef],
+    [containerRef, isVertical, clamp],
   )
 
   const onPointerUp = useCallback(
@@ -85,11 +118,11 @@ export function useResizablePanel(
 
       // Persist final ratio
       setRatio((r) => {
-        saveRatio(r)
+        saveRatio(storageKey, r)
         return r
       })
     },
-    [],
+    [storageKey],
   )
 
   // Attach/detach document-level listeners during drag
@@ -111,32 +144,36 @@ export function useResizablePanel(
 
     const onPointerDown = (e: PointerEvent) => {
       e.preventDefault()
-      dragStart.current = { startX: e.clientX, startRatio: ratioRef.current }
+      const startPos = isVertical ? e.clientY : e.clientX
+      dragStart.current = { startPos, startRatio: ratioRef.current }
       setIsDragging(true)
-      document.body.style.cursor = 'col-resize'
+      document.body.style.cursor = cursorStyle
       document.body.style.userSelect = 'none'
     }
+
+    const decreaseKey = isVertical ? 'ArrowUp' : 'ArrowLeft'
+    const increaseKey = isVertical ? 'ArrowDown' : 'ArrowRight'
 
     const onKeyDown = (e: KeyboardEvent) => {
       let newRatio: number | null = null
       switch (e.key) {
-        case 'ArrowLeft':
+        case decreaseKey:
           newRatio = clamp(ratioRef.current - KEYBOARD_STEP)
           break
-        case 'ArrowRight':
+        case increaseKey:
           newRatio = clamp(ratioRef.current + KEYBOARD_STEP)
           break
         case 'Home':
-          newRatio = MIN_RATIO
+          newRatio = minRatio
           break
         case 'End':
-          newRatio = MAX_RATIO
+          newRatio = maxRatio
           break
       }
       if (newRatio !== null) {
         e.preventDefault()
         setRatio(newRatio)
-        saveRatio(newRatio)
+        saveRatio(storageKey, newRatio)
       }
     }
 
@@ -146,7 +183,7 @@ export function useResizablePanel(
       handle.removeEventListener('pointerdown', onPointerDown)
       handle.removeEventListener('keydown', onKeyDown)
     }
-  }, [enabled])
+  }, [enabled, isVertical, cursorStyle, clamp, minRatio, maxRatio, storageKey])
 
   return { ratio, handleRef, isDragging }
 }
