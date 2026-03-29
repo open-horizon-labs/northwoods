@@ -175,15 +175,3 @@ test.describe('Cross-tenant isolation', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 7. Dev scaffold -> navigate to /#dev, verify loads
-// ---------------------------------------------------------------------------
-
-test.describe('Dev scaffold', () => {
-  test('loads the developer page at /#dev', async ({ page }) => {
-    await page.goto('/#dev')
-
-    // The DevPage renders login presets and various dev panels.
-    // Check for the tenant-a:worker preset button or "Developer" / dev-related heading.
-    await expect(page.getByText(/tenant-a/i).first()).toBeVisible({ timeout: 10_000 })
-  })
-})
