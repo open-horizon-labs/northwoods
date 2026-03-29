@@ -522,6 +522,12 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
           </div>
           <div className="flex items-center gap-4">
             <span className="hidden text-xs text-slate-500 sm:block">{auth.tenantId}</span>
+            <a
+              href="#rag-report"
+              className={`hidden text-xs text-slate-600 hover:text-slate-800 sm:block ${FOCUS_RING}`}
+            >
+              RAG Report
+            </a>
             <button
               type="button"
               onClick={onLogout}

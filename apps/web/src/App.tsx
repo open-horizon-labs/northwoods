@@ -8,7 +8,6 @@ import type { LoginResponse } from './types'
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const WorkerDashboard = lazy(() => import('./pages/WorkerDashboard'))
 const ReviewerDashboard = lazy(() => import('./pages/ReviewerDashboard'))
-const DevPage = lazy(() => import('./pages/DevPage'))
 const AdminTemplates = lazy(() => import('./pages/AdminTemplates'))
 const RagReportPage = lazy(() => import('./pages/RagReportPage'))
 
@@ -67,14 +66,6 @@ export default function App() {
       setAuth(null)
     })
   }, [])
-
-  if (hash === '#dev') {
-    return (
-      <Suspense fallback={<Spinner />}>
-        <DevPage />
-      </Suspense>
-    )
-  }
 
   if (!auth) {
     return (
