@@ -964,9 +964,13 @@ function ReviewDetail({
                   className={`rounded border p-3 ${field.requiresReview ? tier.className : isFinalized ? 'border-slate-200 bg-slate-50' : 'border-slate-200 bg-white'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <label htmlFor={fieldId} className="text-xs font-medium text-slate-900">
-                      {field.fieldKey}
-                    </label>
+                    {isFinalized ? (
+                      <span className="text-xs font-medium text-slate-900">{field.fieldKey}</span>
+                    ) : (
+                      <label htmlFor={fieldId} className="text-xs font-medium text-slate-900">
+                        {field.fieldKey}
+                      </label>
+                    )}
                     <span
                       className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${tier.badgeClass}`}
                       aria-live="polite"
@@ -1282,16 +1286,11 @@ function CaseTimeline({ caseData, caseBusy, caseError, onClose, onOpenReview }: 
               const interviewDateValue = doc.fields.find(
                 (f) => f.fieldKey.toLowerCase() === 'interviewdate',
               )?.value
-              const displayDate = (() => {
-                if (interviewDateValue) {
-                  const parsed = new Date(interviewDateValue)
-                  if (!isNaN(parsed.getTime())) return parsed
-                }
-                return new Date(doc.createdAt)
-              })()
+              const parsedInterviewDate = interviewDateValue ? new Date(interviewDateValue) : null
+              const usingInterviewDate = parsedInterviewDate !== null && !isNaN(parsedInterviewDate.getTime())
+              const displayDate = usingInterviewDate ? parsedInterviewDate! : new Date(doc.createdAt)
               const dateLabel = displayDate.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
               // Only show time when falling back to uploadedAt (interviewDate has no meaningful time)
-              const usingInterviewDate = interviewDateValue && !isNaN(new Date(interviewDateValue).getTime())
               const timeLabel = usingInterviewDate
                 ? null
                 : displayDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
