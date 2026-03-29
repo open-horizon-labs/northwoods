@@ -314,7 +314,7 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
         if (text.StartsWith("```", StringComparison.Ordinal))
         {
             var lines = text.Split('\n');
-            var startIdx = lines[0].TrimEnd().Length > 3 ? 1 : 1;
+            var startIdx = 1;
             var endIdx = lines.Length - 1;
             if (endIdx > 0 && lines[endIdx].Trim() == "```")
                 endIdx--;

@@ -21,9 +21,9 @@ We will implement extraction as a **portable multi-stage pipeline with consensus
 
 The canonical stages are:
 
-1. **Fast local stage (Tesseract):** baseline OCR pass over full document/pages and initial field hypotheses.
-2. **Structured escalation stage (Azure Form Recognizer / equivalent):** run on low-confidence or ambiguous outputs to produce structured field candidates and their provider-specific confidence.
-3. **Optional consensus/normalization stage (LLM, e.g., OpenAI Nano/mini):** normalize values, resolve near-matches, and generate deterministic alternatives only when needed.
+1. **Vision OCR stage (OpenAI Vision — `openai-vision`, Order 1):** primary extraction pass using GPT-4o-nano with automatic escalation to GPT-4o-mini on low confidence or transient failure. Produces structured field candidates with per-field confidence.
+2. **Optional local OCR stage (PaddleOCR — disabled by default):** alternative OCR provider that can run alongside or instead of the vision stage when explicitly enabled.
+3. **Optional normalization stage (OpenAI Normalizer — `openai-normalizer`, Order 2):** normalize values, resolve near-matches, and generate deterministic alternatives using prior stage attempts. Only runs when enabled and prior attempts exist.
 
 Final field value for each field is selected using a **consensus policy**, not by source preference alone:
 
