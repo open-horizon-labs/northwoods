@@ -1,7 +1,7 @@
 ---
 id: bring-similar-cases-into-review
 title: "Bring similar historical cases into the review decision"
-status: proposed
+status: delivered
 mechanism: "Generate embeddings over OCR text, extracted values, and reviewer notes, store them in a vector database, and surface semantically similar prior cases with concise AI-generated context during document review."
 files:
   - docs/exercise.md

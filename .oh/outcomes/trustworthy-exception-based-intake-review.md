@@ -1,7 +1,7 @@
 ---
 id: trustworthy-exception-based-intake-review
 title: "Enable tenant-safe exception-based intake review"
-status: proposed
+status: delivered
 mechanism: "Deliver a multi-tenant upload → extract → confidence → review → finalize workflow so intake workers and reviewers trust the system enough to review only uncertain fields rather than manually transcribing entire packets."
 files:
   - docs/exercise.md

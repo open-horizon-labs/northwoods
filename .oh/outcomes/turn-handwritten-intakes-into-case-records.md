@@ -1,7 +1,7 @@
 ---
 id: turn-handwritten-intakes-into-case-records
 title: "Turn handwritten intake packets into structured case records"
-status: proposed
+status: delivered
 mechanism: "Provide template-guided upload, background OCR/AI extraction, field mapping, confidence scoring, and stored processing status so scanned handwritten documents become searchable structured records instead of inert files."
 files:
   - docs/exercise.md

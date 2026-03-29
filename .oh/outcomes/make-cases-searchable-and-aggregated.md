@@ -1,7 +1,7 @@
 ---
 id: make-cases-searchable-and-aggregated
 title: "Make processed intakes searchable and visible as cases"
-status: proposed
+status: delivered
 mechanism: "Provide search across processed intakes by key attributes and a case view that aggregates all related documents, statuses, and relevant details for a person or case."
 files:
   - docs/exercise.md
