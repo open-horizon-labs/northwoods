@@ -219,8 +219,8 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
         Skip to main content
       </a>
 
-      {/* Nav */}
-      <header className="border-b border-slate-200 bg-white">
+      {/* Nav -- sticky so Sign-out stays accessible while scrolling */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4 sm:px-6">
           <p className="text-sm font-semibold text-slate-900">Northwoods</p>
           <div className="flex items-center gap-4">
@@ -230,7 +230,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
             <button
               type="button"
               onClick={onLogout}
-              className={`text-xs text-slate-600 underline underline-offset-2 hover:text-slate-900 ${FOCUS_RING}`}
+              className={`min-h-11 rounded px-3 py-2 text-xs text-slate-600 underline underline-offset-2 hover:bg-slate-50 hover:text-slate-900 ${FOCUS_RING}`}
             >
               Sign out
             </button>
@@ -439,7 +439,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
               {uploads.map((upload) => (
                 <li
                   key={upload.intakeId}
-                  className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3"
+                  className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                 >
                   <div className="min-w-0 space-y-0.5">
                     <p className="truncate text-sm font-medium text-slate-900">{upload.fileName}</p>
@@ -448,7 +448,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
                       {upload.uploadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
-                  <div className="shrink-0 pt-0.5">
+                  <div className="shrink-0">
                     <StatusBadge status={upload.status} />
                   </div>
                 </li>
@@ -463,7 +463,7 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
 
         {/* Empty state */}
         {uploads.length === 0 ? (
-          <div className="mt-8 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+          <div className="mt-8 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-center sm:p-8">
             <p className="text-sm text-slate-600">No submissions yet this session.</p>
             <p className="mt-1 text-xs text-slate-500">
               Upload a completed intake form above to get started.
@@ -471,9 +471,9 @@ export default function WorkerDashboard({ auth, onLogout }: Props) {
           </div>
         ) : null}
 
-        <p className="mt-8 text-xs text-slate-600">
+        <div className="mt-8 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
           Need help? Contact your supervisor or system administrator.
-        </p>
+        </div>
       </main>
 
       {/* Accessible bottom nav hint for dev access */}
