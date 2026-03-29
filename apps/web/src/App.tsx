@@ -44,6 +44,12 @@ export default function App() {
   const handleLogin = (nextAuth: LoginResponse) => {
     storeAuth(nextAuth)
     setSessionExpiredMsg(null)
+    // Clear the #rag-report hash if it was set before login (e.g. from a stale
+    // link). Other hashes like #review/docs/{id} are valid deep links and must
+    // be preserved so bookmarked/shared URLs still work after login.
+    if (window.location.hash === '#rag-report') {
+      window.location.hash = ''
+    }
     setAuth(nextAuth)
   }
 
