@@ -184,15 +184,24 @@ Blueprint: `render.yaml`. Custom domain via Cloudflare CNAME.
 |---|---|---|---|
 | POST | `/auth/login` | None | Authenticate, receive JWT |
 | GET | `/templates` | JWT | List tenant-scoped templates |
-| GET | `/templates/{id}/blank` | JWT | Printable blank template |
+| GET | `/templates/{id}/blank` | JWT | Download printable blank template |
+| POST | `/templates` | JWT (Admin) | Create a new template |
+| PUT | `/templates/{id}` | JWT (Admin) | Update an existing template |
+| DELETE | `/templates/{id}` | JWT (Admin) | Archive a template |
+| POST | `/templates/{id}/blank-pdf` | JWT (Admin) | Upload blank PDF for a template |
 | POST | `/intakes` | JWT (Worker) | Upload intake document |
+| POST | `/intakes/{id}/retry` | JWT (Reviewer) | Retry a failed intake |
 | GET | `/intakes/{id}` | JWT | Check processing status |
+| GET | `/documents` | JWT | List tenant-scoped documents |
+| GET/HEAD | `/documents/{id}/source` | JWT | Retrieve or check source document |
 | GET | `/review-queue` | JWT (Reviewer) | Documents awaiting review |
 | GET | `/reviews/{id}` | JWT (Reviewer) | Fields, confidence, similar cases, audit trail |
 | POST | `/reviews/{id}/finalize` | JWT (Reviewer) | Finalize with corrections |
 | GET | `/search?q=` | JWT | Full-text search |
 | GET | `/cases/{personKey}` | JWT | Case aggregate across documents |
+| DELETE | `/admin/documents` | JWT (Admin) | Wipe all tenant documents |
+| POST | `/admin/reprocess` | JWT (Admin) | Reprocess all tenant documents |
 | GET | `/healthz` | None | Service health |
 | GET | `/metrics` | JWT | Tenant-scoped counters |
 
-OpenAPI spec: `http://localhost:5100/openapi/v1.json`
+Full OpenAPI spec: `http://localhost:5100/openapi/v1.json`

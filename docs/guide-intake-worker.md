@@ -70,6 +70,7 @@ After you submit, the status badge on your submission updates automatically. You
 | **Queued**       | The file has been received and is waiting to be processed.                   |
 | **Processing**   | The system is reading the form and pulling out the information.               |
 | **Ready for Review** | Processing is done. A reviewer will check the extracted information.    |
+| **Auto-Accepted** | All fields were read with high confidence. A reviewer may still check it. |
 | **Finalized**    | A reviewer has confirmed the information. The intake is complete.             |
 | **Failed**       | Something went wrong during processing. Contact your supervisor.              |
 
