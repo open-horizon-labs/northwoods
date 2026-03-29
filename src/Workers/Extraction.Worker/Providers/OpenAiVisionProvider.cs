@@ -19,10 +19,13 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
         IReadOnlyDictionary<string, List<ExtractionCandidate>>? priorAttempts,
         CancellationToken ct)
     {
-        var fieldsJson = JsonSerializer.Serialize(fieldKeys);
-        var prompt = $"Extract the following fields from this scanned intake form. Fields: {fieldsJson}. " +
+        var schemaFieldsJson = JsonSerializer.Serialize(fieldKeys);
+        var prompt = $"Extract ALL fields you find on this scanned intake form. Also specifically return these fields: {schemaFieldsJson}. " +
             "Return ONLY a JSON object where keys are field names and values are objects with \"value\" (string or null) and \"confidence\" (number 0-1). " +
-            "If a field is not present in the form, use null value with 0 confidence. Do not include markdown fences.";
+            "If a required field is not present in the form, use null value with 0 confidence. " +
+            "A date appearing without a label, or labeled as form date / today's date / date of interview / date of service, " +
+            "should be returned as \"interviewDate\". " +
+            "Do not include markdown fences.";
 
         var (model, body, escalated, escalationReason) = await CallWithFallback(context, prompt, fieldKeys, ct);
         var outputText = TryGetResponseText(body);
@@ -40,7 +43,10 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
         }
 
         var usage = TryGetUsage(body);
+        var schemaKeySet = new HashSet<string>(fieldKeys, StringComparer.OrdinalIgnoreCase);
         var results = new List<ExtractionCandidate>();
+
+        // Emit schema fields (preserves existing confidence/review logic in the background service)
         foreach (var key in fieldKeys)
         {
             if (!parsed.TryGetValue(key, out var item))
@@ -51,6 +57,39 @@ internal sealed class OpenAiVisionProvider(string apiKey, string modelNano, stri
                 ["model"] = model,
                 ["technique"] = "openai-vision-extract",
                 ["tenant"] = ProviderHelpers.TenantHash(context.TenantId)
+            };
+
+            if (usage is not null)
+            {
+                metadata["prompt_tokens"] = usage.Value.PromptTokens;
+                metadata["completion_tokens"] = usage.Value.CompletionTokens;
+                metadata["total_tokens"] = usage.Value.TotalTokens;
+            }
+
+            if (escalated)
+            {
+                metadata["escalated_from"] = modelNano;
+                metadata["escalation_reason"] = escalationReason ?? "nano_failed";
+            }
+
+            results.Add(new ExtractionCandidate(
+                key, item.Value, item.Confidence, Stage, Name, metadata));
+        }
+
+        // Emit discovered fields (keys not in schema, non-empty values only)
+        foreach (var (key, item) in parsed)
+        {
+            if (schemaKeySet.Contains(key))
+                continue;
+            if (string.IsNullOrWhiteSpace(item.Value))
+                continue;
+
+            var metadata = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["model"] = model,
+                ["technique"] = "openai-vision-extract",
+                ["tenant"] = ProviderHelpers.TenantHash(context.TenantId),
+                ["is_discovered"] = true
             };
 
             if (usage is not null)

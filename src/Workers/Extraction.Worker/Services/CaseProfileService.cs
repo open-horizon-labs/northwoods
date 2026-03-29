@@ -13,7 +13,10 @@ internal static class CaseProfileService
     private const int CaseEmbeddingDimensions = 1536;
     private static readonly HttpClient EmbeddingHttp = new();
 
-    public static string BuildCaseProfileText(string templateId, IReadOnlyList<FieldExtractionResult> fields)
+    public static string BuildCaseProfileText(
+        string templateId,
+        IReadOnlyList<FieldExtractionResult> fields,
+        IReadOnlyList<FieldExtractionResult>? discoveredFields = null)
     {
         var extractedPairs = fields
             .Select(f => $"{f.FieldKey}: {f.FinalValue}")
@@ -32,7 +35,20 @@ internal static class CaseProfileService
         var extractedText = extractedPairs.Length > 0 ? string.Join(" | ", extractedPairs) : "(no fields)";
         var ocrText = ocrPairs.Length > 0 ? string.Join(" | ", ocrPairs) : "(no ocr segments)";
 
-        return $"template={templateId}; fields={extractedText}; ocr={ocrText}";
+        var result = $"template={templateId}; fields={extractedText}; ocr={ocrText}";
+
+        if (discoveredFields is { Count: > 0 })
+        {
+            var discoveredPairs = discoveredFields
+                .Select(f => $"{f.FieldKey}: {f.FinalValue}")
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .ToArray();
+
+            if (discoveredPairs.Length > 0)
+                result += $"; discovered={string.Join(" | ", discoveredPairs)}";
+        }
+
+        return result;
     }
 
     public static async Task<bool> SupportsCaseProfiles(NpgsqlConnection conn, NpgsqlTransaction tx)

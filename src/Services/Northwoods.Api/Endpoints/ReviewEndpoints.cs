@@ -68,17 +68,24 @@ internal static class ReviewEndpoints
 
             if (doc == default) return Results.NotFound();
 
-            var fields = (await session.Connection.QueryAsync<ConfidenceField>(
+            var fieldRows = (await session.Connection.QueryAsync<(string field_key, string value, decimal confidence, bool requires_review, bool is_discovered)>(
                 """
-                SELECT field_key AS FieldKey,
-                       COALESCE(corrected_value, extracted_value) AS Value,
-                       confidence AS Confidence,
-                       requires_review AS RequiresReview
+                SELECT field_key,
+                       COALESCE(corrected_value, extracted_value) AS value,
+                       confidence,
+                       requires_review,
+                       COALESCE(is_discovered, false) AS is_discovered
                 FROM extracted_fields
                 WHERE document_id = @Id AND tenant_id = @TenantId
                 """,
                 new { Id = id, TenantId = authContext.TenantId },
                 session.Transaction)).ToList();
+
+            // Schema fields only (non-discovered) are passed to finalize logic and similar-case search
+            var fields = fieldRows
+                .Where(r => !r.is_discovered)
+                .Select(r => new ConfidenceField(r.field_key, r.value ?? string.Empty, r.confidence, r.requires_review))
+                .ToList();
 
             var attemptRows = (await session.Connection.QueryAsync<(string field_key, string provider, string raw_value, decimal raw_confidence)>(
                 """
@@ -152,21 +159,23 @@ internal static class ReviewEndpoints
                 session.Connection, session.Transaction, id, authContext.TenantId, doc.template_id, fields, 5,
                 embeddingHttpClient, openAiApiKey, useAiSummaries, app.Logger, httpContext.RequestAborted);
 
-            var reviewFields = fields.Select(f =>
+            var reviewFields = fieldRows.Select(r =>
             {
-                var attempts = attemptsByField.TryGetValue(f.FieldKey, out var rows)
-                    ? rows.Select(r => new FieldAttempt(r.provider, r.raw_value, r.raw_confidence)).ToList()
+                var attempts = attemptsByField.TryGetValue(r.field_key, out var rows)
+                    ? rows.Select(a => new FieldAttempt(a.provider, a.raw_value, a.raw_confidence)).ToList()
                     : new List<FieldAttempt>();
 
                 var distinctProviders = attempts.Select(a => a.Provider).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                var consensusNote = distinctProviders.Count switch
-                {
-                    0 => "No extraction data available",
-                    1 => "Single provider extraction",
-                    _ => AllProvidersAgree(attempts) ? "All providers agree" : "Providers disagree on value",
-                };
+                var consensusNote = r.is_discovered
+                    ? "Discovered field"
+                    : distinctProviders.Count switch
+                    {
+                        0 => "No extraction data available",
+                        1 => "Single provider extraction",
+                        _ => AllProvidersAgree(attempts) ? "All providers agree" : "Providers disagree on value",
+                    };
 
-                return new ReviewField(f.FieldKey, f.Value, f.Confidence, f.RequiresReview, attempts, consensusNote);
+                return new ReviewField(r.field_key, r.value ?? string.Empty, r.confidence, r.requires_review, attempts, consensusNote, r.is_discovered);
             }).ToList();
 
             var sourceUrl = $"/documents/{doc.id}/source";
@@ -288,11 +297,21 @@ internal static class ReviewEndpoints
                     new { DocId = id, TenantId = authContext.TenantId },
                     session.Transaction)).ToList();
 
+                var discoveredFieldRows = (await session.Connection.QueryAsync<(string field_key, string extracted_value)>(
+                    """
+                    SELECT field_key, COALESCE(corrected_value, extracted_value) AS extracted_value
+                    FROM extracted_fields
+                    WHERE document_id = @DocId AND tenant_id = @TenantId AND COALESCE(is_discovered, false) = true
+                    """,
+                    new { DocId = id, TenantId = authContext.TenantId },
+                    session.Transaction)).ToList();
+
                 var searchText = CaseProfileText.BuildFinalized(
                     doc.template_id,
                     request.Fields,
                     ocrSegments.Select(o => (o.field_key, o.raw_value)),
-                    request.ReviewerNote);
+                    request.ReviewerNote,
+                    discoveredFieldRows.Select(d => (d.field_key, d.extracted_value)));
 
                 string? embeddingLiteral = null;
                 var apiKey = openAiApiKey;

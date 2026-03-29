@@ -6,7 +6,7 @@ namespace Extraction.Worker;
 
 internal static class ExtractionPipelineService
 {
-    public static async Task<IReadOnlyList<FieldExtractionResult>> RunExtractionPipeline(
+    public static async Task<(IReadOnlyList<FieldExtractionResult> SchemaFields, IReadOnlyList<FieldExtractionResult> DiscoveredFields)> RunExtractionPipeline(
         ExtractionContext context,
         IReadOnlyList<string> fieldKeys,
         IReadOnlyList<IExtractionProvider> providers,
@@ -37,16 +37,36 @@ internal static class ExtractionPipelineService
             }
         }
 
-        var results = new List<FieldExtractionResult>(fieldKeys.Count);
+        var schemaKeySet = new HashSet<string>(fieldKeys, StringComparer.OrdinalIgnoreCase);
+
+        var schemaResults = new List<FieldExtractionResult>(fieldKeys.Count);
         foreach (var key in fieldKeys)
         {
             if (!attemptsByField.TryGetValue(key, out var attempts) || attempts.Count == 0)
                 continue;
 
-            results.Add(FieldConsensus.Resolve(key, attempts));
+            schemaResults.Add(FieldConsensus.Resolve(key, attempts));
         }
 
-        return results;
+        // Discovered fields: keys returned by providers that are not in the schema
+        var discoveredResults = new List<FieldExtractionResult>();
+        foreach (var (key, attempts) in attemptsByField)
+        {
+            if (schemaKeySet.Contains(key))
+                continue;
+            if (attempts.Count == 0)
+                continue;
+            // Only include fields marked as discovered by at least one provider attempt
+            if (!attempts.Any(a => a.Metadata is not null &&
+                                   a.Metadata.TryGetValue("is_discovered", out var flag) &&
+                                   flag is true))
+                continue;
+
+            discoveredResults.Add(FieldConsensus.Resolve(key, attempts));
+        }
+
+        discoveredResults.Sort((a, b) => string.Compare(a.FieldKey, b.FieldKey, StringComparison.OrdinalIgnoreCase));
+        return (schemaResults, discoveredResults);
     }
 
     public static async Task<bool> SupportsExtractionAttempts(NpgsqlConnection conn, NpgsqlTransaction tx)

@@ -161,6 +161,41 @@ public static class DatabaseInitializer
                     USING embedding::text::vector(1536);
             END IF;
         END $$;
+
+        -- M005: Add is_discovered column to extracted_fields for open-ended extraction (issue #131)
+        ALTER TABLE extracted_fields ADD COLUMN IF NOT EXISTS is_discovered BOOLEAN NOT NULL DEFAULT false;
+
+        -- M006: Add interviewDate field to all four template schemas if not already present (issue #131)
+        UPDATE templates
+        SET field_schema = jsonb_set(
+            field_schema,
+            '{fields}',
+            (
+                SELECT jsonb_agg(f ORDER BY ord)
+                FROM (
+                    -- Existing fields (except interviewDate to avoid duplicates) keep their order
+                    SELECT f.value AS f, ordinality AS ord
+                    FROM jsonb_array_elements(field_schema->'fields') WITH ORDINALITY AS f(value, ordinality)
+                    WHERE f.value->>'key' <> 'interviewDate'
+                    UNION ALL
+                    -- Insert interviewDate after dateOfBirth (or at position 3 as fallback)
+                    SELECT '{"key":"interviewDate","type":"date","required":false}'::jsonb,
+                           COALESCE(
+                               (SELECT ordinality + 0.5
+                                FROM jsonb_array_elements(field_schema->'fields') WITH ORDINALITY AS f(value, ordinality)
+                                WHERE f.value->>'key' = 'dateOfBirth'
+                                LIMIT 1),
+                               2.5
+                           )
+                ) sub
+            )
+        )
+        WHERE id IN ('general-assistance', 'housing-stability', 'behavioral-health', 'soap-note')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(field_schema->'fields') AS f
+              WHERE f->>'key' = 'interviewDate'
+          );
         """;
 
     private const string ExtensionsSql = """
@@ -477,6 +512,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "applicantName", "type": "string", "required": true},
                     {"key": "dateOfBirth", "type": "date", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "address", "type": "string", "required": true},
                     {"key": "householdSize", "type": "integer", "required": true},
                     {"key": "monthlyIncome", "type": "decimal", "required": true},
@@ -487,6 +523,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "applicantName", "type": "string", "required": true},
                     {"key": "dateOfBirth", "type": "date", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "currentAddress", "type": "string", "required": true},
                     {"key": "householdMembers", "type": "integer", "required": true},
                     {"key": "monthlyRent", "type": "decimal", "required": true},
@@ -497,6 +534,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "clientName", "type": "string", "required": true},
                     {"key": "dateOfBirth", "type": "date", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "presentingConcern", "type": "string", "required": true},
                     {"key": "currentMedications", "type": "string", "required": false},
                     {"key": "substanceUse", "type": "string", "required": false},
@@ -507,6 +545,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "clientName", "type": "string", "required": true},
                     {"key": "sessionNumber", "type": "string", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "subjective", "type": "string", "required": true},
                     {"key": "objective", "type": "string", "required": false},
                     {"key": "assessment", "type": "string", "required": false},
@@ -517,6 +556,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "applicantName", "type": "string", "required": true},
                     {"key": "dateOfBirth", "type": "date", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "address", "type": "string", "required": true},
                     {"key": "householdSize", "type": "integer", "required": true},
                     {"key": "monthlyIncome", "type": "decimal", "required": true},
@@ -527,6 +567,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "applicantName", "type": "string", "required": true},
                     {"key": "dateOfBirth", "type": "date", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "currentAddress", "type": "string", "required": true},
                     {"key": "householdMembers", "type": "integer", "required": true},
                     {"key": "monthlyRent", "type": "decimal", "required": true},
@@ -537,6 +578,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "clientName", "type": "string", "required": true},
                     {"key": "dateOfBirth", "type": "date", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "presentingConcern", "type": "string", "required": true},
                     {"key": "currentMedications", "type": "string", "required": false},
                     {"key": "substanceUse", "type": "string", "required": false},
@@ -547,6 +589,7 @@ public static class DatabaseInitializer
                 '{"fields": [
                     {"key": "clientName", "type": "string", "required": true},
                     {"key": "sessionNumber", "type": "string", "required": true},
+                    {"key": "interviewDate", "type": "date", "required": false},
                     {"key": "subjective", "type": "string", "required": true},
                     {"key": "objective", "type": "string", "required": false},
                     {"key": "assessment", "type": "string", "required": false},

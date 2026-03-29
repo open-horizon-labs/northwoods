@@ -215,7 +215,12 @@ export default function DevPage() {
   const [caseBusy, setCaseBusy] = useState(false)
   const [caseError, setCaseError] = useState<string | null>(null)
 
+  const [reprocessBusy, setReprocessBusy] = useState(false)
+  const [reprocessResult, setReprocessResult] = useState<string | null>(null)
+  const [reprocessError, setReprocessError] = useState<string | null>(null)
+
   const canReview = useMemo(() => auth?.role === 1 || auth?.role === 'Reviewer', [auth])
+  const canAdmin = useMemo(() => auth?.role === 2 || auth?.role === 'Admin', [auth])
 
   const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
 
@@ -1314,6 +1319,53 @@ export default function DevPage() {
                 Search for an applicant above and click a result to view their aggregated case documents.
               </div>
             )}
+          </section>
+
+          <section id="section-admin" className={sectionClass} aria-labelledby="section-admin-title">
+            <SectionTitle
+              titleId="section-admin-title"
+              eyebrow="7 · Admin"
+              title="Admin operations"
+              description="Reprocess all documents to re-run extraction and capture discovered fields and interviewDate."
+            />
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                disabled={!auth || !canAdmin || reprocessBusy}
+                title={!canAdmin ? 'Requires Admin role' : undefined}
+                onClick={async () => {
+                  if (!auth) return
+                  setReprocessBusy(true)
+                  setReprocessResult(null)
+                  setReprocessError(null)
+                  try {
+                    const result = await api.reprocessDocuments(auth.accessToken)
+                    setReprocessResult(`Queued ${result.queued} document(s) for reprocessing (tenant: ${result.tenantId}).`)
+                    // Clear stale state and refresh so the UI reflects the backend reset
+                    setSelectedReviewId(null)
+                    setReviewDetail(null)
+                    setIntakeStatus(null)
+                    setActiveIntakeId(null)
+                    await refreshQueue(auth.accessToken)
+                  } catch (err) {
+                    setReprocessError(userMessage(err, 'Reprocess failed.'))
+                  } finally {
+                    setReprocessBusy(false)
+                  }
+                }}
+                className={focusableSecondary}
+              >
+                {reprocessBusy ? 'Queuing…' : 'Reprocess all documents'}
+              </button>
+              {reprocessResult ? (
+                <p className="text-sm text-emerald-700">{reprocessResult}</p>
+              ) : reprocessError ? (
+                <p className="text-sm text-rose-700">{reprocessError}</p>
+              ) : null}
+            </div>
+            <p className={`mt-2 ${helperClass}`}>
+              Resets all processed documents to uploaded status and clears extracted fields. The extraction worker will re-run extraction for all documents, capturing discovered fields and populating interviewDate.
+            </p>
           </section>
         </div>
       </main>

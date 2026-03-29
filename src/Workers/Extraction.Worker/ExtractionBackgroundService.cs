@@ -206,29 +206,31 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
             try
             {
                 var extractionContext = new ExtractionContext(docId, tenantId, templateId, originalFileKey, tempFile, bytes.Length, bytes);
-                var results = await ExtractionPipelineService.RunExtractionPipeline(extractionContext, fieldKeys, providers, ct);
+                var (results, discoveredResults) = await ExtractionPipelineService.RunExtractionPipeline(extractionContext, fieldKeys, providers, ct);
 
                 // Provider comparison summary
                 var providerNames = results.SelectMany(r => r.AllAttempts.Select(a => a.Provider)).Distinct().ToArray();
                 logger.LogInformation(
-                    "Provider comparison for {DocId}: providers={Providers} fields={FieldCount} attempts={AttemptCount}",
+                    "Provider comparison for {DocId}: providers={Providers} fields={FieldCount} attempts={AttemptCount} discovered={DiscoveredCount}",
                     docId, string.Join(",", providerNames), results.Count,
-                    results.Sum(r => r.AllAttempts.Count));
+                    results.Sum(r => r.AllAttempts.Count), discoveredResults.Count);
                 var canPersistAttempts = await ExtractionPipelineService.SupportsExtractionAttempts(conn, tx);
                 var canPersistCaseProfiles = await CaseProfileService.SupportsCaseProfiles(conn, tx);
 
+                // Persist schema fields with normal confidence/review logic
                 foreach (var result in results)
                 {
                     await conn.ExecuteAsync(
                         """
                         INSERT INTO extracted_fields
-                            (document_id, tenant_id, field_key, extracted_value, confidence, requires_review)
+                            (document_id, tenant_id, field_key, extracted_value, confidence, requires_review, is_discovered)
                         VALUES
-                            (@DocId, @TenantId, @FieldKey, @Value, @Confidence, @RequiresReview)
+                            (@DocId, @TenantId, @FieldKey, @Value, @Confidence, @RequiresReview, false)
                         ON CONFLICT (document_id, field_key) DO UPDATE
                             SET extracted_value = EXCLUDED.extracted_value,
                                 confidence = EXCLUDED.confidence,
                                 requires_review = EXCLUDED.requires_review,
+                                is_discovered = false,
                                 updated_at = now()
                         """,
                         new
@@ -248,9 +250,41 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                     }
                 }
 
+                // Persist discovered fields — don't affect document status or require review
+                foreach (var result in discoveredResults)
+                {
+                    await conn.ExecuteAsync(
+                        """
+                        INSERT INTO extracted_fields
+                            (document_id, tenant_id, field_key, extracted_value, confidence, requires_review, is_discovered)
+                        VALUES
+                            (@DocId, @TenantId, @FieldKey, @Value, @Confidence, false, true)
+                        ON CONFLICT (document_id, field_key) DO UPDATE
+                            SET extracted_value = EXCLUDED.extracted_value,
+                                confidence = EXCLUDED.confidence,
+                                requires_review = false,
+                                is_discovered = true,
+                                updated_at = now()
+                        """,
+                        new
+                        {
+                            DocId = docId,
+                            TenantId = tenantId,
+                            FieldKey = result.FieldKey,
+                            Value = result.FinalValue,
+                            Confidence = result.SystemConfidence
+                        },
+                        tx);
+
+                    if (canPersistAttempts)
+                    {
+                        await ExtractionPipelineService.PersistExtractionAttempts(conn, tx, docId, tenantId, extractionRunId, result, ct);
+                    }
+                }
+
                 if (canPersistCaseProfiles)
                 {
-                    var profileText = CaseProfileService.BuildCaseProfileText(templateId, results);
+                    var profileText = CaseProfileService.BuildCaseProfileText(templateId, results, discoveredResults);
                     var apiKey = config["OPENAI_API_KEY"] ?? config["Extraction:OpenAi:ApiKey"];
                     await CaseProfileService.PersistCaseProfile(
                         conn,
@@ -266,6 +300,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                 }
 
                 // ADR 005 confidence tiers: compute document-level confidence (min of field confidences)
+                // Only schema fields contribute to document status
                 var minFieldConfidence = results.Count > 0
                     ? results.Min(r => r.SystemConfidence)
                     : 0m;
@@ -290,6 +325,7 @@ public sealed partial class Worker(ILogger<Worker> logger, IConfiguration config
                             extraction_run_id = extractionRunId,
                             provider_count = providers.Count,
                             fields_extracted = results.Count,
+                            discovered_fields = discoveredResults.Count,
                             high_confidence_fields = results.Count(r => r.SystemConfidence >= HighConfidenceThreshold),
                             warning_fields = results.Count(r => r.SystemConfidence >= ReviewRequiredThreshold && r.SystemConfidence < HighConfidenceThreshold),
                             low_confidence_fields = results.Count(r => r.SystemConfidence < ReviewRequiredThreshold),

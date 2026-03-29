@@ -20,7 +20,19 @@ public sealed partial class Worker
     internal static FieldExtractionResult ResolveConsensusForTests(string key, IReadOnlyList<ExtractionCandidate> attempts)
         => FieldConsensus.Resolve(key, attempts);
 
-    internal static Task<IReadOnlyList<FieldExtractionResult>> RunExtractionPipelineForTests(
+    /// <summary>Returns schema fields only. Use RunExtractionPipelineWithDiscoveredForTests to get both.</summary>
+    internal static async Task<IReadOnlyList<FieldExtractionResult>> RunExtractionPipelineForTests(
+        ExtractionContext context,
+        IReadOnlyList<string> fieldKeys,
+        IReadOnlyList<IExtractionProvider> providers,
+        CancellationToken cancellationToken)
+    {
+        var (schemaFields, _) = await ExtractionPipelineService.RunExtractionPipeline(context, fieldKeys, providers, cancellationToken);
+        return schemaFields;
+    }
+
+    /// <summary>Returns both schema fields and discovered fields.</summary>
+    internal static Task<(IReadOnlyList<FieldExtractionResult> SchemaFields, IReadOnlyList<FieldExtractionResult> DiscoveredFields)> RunExtractionPipelineWithDiscoveredForTests(
         ExtractionContext context,
         IReadOnlyList<string> fieldKeys,
         IReadOnlyList<IExtractionProvider> providers,

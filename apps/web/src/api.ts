@@ -229,6 +229,14 @@ export const api = {
     })
     return handleResponse<RetryIntakeResponse>(response)
   },
+
+  reprocessDocuments: async (accessToken: string) => {
+    const response = await fetch(`${API_BASE}/admin/reprocess`, {
+      method: 'POST',
+      headers: authHeader(accessToken),
+    })
+    return handleResponse<{ queued: number; tenantId: string }>(response)
+  },
 }
 
 
