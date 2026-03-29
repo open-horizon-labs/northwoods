@@ -75,7 +75,7 @@ This split keeps trust boundaries clear: API owns request/identity boundaries, w
   - **OpenAI Normalizer** (optional; `Extraction:UseOpenAiNormalizer=true`) — LLM normalization pass using `gpt-5.4-mini`.
 - Each provider's results are stored as separate extraction attempts with run-level metadata; attempts are append-only.
 - The pipeline selects the best candidate per field based on confidence score.
-- Confidence is explicit and centralized into operational tiers (`High` >= 0.90, `ReviewRequired` 0.75–0.90, `Escalate` < 0.75 per field with aggregate < 0.82 triggering model escalation).
+- Confidence is explicit and centralized into operational tiers (`High` >= 0.90, `ReviewRequired` 0.75–0.90, `Escalate` < 0.75 per field with aggregate < 0.75 triggering model escalation).
 - Reviewer-facing payloads are generated from extracted candidates plus confidence so uncertain fields are prioritized.
 - Token usage (prompt, completion, total) is recorded in `extraction_attempts.details` for OpenAI extraction attempts.
 

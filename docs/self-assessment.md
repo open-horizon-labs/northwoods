@@ -14,7 +14,7 @@ Northwoods delivers a complete intake-processing platform with a coherent vertic
 - **Background extraction**: Worker polls for queued documents and runs the configured extraction providers (OpenAI Vision plus optional stages). Each provider produces per-field extraction attempts with confidence scores. Attempts are append-only.
 - **Confidence-tiered review**: Extracted fields are routed to review when confidence falls below threshold. Reviewers see fields, confidence indicators, the source document, and similar historical cases.
 - **Finalize with corrections**: Reviewers correct low-confidence fields and finalize with an audit trail. Corrections are stored alongside original extraction.
-- **Audit events**: `intake_uploaded`, `extraction_started`, `extraction_completed`, `extraction_failed`, `finalized` -- all tenant-scoped with correlation IDs.
+- **Audit events**: `intake_uploaded`, `extraction_started`, `extraction_completed`, `extraction_failed`, `field_corrected`, `finalized` -- all tenant-scoped with correlation IDs.
 
 ### Search and case visibility
 
@@ -70,7 +70,7 @@ Northwoods delivers a complete intake-processing platform with a coherent vertic
 | Architecture document | Complete | `docs/architecture.md` |
 | Self-assessment | This file | `docs/self-assessment.md` |
 | Run instructions | Complete | `README.md` |
-| Sample data | Complete | `samples/intakes/` + seed data in `init.sql` |
+| Sample data | Complete | `samples/intakes/` + seed data in `DatabaseInitializer.cs` |
 
 ## Rubric scoring
 
@@ -101,7 +101,7 @@ Scoring uses the rubric in [Reviewer Rubric](reviewer-rubric.md) (1-4):
 
 - **Production auth hardening**: bcrypt hashing is in place, but token refresh, rate limiting, and account lockout are not implemented.
 - **API key requirement**: the worker defaults `UseOpenAiVision=true` and also uses `text-embedding-3-small` for case profile embeddings. Both require `OPENAI_API_KEY` at startup. Without it the worker throws a startup exception and no documents are processed. See README for setup instructions.
-- **UI smoke tests**: Playwright e2e test scaffold exists; full automation in CI is a follow-on item.
+- **UI smoke tests**: Playwright e2e smoke tests run in CI (`.github/workflows/ci.yml`) against the frontend.
 
 ## AI-assisted development
 

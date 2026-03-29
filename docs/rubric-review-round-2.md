@@ -35,19 +35,19 @@ This is the second rubric review pass (issue #10), run after round 1 (#9) fixes 
 | Architecture document | Yes | `docs/architecture.md` with Mermaid diagram |
 | Self-assessment | Yes | `docs/self-assessment.md` with rubric scoring, known gaps, AI examples |
 | Run instructions | Yes | `README.md` with full E2E smoke test commands |
-| Sample data | Yes | 5 PDFs in `samples/intakes/`, seed data in `init.sql` |
+| Sample data | Yes | 5 PDFs in `samples/intakes/`, seed data in `DatabaseInitializer.cs` |
 
 ## Verification Results
 
 ### Fresh clone flow
 1. `docker compose up -d` -- starts cleanly, all services healthy
 2. `curl /healthz` -- returns "Healthy"
-3. Login works for all 4 seed users (2 tenants x 2 roles)
+3. Login works for all 6 seed users (2 tenants x 3 roles)
 4. Templates endpoint returns 4 templates per tenant
 5. Upload produces `intakeId` with status 0 (Uploaded)
 6. Worker extracts within ~4 seconds, transitions to status 2 (ReviewReady)
 7. Review payload includes 7 extracted fields with confidence, source document URL, audit events, and similar cases
-8. Finalize with corrections succeeds, transitions to status 3 (Finalized)
+8. Finalize with corrections succeeds, transitions to status 4 (Finalized)
 9. Search returns tenant-scoped results with highlighting
 10. Case aggregate view returns all documents for a person
 
@@ -77,7 +77,7 @@ This is the second rubric review pass (issue #10), run after round 1 (#9) fixes 
 
 - Token refresh/rate limiting not implemented
 - OpenAI Vision and `text-embedding-3-small` both require `OPENAI_API_KEY` in the worker environment; extraction and embedding will fail at startup if the key is absent
-- UI smoke tests (Playwright) scaffold exists but full automation in CI is a follow-on item
+- UI smoke tests (Playwright) run in CI (`.github/workflows/ci.yml`) against the frontend
 
 Note: "Web frontend not in Docker Compose" was resolved — the `web` service is present in `docker-compose.yml` and starts with `docker compose up -d`. "Hash-based embeddings" was also resolved — `text-embedding-3-small` via the OpenAI Embeddings API is used for all case profile vectors.
 

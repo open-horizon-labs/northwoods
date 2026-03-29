@@ -21,7 +21,7 @@ We will implement extraction as a **portable multi-stage pipeline with consensus
 
 The canonical stages are:
 
-1. **Vision OCR stage (OpenAI Vision — `openai-vision`, Order 1):** primary extraction pass using GPT-4o-nano with automatic escalation to GPT-4o-mini on low confidence or transient failure. Produces structured field candidates with per-field confidence.
+1. **Vision OCR stage (OpenAI Vision — `openai-vision`, Order 1):** primary extraction pass using `gpt-5.4-nano` with automatic escalation to `gpt-5.4-mini` on low confidence or transient failure. Produces structured field candidates with per-field confidence.
 2. **Optional local OCR stage (PaddleOCR — disabled by default):** alternative OCR provider that can run alongside or instead of the vision stage when explicitly enabled.
 3. **Optional normalization stage (OpenAI Normalizer — `openai-normalizer`, Order 2):** normalize values, resolve near-matches, and generate deterministic alternatives using prior stage attempts. Only runs when enabled and prior attempts exist.
 
