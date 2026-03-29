@@ -259,7 +259,7 @@ Triggered on `v*` tags (e.g., `git tag v0.7.0 && git push origin v0.7.0`):
 1. **Build + Push** -- Three parallel matrix jobs build Docker images for API, Worker, and Web using multi-stage Dockerfiles, push to `ghcr.io/open-horizon-labs/northwoods-{api,worker,web}:latest`
 2. **Deploy** -- Updates Render service image references via the Render API, then triggers deploys for all 3 services
 3. **Smoke Test** -- Waits for services to come up (up to 5 min for Render free tier), then runs `scripts/production-smoke.sh` against the live URL
-4. **Release** -- Creates a GitHub Release with auto-generated release notes
+4. **Release** -- Creates a GitHub Release with auto-generated release notes. In practice I either write a release template or delegate release note authoring to coding agents for more descriptive changelogs.
 
 ### Render Topology (`render.yaml`)
 
