@@ -39,6 +39,19 @@ const DEFAULT_ROUTE: ReviewRoute = {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Safely decode URI component, returning original string on failure. */
+function safeDecodeURIComponent(str: string): string {
+  try {
+    return decodeURIComponent(str)
+  } catch {
+    return str
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
 
@@ -70,13 +83,13 @@ export function parseReviewHash(hash: string): ReviewRoute {
     // #review/case/{personKey}
     const caseMatch = afterReview.match(/^case\/(.+)$/)
     if (caseMatch) {
-      return { mode: 'queue', selectedId: null, searchQuery: '', casePersonKey: decodeURIComponent(caseMatch[1]) }
+      return { mode: 'queue', selectedId: null, searchQuery: '', casePersonKey: safeDecodeURIComponent(caseMatch[1]) }
     }
 
     // #review/search or #review/search?q=...
-    if (afterReview === 'search' || afterReview.startsWith('search?') || afterReview.startsWith('search/')) {
+    if (afterReview === 'search' || afterReview.startsWith('search?')) {
       const qMatch = afterReview.match(/[?&]q=([^&]*)/)
-      return { mode: 'search', selectedId: null, searchQuery: qMatch ? decodeURIComponent(qMatch[1]) : '', casePersonKey: null }
+      return { mode: 'search', selectedId: null, searchQuery: qMatch ? safeDecodeURIComponent(qMatch[1]) : '', casePersonKey: null }
     }
 
     // #review/docs or #review/docs/{id}

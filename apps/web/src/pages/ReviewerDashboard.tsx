@@ -323,11 +323,18 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
   // the parsed route, so writing it back immediately would be a no-op that
   // triggers an unnecessary hashchange event).
   const isInitialRender = useRef(true)
+  // Ref to skip the sync effect when selectReviewWithHistory already pushed
+  // a hash update (avoids a redundant replaceHash immediately after pushHash).
+  const skipNextSync = useRef(false)
 
   // Sync sidebar mode, selected review, and case view to URL hash
   useEffect(() => {
     if (isInitialRender.current) {
       isInitialRender.current = false
+      return
+    }
+    if (skipNextSync.current) {
+      skipNextSync.current = false
       return
     }
     const route: ReviewRoute = {
@@ -355,6 +362,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
     setSelectedReviewId(reviewId)
     if (applicantName !== undefined) setSelectedApplicantName(applicantName)
     if (reviewId) {
+      skipNextSync.current = true
       const route: ReviewRoute = {
         mode: sidebarMode,
         selectedId: reviewId,
@@ -457,7 +465,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
     }
   }
 
-  const openCaseView = async (personKey: string) => {
+  const openCaseView = useCallback(async (personKey: string) => {
     setCaseBusy(true)
     setCaseError(null)
     // Switch detail pane to case timeline
@@ -472,7 +480,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Prop
     } finally {
       setCaseBusy(false)
     }
-  }
+  }, [auth.accessToken])
 
   const closeCaseView = () => {
     setCaseView(null)

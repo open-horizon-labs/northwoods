@@ -16,7 +16,10 @@ const RagReportPage = lazy(() => import('./pages/RagReportPage'))
 function useHashRoute(): string {
   const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => {
-    const handler = () => setHash(window.location.hash)
+    const handler = () => {
+      const newHash = window.location.hash
+      setHash((prev) => (prev === newHash ? prev : newHash))
+    }
     window.addEventListener('hashchange', handler)
     return () => window.removeEventListener('hashchange', handler)
   }, [])
