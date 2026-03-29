@@ -59,7 +59,7 @@ internal static class ExtractionPipelineService
             // Only include fields marked as discovered by at least one provider attempt
             if (!attempts.Any(a => a.Metadata is not null &&
                                    a.Metadata.TryGetValue("is_discovered", out var flag) &&
-                                   flag is true or "true"))
+                                   flag is true))
                 continue;
 
             discoveredResults.Add(FieldConsensus.Resolve(key, attempts));

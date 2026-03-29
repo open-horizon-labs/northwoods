@@ -220,6 +220,7 @@ export default function DevPage() {
   const [reprocessError, setReprocessError] = useState<string | null>(null)
 
   const canReview = useMemo(() => auth?.role === 1 || auth?.role === 'Reviewer', [auth])
+  const canAdmin = useMemo(() => auth?.role === 2 || auth?.role === 'Admin', [auth])
 
   const reviewSimilarCases = useMemo(() => reviewDetail?.similarCases ?? [], [reviewDetail])
 
@@ -1330,7 +1331,8 @@ export default function DevPage() {
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <button
                 type="button"
-                disabled={!auth || reprocessBusy}
+                disabled={!auth || !canAdmin || reprocessBusy}
+                title={!canAdmin ? 'Requires Admin role' : undefined}
                 onClick={async () => {
                   if (!auth) return
                   setReprocessBusy(true)
