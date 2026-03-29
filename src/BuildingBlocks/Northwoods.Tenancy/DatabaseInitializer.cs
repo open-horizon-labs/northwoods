@@ -319,6 +319,7 @@ public static class DatabaseInitializer
         CREATE INDEX IF NOT EXISTS idx_case_profiles_applicant_trgm ON case_profiles USING GIN(applicant_name gin_trgm_ops);
         CREATE INDEX IF NOT EXISTS idx_case_profiles_address_trgm ON case_profiles USING GIN(address gin_trgm_ops);
         CREATE INDEX IF NOT EXISTS idx_case_profiles_dob ON case_profiles(date_of_birth);
+        CREATE INDEX IF NOT EXISTS idx_case_profiles_embedding_hnsw ON case_profiles USING hnsw (embedding vector_cosine_ops);
         CREATE INDEX IF NOT EXISTS idx_extraction_attempts_document_id ON extraction_attempts(document_id);
         CREATE INDEX IF NOT EXISTS idx_extraction_attempts_tenant_id ON extraction_attempts(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_id ON audit_events(tenant_id);
