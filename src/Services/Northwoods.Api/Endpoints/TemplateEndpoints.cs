@@ -262,19 +262,6 @@ internal static class TemplateEndpoints
                 new { Id = templateId, TenantId = authContext.TenantId, PdfKey = pdfKey },
                 session.Transaction);
 
-            await session.Connection.ExecuteAsync(
-                """
-                INSERT INTO audit_events (tenant_id, event_type, actor_id, details)
-                VALUES (@TenantId, 'template_blank_pdf_uploaded', @ActorId, @Details::jsonb)
-                """,
-                new
-                {
-                    TenantId = authContext.TenantId,
-                    ActorId = authContext.UserId,
-                    Details = JsonSerializer.Serialize(new { template_id = templateId, pdf_key = pdfKey })
-                },
-                session.Transaction);
-
             await session.CommitAsync();
             return Results.Ok(new { templateId, blankPdfKey = pdfKey });
         })

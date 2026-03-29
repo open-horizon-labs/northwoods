@@ -347,6 +347,7 @@ CREATE POLICY documents_tenant_isolation ON documents
 - **Playwright e2e tests**: Browser smoke tests run in CI against the frontend only (no backend services in the test environment).
 - **Advanced reranking**: The RRF fusion is effective but a cross-encoder reranker (stage 4 in ADR 001) was not implemented.
 - **Temporal deferral**: ADR 002 proposed Temporal for workflow orchestration. This was intentionally deferred in favor of a simpler poll-based worker, which proved sufficient for the exercise scope.
+- **Admin utility endpoints**: `DELETE /admin/documents` and `POST /admin/reprocess` are demo/development conveniences for wiping and re-extracting tenant data. They require JWT auth + Admin role and are fully tenant-scoped, but a production system would gate these behind additional controls (IP allowlist, confirmation flow) or remove them entirely.
 
 ### Design trade-offs
 
