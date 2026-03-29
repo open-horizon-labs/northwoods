@@ -48,7 +48,15 @@ The problem is architectural: the heavy operation is chained to the fast one. Th
 
 ## Phase 4: Ship
 
-(filled after execution)
+**PR:** #114 -- https://github.com/open-horizon-labs/northwoods/pull/114
+**Status:** MERGED (fast-forward; commit 47301bd already on main when branch was pushed)
+
+- /review findings posted: yes (comment 4148939687)
+- /dissent challenge posted: yes (comment 4148939985)
+- Both gate checks passed (review=1, dissent=1) before `gh pr ready`
+- CodeRabbit: "Review failed - PR is closed" -- PR was auto-merged before CodeRabbit could complete; no findings to address
+- `dotnet build src/Northwoods.slnx`: Build succeeded, 0 warnings, 0 errors
+- `pnpm --dir apps/web build`: Clean build, all 63 modules transformed
 
 ## RNA Tool Friction Log
 | Phase | Tool | What happened | Workaround | Severity |

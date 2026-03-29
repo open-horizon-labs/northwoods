@@ -11,7 +11,6 @@ import type {
   ReviewDetailResponse,
   ReviewQueueItem,
   SearchResponse,
-  SimilarCase,
   TemplateDescriptor,
   UpdateTemplateRequest,
 } from './types'
@@ -96,12 +95,11 @@ export const api = {
     return handleResponse<TemplateDescriptor[]>(response)
   },
 
-  getTemplateBlank: async (accessToken: string, templateId: string, download: boolean) => {
-    const mode = download ? '?download=true' : '?download=false'
-    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}/blank${mode}`, {
+  getTemplateBlank: async (accessToken: string, templateId: string) => {
+    const response = await fetch(`${API_BASE}/templates/${encodeURIComponent(templateId)}/blank`, {
       headers: {
         ...(authHeader(accessToken) ?? {}),
-        Accept: 'text/html',
+        Accept: 'application/pdf',
       },
     })
 
@@ -145,13 +143,6 @@ export const api = {
       headers: authHeader(accessToken),
     })
     return handleResponse<ReviewDetailResponse>(response)
-  },
-
-  getSimilarCases: async (accessToken: string, reviewId: string) => {
-    const response = await fetch(`${API_BASE}/reviews/${reviewId}/similar-cases`, {
-      headers: authHeader(accessToken),
-    })
-    return handleResponse<SimilarCase[]>(response)
   },
 
   finalizeReview: async (accessToken: string, reviewId: string, payload: FinalizeReviewRequest) => {

@@ -9,7 +9,6 @@ const ReviewerDashboard = lazy(() => import('./pages/ReviewerDashboard'))
 const DevPage = lazy(() => import('./pages/DevPage'))
 const AdminTemplates = lazy(() => import('./pages/AdminTemplates'))
 const RagReportPage = lazy(() => import('./pages/RagReportPage'))
-const SubmissionsPage = lazy(() => import('./pages/SubmissionsPage'))
 
 /** Hash-based routing: #dev, #rag-report, #submissions map to dedicated pages. */
 function useHashRoute(): string {
@@ -84,16 +83,17 @@ export default function App() {
   if (docHashMatch && (role === 1 || role === 'Reviewer')) {
     return (
       <Suspense fallback={<Spinner />}>
-        <ReviewerDashboard auth={auth} onLogout={handleLogout} initialDocumentId={docHashMatch[1]} />
+        <ReviewerDashboard auth={auth} onLogout={handleLogout} initialDocumentId={docHashMatch[1]} initialMode="documents" />
       </Suspense>
     )
   }
 
-  // Submissions view — accessible to any authenticated user
-  if (hash === '#submissions') {
+  // All Documents — opens ReviewerDashboard in documents mode so clicking a document
+  // stays in the same layout rather than swapping the entire component tree.
+  if (hash === '#submissions' && (role === 1 || role === 'Reviewer')) {
     return (
       <Suspense fallback={<Spinner />}>
-        <SubmissionsPage auth={auth} onLogout={handleLogout} />
+        <ReviewerDashboard auth={auth} onLogout={handleLogout} initialMode="documents" />
       </Suspense>
     )
   }

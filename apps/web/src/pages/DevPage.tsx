@@ -231,32 +231,26 @@ export default function DevPage() {
     })
   }, [reviewQueue, reviewQueueSearch])
 
-  const openTemplateBlank = useCallback(async (templateId: string, download: boolean) => {
+  const downloadTemplateBlank = useCallback(async (templateId: string) => {
     if (!auth) {
-      setTemplatesError('Log in before viewing or downloading templates.')
+      setTemplatesError('Log in before downloading templates.')
       return
     }
 
     setTemplatesError(null)
 
     try {
-      const blob = await api.getTemplateBlank(auth.accessToken, templateId, download)
+      const blob = await api.getTemplateBlank(auth.accessToken, templateId)
       const objectUrl = URL.createObjectURL(blob)
-
-      if (download) {
-        const link = document.createElement('a')
-        link.href = objectUrl
-        link.download = `${templateId}-template.html`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      } else {
-        window.open(objectUrl, '_blank', 'noopener,noreferrer')
-      }
-
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = `${templateId}-template.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
     } catch (error) {
-      setTemplatesError(userMessage(error, 'Unable to load blank template. Please try again.'))
+      setTemplatesError(userMessage(error, 'Unable to download blank template. Please try again.'))
     }
   }, [auth])
 
@@ -737,20 +731,19 @@ export default function DevPage() {
                                 >
                                   {isSelected ? 'Selected' : 'Select'}
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void openTemplateBlank(template.id, false)}
-                                  className={focusableSecondary}
-                                >
-                                  View blank
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void openTemplateBlank(template.id, true)}
-                                  className={focusableSecondary}
-                                >
-                                  Download blank
-                                </button>
+                                {template.blankPdfKey ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void downloadTemplateBlank(template.id)}
+                                    className={focusableSecondary}
+                                  >
+                                    Download blank
+                                  </button>
+                                ) : (
+                                  <p className="text-xs text-slate-600">
+                                    No printable form available -- contact your administrator.
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </li>
