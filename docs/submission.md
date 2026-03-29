@@ -182,54 +182,17 @@ This project was built through an AI-assisted workflow where AI increased speed 
 - **GitHub CodeQL** -- Semantic static analysis for security vulnerabilities and code quality across .NET and TypeScript. Runs on every push and PR via a GitHub-managed workflow.
 - **Playwright CLI** -- Automated browser interactions for intake/review flow validation against the running stack.
 
-#### Open Horizons (OH) workflow skills
+#### Open Horizons (OH) -- workflow orchestration (my project)
 
-Open Horizons is a strategic alignment framework that structures how work gets done. It lives in the `.oh/` directory and was used as an MCP server throughout development.
+[Open Horizons](https://github.com/open-horizon-labs/open-horizons) is a strategic alignment framework I built that structures how AI agents do work. Each GitHub issue was worked end-to-end by a `dev-pipeline` agent that runs four phases: problem statement, solution space, execute, ship. The `dev-pipeline-oversight` variant adds post-merge comment audit. OH provided outcome definitions, guardrails (e.g., "tenant isolation must be provable"), and decision logging -- keeping agent work connected to goals rather than drifting.
 
-**What OH provided:**
+#### Repo-Native Alignment (RNA) -- code intelligence MCP (my project)
 
-- **Outcomes** (`.oh/outcomes/`): Seven outcome definitions that kept development aligned with what actually matters -- not assignment bullet points, but capability-oriented goals like "bring similar cases into review" and "prove tenant-safe and operable delivery". Each outcome has a mechanism, success signal, and linked files.
+[RNA](https://github.com/open-horizon-labs/repo-native-alignment) is an MCP server I built that makes a repository queryable by AI agents. It provides semantic code search, dependency graph traversal, and a `repo_map` call that returns top symbols, subsystem boundaries, and entry points -- giving an agent immediate orientation in an unfamiliar codebase. RNA indexes code, markdown, business artifacts, and git history in a single searchable store.
 
-- **Guardrails** (`.oh/guardrails/`): Five guardrails enforcing design discipline -- "tenant isolation must be provable", "RAG must improve review judgment", "scope must protect a coherent vertical slice". These acted as automated constraint checks during agent sessions.
+#### Impeccable -- design quality skills (my project)
 
-- **Decision logging**: Major architectural decisions were logged with reasoning tied to specific outcomes, creating an auditable trail from "why did we choose Postgres for retrieval?" to the ADR that answers it.
-
-- **Aiming and problem framing** (`.oh/cto-judgement.md`): Before writing code, the OH workflow structured the problem space analysis -- constraints, terrain, stakeholders, capability-oriented JTBD workflows, and an explicit X-Y check ("the stated need is the feature checklist; the underlying need is demonstrating CTO-level judgment").
-
-**How OH was used in practice:**
-
-Each GitHub issue was worked end-to-end by a dev-pipeline agent (`.claude/agents/dev-pipeline.md`). The pipeline runs four phases: problem statement, solution space, execute, ship. The `dev-pipeline-oversight` variant adds a fifth phase -- post-merge comment audit that verifies all external review findings (CodeRabbit, `/review`, `/dissent`) were addressed before moving on.
-
-The OH MCP server (`oh-mcp` in `.mcp.json` equivalent) provided context to these agents so they could connect their work to outcomes and guardrails rather than working in isolation.
-
-#### Repo-Native Alignment (RNA) MCP
-
-RNA is a code intelligence tool that makes the repository queryable through semantic search and graph-style relationships. It was configured as an MCP server in `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "rna-mcp": {
-      "type": "stdio",
-      "command": "repo-native-alignment",
-      "args": ["--repo", "."]
-    }
-  }
-}
-```
-
-**What RNA provided:**
-
-- **Semantic code search**: Instead of grep, agents could search for concepts like "tenant isolation enforcement" or "embedding generation" and get relevant symbols, files, and documentation ranked by importance.
-- **Graph traversal**: `mode: neighbors` and `mode: impact` queries let agents understand call chains, dependency relationships, and blast radius before making changes.
-- **Repo map**: A single call to `repo_map` returns the top symbols by importance, subsystem boundaries, hotspot files, active outcomes, and entry points -- giving an agent immediate orientation in an unfamiliar codebase.
-- **Cross-artifact search**: RNA indexes code symbols, markdown sections, business artifacts (outcomes, guardrails), and git commits in a single searchable store.
-
-RNA went beyond "find me this function" -- it connected code changes to business outcomes, helping agents understand *why* something exists, not just *where*.
-
-#### Impeccable design skills
-
-A suite of 17+ design-focused skills (`.claude/skills/`) provided systematic UI quality control: `audit` runs diagnostics across accessibility, theming, responsive design, and anti-patterns; `normalize`, `harden`, and `polish` fix issues found by the audit; `frontend-design` provides creative direction and AI-generated-UI detection criteria.
+A suite of 17+ design-focused Claude Code skills (`.claude/skills/`) providing systematic UI quality control: `audit`, `normalize`, `harden`, `polish`, `frontend-design`, and others.
 
 #### How these tools combined
 
