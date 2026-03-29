@@ -1,7 +1,7 @@
 ---
 id: prove-tenant-safe-and-operable-delivery
 title: "Prove the platform is tenant-safe and operationally credible"
-status: proposed
+status: delivered
 mechanism: "Propagate tenant-aware authorization through services, isolate data and retrieval per tenant, and support the workflow with logging, correlation IDs, health checks, retries, tests, Docker Compose, and architecture documentation."
 files:
   - docs/exercise.md

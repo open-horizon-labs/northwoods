@@ -1,7 +1,7 @@
 ---
 id: cto-judgement-legible-in-system
 title: "Make CTO judgment legible through the system"
-status: proposed
+status: delivered
 mechanism: "Choose a capability-oriented architecture, intentionally scoped vertical slices, and explicit documentation so Banyan reviewers can see disciplined trade-offs in multi-tenancy, RAG usefulness, resilience, and delivery realism rather than just feature volume."
 files:
   - docs/exercise.md

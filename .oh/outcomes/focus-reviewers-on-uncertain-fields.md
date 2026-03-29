@@ -1,7 +1,7 @@
 ---
 id: focus-reviewers-on-uncertain-fields
 title: "Focus reviewers on the uncertain parts of each intake"
-status: proposed
+status: delivered
 mechanism: "Deliver a dedicated review workflow that shows extracted fields alongside confidence scores and the source image/PDF, allows corrections, and records finalization events in an audit log."
 files:
   - docs/exercise.md
