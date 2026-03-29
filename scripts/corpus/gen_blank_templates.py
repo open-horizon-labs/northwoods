@@ -15,12 +15,9 @@ from gen_utils_v2 import (
     draw_section_header,
     draw_field_line,
     draw_field_block,
-    draw_checkbox_v2,
     ensure_dir,
     PRINT_FONT,
-    PRINT_BOLD,
     RULE_COLOR,
-    SHADE_BG,
 )
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.colors import black, HexColor
