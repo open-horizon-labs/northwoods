@@ -17,7 +17,7 @@ export function readStoredAuth(): LoginResponse | null {
       typeof (parsed as Record<string, unknown>).tenantId === 'string' &&
       (parsed as Record<string, unknown>).tenantId &&
       'role' in parsed &&
-      [0, 1, 'IntakeWorker', 'Reviewer'].includes(
+      [0, 1, 2, 'IntakeWorker', 'Reviewer', 'Admin'].includes(
         (parsed as Record<string, unknown>).role as string | number,
       )
     ) {

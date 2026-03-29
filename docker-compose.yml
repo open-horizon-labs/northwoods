@@ -35,8 +35,8 @@ services:
 
   api:
     build:
-      context: src
-      dockerfile: Services/Northwoods.Api/Dockerfile
+      context: .
+      dockerfile: src/Services/Northwoods.Api/Dockerfile
     environment:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Host=postgres;Database=northwoods;Username=northwoods;Password=northwoods
