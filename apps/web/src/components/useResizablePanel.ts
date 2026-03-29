@@ -125,14 +125,24 @@ export function useResizablePanel(
     [storageKey],
   )
 
+  // Reset styles on unmount to prevent stuck cursor/user-select
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [])
+
   // Attach/detach document-level listeners during drag
   useEffect(() => {
     if (!isDragging) return
     document.addEventListener('pointermove', onPointerMove)
     document.addEventListener('pointerup', onPointerUp)
+    document.addEventListener('pointercancel', onPointerUp)
     return () => {
       document.removeEventListener('pointermove', onPointerMove)
       document.removeEventListener('pointerup', onPointerUp)
+      document.removeEventListener('pointercancel', onPointerUp)
     }
   }, [isDragging, onPointerMove, onPointerUp])
 
