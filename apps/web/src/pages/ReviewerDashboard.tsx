@@ -4,6 +4,8 @@ import { api, userMessage } from '../api'
 import { CaseTimeline } from '../components/CaseTimeline'
 import { ReviewDetail } from '../components/ReviewDetail'
 import { btnSecondary, FOCUS_RING, inputInteractive } from '../components/reviewStyles'
+import type { ReviewRoute, SidebarMode } from '../lib/hashRoute'
+import { buildReviewHash, pushHash, replaceHash } from '../lib/hashRoute'
 import type {
   CaseAggregateResponse,
   ConfidenceField,
@@ -16,21 +18,27 @@ import type {
 } from '../types'
 import { statusBadge } from '../types'
 
-export type SidebarMode = 'queue' | 'documents' | 'search'
+export type { SidebarMode } from '../lib/hashRoute'
 
 type Props = {
   auth: LoginResponse
   onLogout: () => void
-  initialDocumentId?: string
-  initialMode?: SidebarMode
+  /** Structured route parsed from the URL hash by App.tsx. */
+  initialRoute?: ReviewRoute
 }
 
-export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, initialMode }: Props) {
+export default function ReviewerDashboard({ auth, onLogout, initialRoute }: Props) {
+  // Resolve initial state from the structured route
+  const resolvedMode = initialRoute?.mode ?? 'queue'
+  const resolvedId = initialRoute?.selectedId ?? null
+  const resolvedSearch = initialRoute?.searchQuery ?? ''
+  const resolvedCaseKey = initialRoute?.casePersonKey ?? null
+
   const [queue, setQueue] = useState<ReviewQueueItem[]>([])
   const [queueSearch, setQueueSearch] = useState('')
   const [queueBusy, setQueueBusy] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
-  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(initialDocumentId ?? null)
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(resolvedId)
   const [selectedApplicantName, setSelectedApplicantName] = useState<string | undefined>(undefined)
 
   const [reviewDetail, setReviewDetail] = useState<ReviewDetailResponse | null>(null)
@@ -45,7 +53,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
   const [retryError, setRetryError] = useState<string | null>(null)
 
   // Sidebar mode: queue vs documents vs search
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialMode ?? 'queue')
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(resolvedMode)
 
   // Documents list state (loaded lazily when the user first switches to documents mode)
   const [documents, setDocuments] = useState<DocumentListItem[]>([])
@@ -55,7 +63,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
   const [docsFilter, setDocsFilter] = useState('')
 
   // Global search state
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(resolvedSearch)
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
   const [searchBusy, setSearchBusy] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
@@ -95,9 +103,9 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
       // Auto-select first item if current selection was removed, but preserve deep-linked docs
       setSelectedReviewId((current) => {
         // Don't auto-select a queue item when starting in documents mode
-        if (!current) return (initialDocumentId ?? (initialMode === 'documents' ? null : (items[0]?.reviewId ?? null)))
+        if (!current) return (resolvedId ?? (resolvedMode === 'documents' ? null : (items[0]?.reviewId ?? null)))
         if (items.some((i) => i.reviewId === current)) return current
-        return current === initialDocumentId ? current : (items[0]?.reviewId ?? null)
+        return current === resolvedId ? current : (items[0]?.reviewId ?? null)
       })
     } catch (err) {
       setQueueError(userMessage(err, 'Unable to load review queue. Please try again.'))
@@ -105,7 +113,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     } finally {
       setQueueBusy(false)
     }
-  }, [auth.accessToken, initialDocumentId])
+  }, [auth.accessToken, resolvedId, resolvedMode])
 
   const loadDocuments = useCallback(async () => {
     setDocsBusy(true)
@@ -307,6 +315,64 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  // ---------------------------------------------------------------------------
+  // URL sync: keep the hash in sync with view state
+  // ---------------------------------------------------------------------------
+
+  // Ref to suppress the initial URL update on mount (the URL already reflects
+  // the parsed route, so writing it back immediately would be a no-op that
+  // triggers an unnecessary hashchange event).
+  const isInitialRender = useRef(true)
+  // Ref to skip the sync effect when selectReviewWithHistory already pushed
+  // a hash update (avoids a redundant replaceHash immediately after pushHash).
+  const skipNextSync = useRef(false)
+
+  // Sync sidebar mode, selected review, and case view to URL hash
+  useEffect(() => {
+    if (isInitialRender.current) {
+      isInitialRender.current = false
+      return
+    }
+    if (skipNextSync.current) {
+      skipNextSync.current = false
+      return
+    }
+    const route: ReviewRoute = {
+      mode: sidebarMode,
+      selectedId: selectedReviewId,
+      searchQuery: sidebarMode === 'search' ? searchQuery : '',
+      casePersonKey: caseView ? caseView.personKey : null,
+    }
+    const newHash = buildReviewHash(route)
+    // Use replaceState for most changes to avoid polluting browser history
+    replaceHash(newHash)
+  }, [sidebarMode, selectedReviewId, caseView, searchQuery])
+
+  // If the URL had a case person key, open the case view on mount
+  useEffect(() => {
+    if (resolvedCaseKey) {
+      void openCaseView(resolvedCaseKey)
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // When user selects a specific review, push to history so Back button works
+  const selectReviewWithHistory = useCallback((reviewId: string | null, applicantName?: string) => {
+    setSelectedReviewId(reviewId)
+    if (applicantName !== undefined) setSelectedApplicantName(applicantName)
+    if (reviewId) {
+      skipNextSync.current = true
+      const route: ReviewRoute = {
+        mode: sidebarMode,
+        selectedId: reviewId,
+        searchQuery: '',
+        casePersonKey: null,
+      }
+      pushHash(buildReviewHash(route))
+    }
+  }, [sidebarMode])
+
   const handleFieldChange = (index: number, value: string) => {
     setEditableFields((prev) =>
       prev.map((f, i) =>
@@ -365,8 +431,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     const prefixRe = /^[0-9a-f]{8}$/i
     if (fullUuidRe.test(q)) {
       closeCaseView()
-      setSelectedReviewId(q.toLowerCase())
-      setSelectedApplicantName(undefined)
+      selectReviewWithHistory(q.toLowerCase(), undefined)
       return
     }
     if (prefixRe.test(q)) {
@@ -374,16 +439,14 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
       const match = documents.find((d) => d.documentId.startsWith(q.toLowerCase()))
       if (match) {
         closeCaseView()
-        setSelectedReviewId(match.documentId)
-        setSelectedApplicantName(match.applicantName)
+        selectReviewWithHistory(match.documentId, match.applicantName)
         return
       }
       // Also check the queue
       const queueMatch = queue.find((i) => i.reviewId.startsWith(q.toLowerCase()))
       if (queueMatch) {
         closeCaseView()
-        setSelectedReviewId(queueMatch.reviewId)
-        setSelectedApplicantName(queueMatch.applicantName)
+        selectReviewWithHistory(queueMatch.reviewId, queueMatch.applicantName)
         return
       }
     }
@@ -402,7 +465,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     }
   }
 
-  const openCaseView = async (personKey: string) => {
+  const openCaseView = useCallback(async (personKey: string) => {
     setCaseBusy(true)
     setCaseError(null)
     // Switch detail pane to case timeline
@@ -417,7 +480,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
     } finally {
       setCaseBusy(false)
     }
-  }
+  }, [auth.accessToken])
 
   const closeCaseView = () => {
     setCaseView(null)
@@ -569,7 +632,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                         <li key={item.reviewId}>
                           <button
                             type="button"
-                            onClick={() => { closeCaseView(); setSelectedReviewId(item.reviewId); setSelectedApplicantName(item.applicantName) }}
+                            onClick={() => { closeCaseView(); selectReviewWithHistory(item.reviewId, item.applicantName) }}
                             aria-pressed={isSelected}
                             aria-current={isSelected ? 'true' : undefined}
                             aria-label={`Review ${item.applicantName}, ${item.uncertainFieldCount} uncertain field${item.uncertainFieldCount === 1 ? '' : 's'}`}
@@ -660,7 +723,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                         <li key={doc.documentId}>
                           <button
                             type="button"
-                            onClick={() => { closeCaseView(); setSelectedReviewId(doc.documentId) }}
+                            onClick={() => { closeCaseView(); selectReviewWithHistory(doc.documentId) }}
                             aria-pressed={isSelected}
                             aria-current={isSelected ? 'true' : undefined}
                             aria-label={`Open document for ${doc.applicantName}`}
@@ -742,7 +805,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
                         <li key={item.intakeId}>
                           <button
                             type="button"
-                            onClick={() => { closeCaseView(); setSelectedReviewId(item.intakeId); setSelectedApplicantName(item.applicantName) }}
+                            onClick={() => { closeCaseView(); selectReviewWithHistory(item.intakeId, item.applicantName) }}
                             className={`w-full px-4 py-3 text-left transition hover:bg-slate-50 ${FOCUS_RING}`}
                             aria-label={`Open review for ${item.applicantName}`}
                           >
@@ -796,7 +859,7 @@ export default function ReviewerDashboard({ auth, onLogout, initialDocumentId, i
               caseBusy={caseBusy}
               caseError={caseError}
               onClose={closeCaseView}
-              onOpenReview={(intakeId) => { closeCaseView(); setSelectedReviewId(intakeId); setSelectedApplicantName(undefined) }}
+              onOpenReview={(intakeId) => { closeCaseView(); selectReviewWithHistory(intakeId, undefined) }}
             />
           ) : !selectedReviewId ? (
             <div className="flex flex-1 items-center justify-center p-8 text-center">

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { clearStoredAuth, readStoredAuth, storeAuth } from './lib/auth'
+import { parseReviewHash } from './lib/hashRoute'
 import { setUnauthorizedHandler } from './api'
 import type { LoginResponse } from './types'
 
@@ -11,11 +12,14 @@ const DevPage = lazy(() => import('./pages/DevPage'))
 const AdminTemplates = lazy(() => import('./pages/AdminTemplates'))
 const RagReportPage = lazy(() => import('./pages/RagReportPage'))
 
-/** Hash-based routing: #dev, #rag-report, #submissions map to dedicated pages. */
+/** Hash-based routing: listens for hash changes and re-renders. */
 function useHashRoute(): string {
   const [hash, setHash] = useState(() => window.location.hash)
   useEffect(() => {
-    const handler = () => setHash(window.location.hash)
+    const handler = () => {
+      const newHash = window.location.hash
+      setHash((prev) => (prev === newHash ? prev : newHash))
+    }
     window.addEventListener('hashchange', handler)
     return () => window.removeEventListener('hashchange', handler)
   }, [])
@@ -26,7 +30,7 @@ function Spinner() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50">
       <p className="text-sm text-slate-500" role="status" aria-live="polite">
-        Loading\u2026
+        Loading&hellip;
       </p>
     </div>
   )
@@ -91,27 +95,7 @@ export default function App() {
     )
   }
 
-  // Deep link to a specific document — reviewer only
-  const docHashMatch = hash.match(/^#doc\/([0-9a-f-]{36})$/i)
-  if (docHashMatch && (role === 1 || role === 'Reviewer')) {
-    return (
-      <Suspense fallback={<Spinner />}>
-        <ReviewerDashboard auth={auth} onLogout={handleLogout} initialDocumentId={docHashMatch[1]} initialMode="documents" />
-      </Suspense>
-    )
-  }
-
-  // All Documents — opens ReviewerDashboard in documents mode so clicking a document
-  // stays in the same layout rather than swapping the entire component tree.
-  if (hash === '#submissions' && (role === 1 || role === 'Reviewer')) {
-    return (
-      <Suspense fallback={<Spinner />}>
-        <ReviewerDashboard auth={auth} onLogout={handleLogout} initialMode="documents" />
-      </Suspense>
-    )
-  }
-
-  // RAG report is reviewer-only — explicit check for maintainability
+  // RAG report is reviewer-only
   if (hash === '#rag-report' && (role === 1 || role === 'Reviewer')) {
     return (
       <Suspense fallback={<Spinner />}>
@@ -120,6 +104,23 @@ export default function App() {
     )
   }
 
+  // All other reviewer routes: parse the hash into structured state.
+  // Handles #review/*, #doc/{uuid} (legacy), #submissions (legacy),
+  // and the empty hash (default queue view).
+  if (role === 1 || role === 'Reviewer') {
+    const route = parseReviewHash(hash)
+    return (
+      <Suspense fallback={<Spinner />}>
+        <ReviewerDashboard
+          auth={auth}
+          onLogout={handleLogout}
+          initialRoute={route}
+        />
+      </Suspense>
+    )
+  }
+
+  // Fallback for unknown roles
   return (
     <Suspense fallback={<Spinner />}>
       <ReviewerDashboard auth={auth} onLogout={handleLogout} />
