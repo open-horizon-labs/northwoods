@@ -278,12 +278,11 @@ export default function RagReportPage({ auth, onLogout }: Props) {
         <div className="flex h-12 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-sm font-semibold text-slate-900">RAG Pipeline Report</h1>
-            <span className="text-xs text-slate-400">Self-assessment</span>
+            <span className="text-xs text-slate-600">Self-assessment</span>
           </div>
           <div className="flex items-center gap-4">
             <a
-              href="#"
-              onClick={(e) => { e.preventDefault(); window.location.hash = ''; }}
+              href="#review/queue"
               className={`text-xs font-medium text-sky-700 hover:underline ${FOCUS_RING}`}
             >
               Jump to reviewer view
