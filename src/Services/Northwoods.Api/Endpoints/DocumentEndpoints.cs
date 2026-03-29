@@ -64,9 +64,10 @@ internal static class DocumentEndpoints
                 """
                 SELECT d.id AS DocumentId,
                        d.template_id AS TemplateId,
-                       COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.field_key = 'applicantName' LIMIT 1), '(unknown)') AS ApplicantName,
+                       COALESCE((SELECT COALESCE(ef.corrected_value, ef.extracted_value) FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND LOWER(ef.field_key) = 'applicantname' ORDER BY ef.id LIMIT 1), d.template_id) AS ApplicantName,
                        d.status AS Status,
-                       d.created_at AS CreatedAt
+                       d.created_at AS CreatedAt,
+                       (SELECT COALESCE(ef.corrected_value, ef.extracted_value) FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND LOWER(ef.field_key) IN ('date', 'intakedate', 'servicedate', 'formdate') ORDER BY CASE LOWER(ef.field_key) WHEN 'date' THEN 1 WHEN 'intakedate' THEN 2 WHEN 'servicedate' THEN 3 WHEN 'formdate' THEN 4 ELSE 5 END, ef.id LIMIT 1) AS DocumentDate
                 FROM documents d
                 WHERE d.tenant_id = @TenantId
                 ORDER BY d.created_at DESC

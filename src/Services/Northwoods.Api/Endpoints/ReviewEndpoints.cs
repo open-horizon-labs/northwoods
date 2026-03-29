@@ -34,7 +34,7 @@ internal static class ReviewEndpoints
             var items = (await session.Connection.QueryAsync<ReviewQueueItem>(
                 """
                 SELECT d.id AS ReviewId, d.id AS IntakeId,
-                       COALESCE((SELECT ef.extracted_value FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.field_key = 'applicantName' LIMIT 1), '(unknown)') AS ApplicantName,
+                       COALESCE((SELECT COALESCE(ef.corrected_value, ef.extracted_value) FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND LOWER(ef.field_key) = 'applicantname' ORDER BY ef.id LIMIT 1), d.template_id) AS ApplicantName,
                        d.template_id AS TemplateId,
                        (SELECT COUNT(*)::int FROM extracted_fields ef WHERE ef.document_id = d.id AND ef.tenant_id = d.tenant_id AND ef.requires_review) AS UncertainFieldCount,
                        d.created_at AS UploadDate
@@ -242,6 +242,20 @@ internal static class ReviewEndpoints
                     """,
                     new { DocId = id, TenantId = authContext.TenantId, field.FieldKey, field.Value },
                     session.Transaction);
+            }
+
+            // Guard: if any field still has requires_review = true after applying corrections,
+            // the document cannot be finalized -- it must remain in review_ready state.
+            var remainingReviewCount = await session.Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*)::int FROM extracted_fields WHERE document_id = @Id AND tenant_id = @TenantId AND requires_review = true",
+                new { Id = id, TenantId = authContext.TenantId },
+                session.Transaction);
+
+            if (remainingReviewCount > 0)
+            {
+                // Commit the corrections already applied so reviewers don't lose their edits.
+                await session.CommitAsync();
+                return Results.BadRequest(new { error = $"Cannot finalize: {remainingReviewCount} field(s) still require review. Submit corrections for all flagged fields before finalizing." });
             }
 
             await session.Connection.ExecuteAsync(
