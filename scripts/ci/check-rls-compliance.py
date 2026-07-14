@@ -7,6 +7,10 @@ SQL checks (infra/postgres/init.sql):
   - Every RLS-enabled table has a policy using current_setting('app.tenant_id', true)
   - app_user role does not have BYPASS RLS
 
+Deployment checks (render.yaml):
+  - Production enables the restricted app_user role
+  - Production does not seed the known local demo administrators
+
 C# checks (src/**/*.cs):
   - No file outside exempt paths uses `new NpgsqlConnection` directly
     Exempt: DbConnectionFactory.cs, PostgresHealthCheck.cs, Workers/Extraction.Worker/**
@@ -18,7 +22,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INIT_SQL = REPO_ROOT / "infra" / "postgres" / "init.sql"
+RENDER_YAML = REPO_ROOT / "render.yaml"
 SRC_DIR = REPO_ROOT / "src"
+API_PROGRAM = SRC_DIR / "Services" / "Northwoods.Api" / "Program.cs"
 
 # Files allowed to use NpgsqlConnection directly (superuser / infrastructure code).
 EXEMPT_CS_PATTERNS = [
@@ -120,6 +126,9 @@ def check_sql() -> None:
     if alter_bypass_re.search(sql):
         errors.append("SQL: ALTER ROLE app_user BYPASS RLS found — violates ADR 004")
 
+    if re.search(r"CREATE\s+ROLE\s+app_user\b[^;]*\bLOGIN\b", sql, re.IGNORECASE):
+        errors.append("SQL: app_user can log in directly — use a NOLOGIN role for SET LOCAL ROLE")
+
 
 # ---------------------------------------------------------------------------
 # C# checks
@@ -151,6 +160,51 @@ def check_csharp() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Deployment checks
+# ---------------------------------------------------------------------------
+
+def check_render_config() -> None:
+    if not RENDER_YAML.exists():
+        errors.append(f"MISSING: {RENDER_YAML} not found")
+        return
+
+    render_config = RENDER_YAML.read_text()
+
+    def configured_value(key: str):
+        match = re.search(
+            rf"-\s+key:\s*{re.escape(key)}\s*\n\s*value:\s*[\"']?([^\"'\s]+)",
+            render_config,
+        )
+        return match.group(1).lower() if match else None
+
+    use_app_user_role = configured_value("Database__UseAppUserRole")
+    if use_app_user_role != "true":
+        errors.append(
+            "Render: Database__UseAppUserRole must be explicitly true; "
+            "the database owner bypasses RLS"
+        )
+
+    seed_demo_admins = configured_value("Database__SeedDemoAdmins")
+    if seed_demo_admins != "false":
+        errors.append(
+            "Render: Database__SeedDemoAdmins must be explicitly false; "
+            "known local demo administrators cannot exist in the public deployment"
+        )
+
+    if not API_PROGRAM.exists():
+        errors.append(f"MISSING: {API_PROGRAM} not found")
+        return
+
+    program = API_PROGRAM.read_text()
+    if "app.Environment.IsProduction() && !useAppUserRole" not in program:
+        errors.append("API: production startup does not reject disabled RLS")
+    if "app.Environment.IsProduction() && seedDemoAdmins" not in program:
+        errors.append("API: production startup does not reject seeded demo administrators")
+    if "AssertDemoAdminsAbsentAsync" not in program:
+        errors.append("API: startup does not verify that demo administrators were removed")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -158,9 +212,11 @@ def main() -> int:
     print("=== ADR 004 RLS Compliance Check ===")
     print(f"  SQL:  {relative(INIT_SQL)}")
     print(f"  C#:   {relative(SRC_DIR)}")
+    print(f"  Deploy: {relative(RENDER_YAML)}")
 
     check_sql()
     check_csharp()
+    check_render_config()
 
     if errors:
         print("\nFAILURES:")

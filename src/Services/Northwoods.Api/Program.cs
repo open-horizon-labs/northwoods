@@ -36,6 +36,7 @@ var jwtExpiration = TimeSpan.FromMinutes(builder.Configuration.GetValue("Auth:Jw
 var reviewersCanUpload = builder.Configuration.GetValue("Auth:ReviewerCanUpload", false);
 
 var useAppUserRole = builder.Configuration.GetValue("Database:UseAppUserRole", true);
+var seedDemoAdmins = builder.Configuration.GetValue("Database:SeedDemoAdmins", false);
 var db = new DbConnectionFactory(connectionString, useAppUserRole);
 var store = new ObjectStore(
     builder.Configuration["Minio:Endpoint"] ?? "localhost:9000",
@@ -101,6 +102,19 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var app = builder.Build();
+
+if (app.Environment.IsProduction() && !useAppUserRole)
+{
+    throw new InvalidOperationException(
+        "Database:UseAppUserRole must be true in production so row-level security is enforced.");
+}
+
+if (app.Environment.IsProduction() && seedDemoAdmins)
+{
+    throw new InvalidOperationException(
+        "Database:SeedDemoAdmins must be false in production so known local administrators are not exposed.");
+}
+
 var observability = new ApiObservability();
 
 const string correlationIdHeader = "X-Correlation-Id";
@@ -143,8 +157,15 @@ app.Use(async (httpContext, next) =>
     }
 });
 
-// Ensure database schema and seed data exist on startup
-await DatabaseInitializer.InitializeAsync(connectionString, useAppUserRole, app.Logger);
+// Ensure database schema and seed data exist on startup.
+// Public deployments leave SeedDemoAdmins=false so the known local demo
+// administrators are removed before the API accepts requests.
+await DatabaseInitializer.InitializeAsync(connectionString, useAppUserRole, seedDemoAdmins, app.Logger);
+
+if (!seedDemoAdmins)
+{
+    await DatabaseInitializer.AssertDemoAdminsAbsentAsync(connectionString, app.Logger);
+}
 
 // Verify tenant isolation is enforced before accepting any requests.
 // If UseAppUserRole=false the app runs as the DB owner, which PostgreSQL exempts from RLS,
@@ -155,9 +176,8 @@ if (useAppUserRole)
 }
 else
 {
-    app.Logger.LogCritical(
-        "SECURITY: Database:UseAppUserRole=false — RLS is disabled. " +
-        "All tenant data is visible to all connections. DO NOT run in production.");
+    app.Logger.LogWarning(
+        "Database:UseAppUserRole=false — RLS is disabled for this non-production process.");
 }
 
 // Ensure the MinIO bucket exists on startup

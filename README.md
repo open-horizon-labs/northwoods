@@ -1,29 +1,25 @@
 # Northwoods
 
-Northwoods processes handwritten intake documents into structured, confidence-scored fields that route through human-in-the-loop review before acceptance. It was built for the Banyan Software CTO assignment.
+Northwoods turns handwritten intake documents into structured, confidence-scored fields that a person reviews before acceptance. I built it for a time-boxed CTO interview assignment.
 
-**Live instance:** [northwoods.muness.com](https://northwoods.muness.com)
+## Explore the system
 
-## For the reviewer
+The assignment asked for document extraction, human review, auditability, similar-case retrieval, and tenant isolation. This section maps those requirements to the code and evidence.
 
-This section is for you. It maps the assignment requirements to where they live in the codebase.
-
-### Try the live system
+### Run it locally
 
 | Role | Email | Password | What you'll see |
 |---|---|---|---|
 | Intake Worker | worker@sunrise.example | password | Upload dashboard — select template, attach PDF, watch status |
 | Reviewer | reviewer@sunrise.example | password | Review queue — confidence indicators, field corrections, similar cases, finalize |
 
-Tenant-b (Lakewood) credentials also exist (`worker@lakewood.example`, `reviewer@lakewood.example`) — use them to verify tenant isolation.
-
-The developer scaffold (preset login buttons, raw API explorer) is at [northwoods.muness.com/#dev](https://northwoods.muness.com/#dev). It is not linked from the main UI.
+Tenant-b (Lakewood) credentials also exist (`worker@lakewood.example`, `reviewer@lakewood.example`). Use them to check that each account sees only its tenant's records.
 
 ### Evaluate the architecture
 
 | Document | What it covers |
 |---|---|
-| [Architecture Rationale](docs/architecture.md) | System diagram, component responsibilities, extraction model, RAG strategy, tenancy model, trade-offs |
+| [Architecture Rationale](docs/submission.md#4d-architecture-overview) | System diagram, component responsibilities, extraction model, RAG strategy, tenancy model, trade-offs |
 | [ADR 001: Postgres hybrid retrieval](docs/ADRs/001-postgres-hybrid-retrieval-with-pgvector-and-pg-trgm.md) | Why Postgres for vector search instead of a dedicated vector DB |
 | [ADR 002: Temporal for workflows](docs/ADRs/002-temporal-for-document-processing-workflows.md) | Considered and deferred — worker polling used instead |
 | [ADR 003: MinIO for storage](docs/ADRs/003-minio-for-s3-compatible-document-storage.md) | S3-compatible object store for documents |
@@ -34,19 +30,19 @@ The developer scaffold (preset login buttons, raw API explorer) is at [northwood
 
 | Document | What it covers |
 |---|---|
-| [AI Development Tooling](docs/ai-tooling.md) | What tools were used, how, and what remained human-owned |
-| [Self-Assessment](docs/self-assessment.md) | What's complete, what's missing, 5 concrete prompts with outputs |
+| [AI Development Tooling](docs/submission.md#4c-ai-tooling-overview) | What tools were used, how, and what remained human-owned |
+| [Self-Assessment](docs/submission.md#7-whats-complete-vs-whats-missing) | What is complete and what remains unfinished |
 
 The agentic development pipeline is in `.claude/agents/dev-pipeline.md` and `.claude/agents/dev-pipeline-oversight.md`. Each GitHub issue was worked end-to-end by an agent: branch, implement, `/review`, `/dissent`, CodeRabbit, merge. The human role was scoping, reviewing output, catching drift, and making architectural calls.
 
 ### RAG pipeline report
 
-Log in as a reviewer and navigate to [/#rag-report](https://northwoods.muness.com/#rag-report) to see the RAG pipeline results: expected vs. actual similar case retrieval for known narrative arcs across 40 fictional people. This page runs live queries — it is not canned data.
+Log in as a reviewer and open [`/#rag-report`](http://localhost:5173/#rag-report) to compare expected and returned cases for known narrative arcs across 40 fictional people. The page runs queries against the local system.
 
 ### What to look for
 
 - **Confidence drives behavior.** Low-confidence fields route to review. High-confidence fields can auto-accept. The review UI shows *why* the system is uncertain (per-provider breakdown).
-- **Tenant isolation is provable.** RLS on all data tables. `scripts/ci/check-rls-compliance.py` verifies it. Integration tests confirm cross-tenant returns empty.
+- **Tenant isolation fails closed in production.** The API refuses to start without its restricted database role. `scripts/ci/check-rls-compliance.py` checks the policies and deployment configuration. Integration tests exercise cross-tenant reads when Postgres is available.
 - **Audit trail is append-only.** `extraction_completed → field_corrected × N → finalized` — each event with actor, timestamp, correlation ID, before/after values.
 - **The corpus tells a story.** 40 people across two tenants, two visual form styles, longitudinal narrative arcs. Frequent flyers (P019 Raymond Castillo, P039 Gloria Navarro) show progression from crisis to stability across months. The RAG report page shows whether the system found these relationships.
 
@@ -152,7 +148,8 @@ Intake Worker → [Upload PDF] → API → MinIO (store) + Postgres (metadata)
 ### Seed data
 
 - **2 tenants:** Sunrise (tenant-a) and Lakewood (tenant-b)
-- **6 users per system:** worker + reviewer + admin per tenant (password: `password`)
+- **4 worker/reviewer users:** one of each role per tenant (password: `password`)
+- **2 local-only administrators:** Docker Compose seeds one per tenant for reset and template-maintenance scripts; the public deployment removes these accounts on startup
 - **4 templates per tenant:** General Assistance, Housing Stability, Behavioral Health, SOAP Progress Note
 - **8 seeded documents** for RAG demo (P017, P019, P037, P039 across both tenants) — loaded by `DatabaseInitializer.SeedCorpusAsync` on every API startup
 - **Corpus generators** in `scripts/corpus/` — regenerate with `python3 scripts/corpus/generate_seed_sql.py`
@@ -175,6 +172,8 @@ Deployment is release-driven. Create and push a `v*` tag (for example `v0.3.3`) 
 It then updates all three Render services (api, worker, web) and triggers deploys.
 
 Blueprint: `render.yaml`. Custom domain via Cloudflare CNAME.
+
+Production startup requires the restricted `app_user` database role and verifies that row-level security blocks cross-tenant reads. The deployment also removes the known local demo administrator accounts before accepting requests.
 
 ---
 

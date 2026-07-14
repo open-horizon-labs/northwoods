@@ -12,6 +12,35 @@ namespace Northwoods.Tenancy;
 public static class DatabaseInitializer
 {
     /// <summary>
+    /// Verifies that the known local demo administrator accounts do not exist.
+    /// Public deployments call this after initialization so a failed cleanup
+    /// stops startup instead of leaving predictable administrators active.
+    /// </summary>
+    public static async Task AssertDemoAdminsAbsentAsync(string connectionString, ILogger logger)
+    {
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync();
+
+        var demoAdminCount = await conn.ExecuteScalarAsync<int>(
+            """
+            SELECT COUNT(*)::int
+            FROM users
+            WHERE role = 'Admin'
+              AND ((tenant_id = 'tenant-a' AND email = 'admin@sunrise.example')
+                OR (tenant_id = 'tenant-b' AND email = 'admin@lakewood.example'))
+            """);
+
+        if (demoAdminCount > 0)
+        {
+            throw new InvalidOperationException(
+                $"SECURITY: {demoAdminCount} known demo administrator account(s) remain active. " +
+                "Public deployments must set Database:SeedDemoAdmins=false.");
+        }
+
+        logger.LogInformation("DatabaseInitializer: demo administrator accounts are absent");
+    }
+
+    /// <summary>
     /// Verifies that row-level security is actually enforced: opens a tenant-a scoped session
     /// and asserts that tenant-b rows in the users table are not visible.
     /// Throws if RLS is bypassed — call this after InitializeAsync to crash the app on misconfiguration
@@ -40,7 +69,11 @@ public static class DatabaseInitializer
     /// Ensures the database schema, indexes, and seed data exist.
     /// Safe to call on every startup — all statements are idempotent.
     /// </summary>
-    public static async Task InitializeAsync(string connectionString, bool setupRls, ILogger logger)
+    public static async Task InitializeAsync(
+        string connectionString,
+        bool setupRls,
+        bool seedDemoAdmins,
+        ILogger logger)
     {
         try
         {
@@ -78,6 +111,14 @@ public static class DatabaseInitializer
             // Phase 4: Seed data (ON CONFLICT — idempotent)
             await ExecuteSqlSafe(conn, SeedTenantsSql, logger, "seed tenants");
             await ExecuteSqlSafe(conn, SeedUsersSql, logger, "seed users");
+            if (seedDemoAdmins)
+            {
+                await ExecuteSqlSafe(conn, SeedDemoAdminUsersSql, logger, "seed local demo administrators");
+            }
+            else
+            {
+                await ExecuteSqlSafe(conn, RemoveDemoAdminUsersSql, logger, "remove demo administrators");
+            }
             await ExecuteSqlSafe(conn, CleanupOldTemplatesSql, logger, "cleanup old templates");
             await ExecuteSqlSafe(conn, SeedTemplatesSql, logger, "seed templates");
 
@@ -407,10 +448,11 @@ public static class DatabaseInitializer
         DO $$
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-                CREATE ROLE app_user WITH LOGIN PASSWORD 'app_user';
+                CREATE ROLE app_user NOLOGIN;
             END IF;
         END
         $$;
+        ALTER ROLE app_user NOLOGIN NOBYPASSRLS;
         """;
 
     private const string GrantsSql = """
@@ -598,11 +640,27 @@ public static class DatabaseInitializer
         INSERT INTO users (tenant_id, email, password_hash, role) VALUES
             ('tenant-a', 'worker@sunrise.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'IntakeWorker'),
             ('tenant-a', 'reviewer@sunrise.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Reviewer'),
-            ('tenant-a', 'admin@sunrise.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Admin'),
             ('tenant-b', 'worker@lakewood.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'IntakeWorker'),
-            ('tenant-b', 'reviewer@lakewood.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Reviewer'),
+            ('tenant-b', 'reviewer@lakewood.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Reviewer')
+        ON CONFLICT (tenant_id, email) DO UPDATE
+            SET password_hash = EXCLUDED.password_hash,
+                role = EXCLUDED.role;
+        """;
+
+    private const string SeedDemoAdminUsersSql = """
+        INSERT INTO users (tenant_id, email, password_hash, role) VALUES
+            ('tenant-a', 'admin@sunrise.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Admin'),
             ('tenant-b', 'admin@lakewood.example', '$2a$12$S.9UQ5kYJy1e7DJ/f29XnOwGKrhVCo51W2rQ.NENXd.Zo.PHWoEai', 'Admin')
-        ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
+        ON CONFLICT (tenant_id, email) DO UPDATE
+            SET password_hash = EXCLUDED.password_hash,
+                role = EXCLUDED.role;
+        """;
+
+    private const string RemoveDemoAdminUsersSql = """
+        DELETE FROM users
+        WHERE role = 'Admin'
+          AND ((tenant_id = 'tenant-a' AND email = 'admin@sunrise.example')
+            OR (tenant_id = 'tenant-b' AND email = 'admin@lakewood.example'));
         """;
 
     private const string SeedTemplatesSql = """

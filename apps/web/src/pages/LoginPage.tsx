@@ -91,7 +91,7 @@ export default function LoginPage({ onLogin, sessionExpiredMessage }: Props) {
 
       <main id="main" className="w-full max-w-sm">
         <header className="mb-8 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">TraverseLite</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Northwoods</p>
           <h1 className="mt-2 text-2xl font-semibold text-slate-900">Sign in</h1>
           <p className="mt-1 text-sm text-slate-600">Use your work email and password.</p>
         </header>

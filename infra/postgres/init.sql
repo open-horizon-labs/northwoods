@@ -155,16 +155,18 @@ CREATE INDEX IF NOT EXISTS idx_audit_events_tenant_id ON audit_events(tenant_id)
 CREATE INDEX IF NOT EXISTS idx_audit_events_document_id ON audit_events(document_id);
 
 -- ============================================================================
--- Create app_user role with password
+-- Create a restricted role for SET LOCAL ROLE. It cannot log in directly.
 -- ============================================================================
 
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-        CREATE ROLE app_user WITH LOGIN PASSWORD 'app_user';
+        CREATE ROLE app_user NOLOGIN;
     END IF;
 END
 $$;
+
+ALTER ROLE app_user NOLOGIN NOBYPASSRLS;
 
 -- ============================================================================
 -- Grant permissions to app_user

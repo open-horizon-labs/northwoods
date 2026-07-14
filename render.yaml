@@ -30,6 +30,8 @@ services:
           name: northwoods-db
           property: connectionString
       - key: Database__UseAppUserRole
+        value: "true"
+      - key: Database__SeedDemoAdmins
         value: "false"
       - key: Minio__Endpoint
         fromService:

@@ -40,6 +40,8 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Host=postgres;Database=northwoods;Username=northwoods;Password=northwoods
+      Database__UseAppUserRole: true
+      Database__SeedDemoAdmins: true
       Minio__Endpoint: minio:9000
       Minio__AccessKey: northwoods
       Minio__SecretKey: northwoods
