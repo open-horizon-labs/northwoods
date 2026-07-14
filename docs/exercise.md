@@ -178,7 +178,7 @@ o **Multi-tenancy strategy and implications**
 
 **Submission** 
 
-1. Send a zip file with the code – Sryczek@BanyanSoftware.com 
+1. Send a zip file with the code to the evaluator.
 
 2. or share a GitHub project  
 

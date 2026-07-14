@@ -3,7 +3,7 @@
 **Handwritten Intake Document Processor**
 .NET 10 / React + TypeScript / Postgres 18 with pgvector
 
-> **TL;DR** -- Live at [northwoods.muness.com](https://northwoods.muness.com). Login popup pre-fills credentials. Upload scanned forms, AI extracts fields with confidence scores, reviewers correct and finalize with similar-case RAG assistance. 184-document synthetic corpus, 5-signal hybrid retrieval (vector + FTS + trigram + structured), row-level security on all tables. Built with Claude Code + Open Horizons workflow orchestration + CodeRabbit automated review.
+> **TL;DR** -- Upload scanned forms, extract fields with confidence scores, send uncertain fields to a reviewer, and retrieve similar cases from a 184-document synthetic corpus. The repository includes the application, five-signal hybrid retrieval, row-level security, architecture decisions, and the agent work trail.
 
 ---
 
@@ -26,10 +26,6 @@
 ## 1. Quick Start
 
 **GitHub:** [github.com/open-horizon-labs/northwoods](https://github.com/open-horizon-labs/northwoods)
-(Repository access will be granted before sending.)
-
-**Live demo:** [northwoods.muness.com](https://northwoods.muness.com)
-(Hosted on Render -- API, Worker, Web, Postgres, and MinIO all deployed via `render.yaml`.)
 
 **Login credentials** are pre-fillable using the popup on the login page. For manual entry:
 
@@ -62,13 +58,13 @@ The API serves OpenAPI docs at `http://localhost:5100/scalar/v1` and raw spec at
 
 ## 2. RAG Report -- Self-Assessment Tool
 
-The RAG Report is a built-in evaluation page that tests whether the similar-case retrieval pipeline actually works. It lives in the reviewer navigation at `/#rag-report` and runs live queries against the deployed system -- nothing is canned.
+The RAG Report is a built-in evaluation page that tests whether the similar-case retrieval pipeline finds the expected histories. It lives in the reviewer navigation at `/#rag-report` and runs queries against the current system.
 
 The page defines a set of **arc queries**, each representing a known relationship from the synthetic corpus. For example, Raymond Castillo (P019) is a frequent flyer at the Sunrise facility with 12 visits spanning two form eras. The report searches for his name, finds his most recent document, fetches similar cases from the review endpoint, and checks whether his other documents appear in the top 5. Similarly, Gloria Navarro (P039) plays the same role at the Lakewood facility. Carlton Hughes (P017) tests cross-facility transfer -- he moved from Sunrise to Lakewood, so his cases should appear together within the correct tenant boundary.
 
 The report also includes a **tenant isolation check**: Brianna Kowalski (P004) is a Sunrise-only client. When the system retrieves similar cases for her, no Lakewood person keys should appear. If they do, the page flags a tenant isolation violation with a red badge. Each query card shows pass/fail status, the anchor document used, and a table of returned similar cases with match scores, template types, and whether each result was expected. The overall summary shows pass/fail counts so a reviewer can see at a glance whether the RAG pipeline is producing meaningful, tenant-safe results.
 
-This page exists because it is one thing to claim "RAG works" and another to prove it with repeatable, inspectable evidence. The report runs on every deployment and gives both the developer and the evaluator a concrete answer to "does similar-case retrieval actually find what it should?"
+The report gives the reviewer expected and returned cases, the signals behind each match, and an explicit tenant-boundary check.
 
 **File:** `apps/web/src/pages/RagReportPage.tsx`
 
@@ -151,7 +147,7 @@ The similar-case query (`FindSimilarCasesAsync` in `ReviewEndpoints.cs`) does no
 
 Each signal produces a ranked list. These are fused using **Reciprocal Rank Fusion**: `score = SUM(1.0 / (60.0 + rank))` across all signals where a document appears. The constant 60 is the standard RRF smoothing parameter.
 
-**Why hybrid instead of vector-only?** In my experience, pure semantic similarity search produces disappointing results for structured case data -- exact name matches routinely fail to surface, and the ranking feels arbitrary to reviewers. Supplementing vector search with full-text search and specific field matching (name, address, DOB) is straightforward to implement and dramatically improves retrieval quality. This pattern proved itself in client work (Mayo Clinic) and in the open-source RNA project. The query-time overhead is minimal -- typically 50-200ms total for all five signals -- and the quality boost has consistently justified the added complexity.
+**Why hybrid instead of vector-only?** Names, addresses, and dates of birth carry information that vector similarity can miss. Northwoods ranks those signals alongside full-text and vector matches, combines the ranked lists, and returns the signals that contributed to each result.
 
 **AI-generated summaries:**
 When an OpenAI key is available and AI summaries are enabled, each similar case gets a contextual summary generated by `gpt-5.4-nano`. The prompt provides the current case fields, the matched case fields, and the algorithmic match signals, asking for a 1-2 sentence factual explanation of the relationship. An algorithmic fallback summary is always available if the AI call fails.
@@ -269,8 +265,6 @@ Triggered on `v*` tags (e.g., `git tag v0.7.0 && git push origin v0.7.0`):
 | `northwoods-web` | Static Site (nginx) | `ghcr.io/.../northwoods-web:latest` |
 | `northwoods-db` | Postgres 18 | Render managed (pgvector enabled) |
 | `northwoods-minio` | Private Service | MinIO for document blob storage |
-
-Custom domain: `northwoods.muness.com` via Cloudflare DNS.
 
 ### Docker Multi-Stage Builds
 
